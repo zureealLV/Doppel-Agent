@@ -12,6 +12,8 @@ from pathlib import Path
 from .core import Core
 from .daemon import serve
 from .provider import MockProvider, OpenAICompatibleProvider
+from .web.server import serve_ui
+from .tasks.manager import TaskManager
 
 
 async def rpc_run(port: int, prompt: str) -> dict:
@@ -32,16 +34,17 @@ async def rpc_run(port: int, prompt: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="doppel-agent")
-    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor"))
+    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor", "ui", "tasks"))
     parser.add_argument("prompt", nargs="?")
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int)
     parser.add_argument("--provider", choices=("mock", "openai"))
     parser.add_argument("--base-url", default=os.getenv("DOPPEL_AGENT_BASE_URL", ""))
     parser.add_argument("--model", default=os.getenv("DOPPEL_AGENT_MODEL", ""))
     parser.add_argument("--allow-write", action="store_true")
     parser.add_argument("--allow-command", action="store_true")
     args = parser.parse_args()
+    port = args.port or (8766 if args.command == "ui" else 8765)
     if args.command in ("demo", "ask", "run") and not args.prompt:
         parser.error("prompt is required for demo/ask/run")
     if args.command == "doctor":
@@ -52,6 +55,15 @@ def main() -> None:
             "model_configured": bool(args.model),
             "api_key_configured": bool(os.getenv("DOPPEL_AGENT_API_KEY")),
         }, ensure_ascii=False, indent=2))
+        return
+    if args.command == "ui":
+        serve_ui(args.workspace, port)
+        return
+    if args.command == "tasks":
+        if not args.prompt:
+            parser.error("tasks requires a run ID")
+        manager = TaskManager(args.workspace.resolve() / ".doppel-agent" / "tasks.sqlite3")
+        print(json.dumps(manager.list(args.prompt), ensure_ascii=False, indent=2))
         return
     if args.command in ("demo", "ask", "serve"):
         provider_name = args.provider or ("openai" if args.command == "ask" else "mock")
@@ -72,10 +84,10 @@ def main() -> None:
         else:
             if (args.allow_write or args.allow_command) and not os.getenv("DOPPEL_AGENT_RPC_TOKEN"):
                 parser.error("daemon with write/command grants requires DOPPEL_AGENT_RPC_TOKEN")
-            print(f"Doppel Agent listening on 127.0.0.1:{args.port}", flush=True)
-            asyncio.run(serve(core, args.port))
+            print(f"Doppel Agent listening on 127.0.0.1:{port}", flush=True)
+            asyncio.run(serve(core, port))
     else:
-        response = asyncio.run(rpc_run(args.port, args.prompt))
+        response = asyncio.run(rpc_run(port, args.prompt))
         print(json.dumps(response, ensure_ascii=False, indent=2))
         if "error" in response or response.get("result", {}).get("status") != "completed":
             sys.exit(1)

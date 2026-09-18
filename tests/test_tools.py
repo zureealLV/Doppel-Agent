@@ -51,6 +51,24 @@ class ToolTests(unittest.TestCase):
         registry.execute("write_file", {"path": "new.txt", "content": "hello"})
         self.assertEqual((self.root / "new.txt").read_text(encoding="utf-8"), "hello")
 
+    def test_approval_requires_grant_and_consent(self):
+        calls = []
+        approver = lambda capability, name, arguments: calls.append((capability, name)) or True
+        no_grant = ToolRegistry(PermissionManager(frozenset(), approver))
+        no_grant.register(write_file_tool(self.root))
+        with self.assertRaises(PermissionError):
+            no_grant.execute("write_file", {"path": "new.txt", "content": "hello"})
+        self.assertEqual(calls, [])
+        denied = ToolRegistry(PermissionManager(frozenset({"workspace_write"}), lambda *_: False))
+        denied.register(write_file_tool(self.root))
+        with self.assertRaises(PermissionError):
+            denied.execute("write_file", {"path": "new.txt", "content": "hello"})
+        self.assertFalse((self.root / "new.txt").exists())
+        granted = ToolRegistry(PermissionManager(frozenset({"workspace_write"}), approver))
+        granted.register(write_file_tool(self.root))
+        granted.execute("write_file", {"path": "new.txt", "content": "hello"})
+        self.assertEqual(calls, [("workspace_write", "write_file")])
+
     def test_command_denied_by_default(self):
         self.registry.register(run_command_tool(self.root))
         with self.assertRaises(PermissionError):

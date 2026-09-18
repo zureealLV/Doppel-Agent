@@ -28,7 +28,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
             }
         else:
             message = {"role": "assistant", "content": "Done."}
-        payload = json.dumps({"choices": [{"message": message}]}).encode()
+        payload = json.dumps({"choices": [{"message": message}], "usage": {"prompt_tokens": 42, "completion_tokens": 11, "total_tokens": 53}}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -56,6 +56,8 @@ class ProviderTests(unittest.TestCase):
                 second_messages = FixtureHandler.requests[1]["messages"]
                 self.assertEqual(second_messages[-1]["role"], "tool")
                 self.assertEqual(second_messages[-1]["tool_call_id"], "call_1")
+                events_path = root / ".doppel-agent" / "runs" / result["run_id"] / "events.jsonl"
+                self.assertIn("model_usage", events_path.read_text(encoding="utf-8"))
             finally:
                 server.shutdown()
                 server.server_close()

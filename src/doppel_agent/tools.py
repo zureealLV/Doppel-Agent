@@ -60,10 +60,10 @@ class ToolRegistry:
             if schema["type"] == "string" and not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")
             if schema["type"] == "array" and (
-                not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value)
+                not isinstance(value, list) or not all(isinstance(item, str) for item in value)
             ):
-                raise ValueError(f"{key} must be a nonempty string array")
-        decision = self.permissions.check(tool.capability)
+                raise ValueError(f"{key} must be a string array")
+        decision = self.permissions.check(tool.capability, name, arguments)
         if not decision.allowed:
             raise PermissionError(decision.reason)
         return tool.handler(arguments)
@@ -133,6 +133,8 @@ def write_file_tool(workspace: Path, max_bytes: int = 256 * 1024) -> Tool:
 def run_command_tool(workspace: Path, timeout_seconds: int = 30) -> Tool:
     def run(arguments: dict[str, Any]) -> str:
         argv = arguments["argv"]
+        if not argv:
+            raise ValueError("argv must not be empty")
         if any("\x00" in arg for arg in argv):
             raise ValueError("NUL in command argument")
         try:

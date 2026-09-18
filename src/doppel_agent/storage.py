@@ -32,3 +32,25 @@ class RunStore:
         temporary = directory / "session.json.tmp"
         temporary.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
         temporary.replace(directory / "session.json")
+
+    def read_session(self, run_id: str) -> dict[str, Any] | None:
+        if len(run_id) != 32 or any(ch not in "0123456789abcdef" for ch in run_id):
+            return None
+        path = self.root / "runs" / run_id / "session.json"
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def list_sessions(self, limit: int = 20) -> list[dict[str, Any]]:
+        runs = self.root / "runs"
+        if not runs.is_dir():
+            return []
+        paths = sorted(runs.glob("*/session.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+        result = []
+        for path in paths:
+            session = self.read_session(path.parent.name)
+            if session:
+                result.append(session)
+            if len(result) >= limit:
+                break
+        return result

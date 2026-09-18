@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Doppel Agent · Local Console</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Doppel Agent 控制台首页">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
+        <span><strong>DOPPEL</strong><small>AGENT / LOCAL CONSOLE</small></span>
+      </a>
+      <div class="top-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span><span class="version-tag">v0.2 · ALPHA</span></div>
+    </header>
+
+    <main class="workspace-layout">
+      <aside class="settings-panel" aria-labelledby="settings-title">
+        <div class="section-kicker">01 / CONFIGURATION</div>
+        <h1 id="settings-title">连接模型</h1>
+        <p class="muted intro">在本机填写 API 参数。密钥只随当前请求发送给本地 Core，不保存到浏览器存储或项目文件。</p>
+
+        <form id="config-form" autocomplete="off">
+          <label for="preset">服务类型</label>
+          <select id="preset" name="preset">
+            <option value="deepseek">DeepSeek API</option>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="local">本地兼容服务</option>
+            <option value="mock">离线 Mock（功能演示）</option>
+          </select>
+
+          <label for="base-url">API Base URL <span class="field-hint">自动追加 /chat/completions</span></label>
+          <input id="base-url" name="base-url" type="url" spellcheck="false" value="https://api.deepseek.com" placeholder="https://api.example.com/v1">
+
+          <label for="model">模型名称</label>
+          <input id="model" name="model" type="text" spellcheck="false" value="deepseek-flash" placeholder="model-id">
+
+          <label for="api-key">API Key <span class="field-hint">仅保留在本页内存</span></label>
+          <div class="secret-wrap"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button type="button" id="toggle-key" class="icon-button" aria-label="显示 API Key">显示</button></div>
+
+          <button type="button" id="probe-button" class="secondary-button">测试 API 连接 <span aria-hidden="true">↗</span></button>
+          <div id="probe-result" class="inline-result" role="status" aria-live="polite">尚未测试</div>
+        </form>
+
+        <div class="settings-foot">
+          <div class="mini-label">WORKSPACE</div>
+          <code id="workspace-path">正在读取…</code>
+          <p>模型会收到工具读取的文件内容；请只连接你信任的服务。</p>
+        </div>
+      </aside>
+
+      <section class="main-panel" aria-labelledby="run-title">
+        <div class="hero-line"><span class="section-kicker">02 / AGENT RUN</span><span class="mode-pill"><span></span> LOCAL RUNTIME</span></div>
+        <div class="hero">
+          <p class="eyebrow">CONTROL THE LOOP</p>
+          <h2 id="run-title">从想法到可追溯的执行。</h2>
+          <p>给 Doppel Agent 一个目标。它会规划下一步、调用工具，再把结果带回模型。每一步都有事件记录，不靠“我觉得成功了”蒙混过关。</p>
+        </div>
+
+        <form id="run-form" class="composer">
+          <label for="prompt">你的任务 <span class="field-hint">Ctrl + Enter 运行</span></label>
+          <textarea id="prompt" rows="6" placeholder="例如：先列出当前目录，阅读 README，然后总结这个项目还缺哪些功能。"></textarea>
+          <div class="composer-footer">
+            <div class="capabilities" aria-label="工具权限">
+              <label class="switch-line"><input type="checkbox" id="allow-write"><span>允许写文件</span></label>
+              <label class="switch-line"><input type="checkbox" id="allow-command"><span>允许运行命令</span></label>
+            </div>
+            <button type="submit" id="run-button" class="primary-button"><span class="run-icon" aria-hidden="true">▶</span> 启动任务</button>
+          </div>
+          <p class="permission-note">默认仅可读取工作区。写入与命令权限只作用于这次运行；命令工具不是 OS 沙箱。</p>
+        </form>
+
+        <section class="recent-card" aria-labelledby="recent-title">
+          <div class="card-heading"><div><div class="section-kicker">HISTORY</div><h3 id="recent-title">最近运行</h3></div><button id="refresh-runs" type="button" class="secondary-button">刷新</button></div>
+          <div id="recent-runs" class="recent-runs">暂无已保存的运行。</div>
+        </section>
+
+        <section class="result-card" aria-labelledby="result-title">
+          <div class="card-heading"><div><div class="section-kicker">OUTPUT</div><h3 id="result-title">运行结果</h3></div><span id="run-status" class="result-state idle">等待任务</span></div>
+          <div id="empty-state" class="empty-state"><span class="empty-symbol" aria-hidden="true">⌁</span><strong>还没有运行记录</strong><p>填写左侧 API 配置，先测试连接，再发送第一条任务。</p></div>
+          <pre id="answer" class="answer" hidden></pre>
+          <p id="run-id" class="run-id" hidden></p>
+        </section>
+      </section>
+
+      <aside class="trace-panel" aria-labelledby="trace-title">
+        <div class="section-kicker">03 / OBSERVABILITY</div>
+        <section id="approval-section" class="approval-section" aria-labelledby="approval-title" hidden>
+          <div class="trace-heading"><h2 id="approval-title">等待权限审批</h2><span>MANUAL GATE</span></div>
+          <p>检查完整参数后决定。120 秒内未处理会自动拒绝。</p>
+          <div id="approval-list"></div>
+        </section>
+        <section class="task-section" aria-labelledby="tasks-title">
+          <div class="trace-heading"><h2 id="tasks-title">任务计划</h2><span id="task-count">0 TASKS</span></div>
+          <ol id="task-list" class="task-list"><li class="trace-empty">任务创建后显示在这里。</li></ol>
+        </section>
+        <div class="trace-heading"><h2 id="trace-title">执行轨迹</h2><span id="event-count">0 EVENTS</span></div>
+        <p class="muted">模型回合、工具请求与错误在这里按时间顺序出现。</p>
+        <ol id="event-list" class="event-list" aria-live="polite"><li class="trace-empty">等待事件流…</li></ol>
+        <div class="trace-footer"><span>TRACE / JSONL</span><span id="trace-indicator">● IDLE</span></div>
+      </aside>
+    </main>
+    <footer class="footer"><span>DOPPEL AGENT</span><span>LOCAL FIRST · EXPLICIT PERMISSIONS · AUDITABLE RUNS</span><span>NOT A CLOUD KEY VAULT</span></footer>
+  </div>
+</body>
+</html>

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doppel-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local coding-agent runtime built as an independent study project"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,6 +15,9 @@ doppel-agent = "doppel_agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"doppel_agent.web" = ["*.html", "*.css", "*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

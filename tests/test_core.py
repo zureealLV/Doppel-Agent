@@ -3,12 +3,27 @@ import unittest
 
 from doppel_agent.core import Core
 from doppel_agent.provider import ModelTurn, ToolCall
+from doppel_agent.tasks.manager import TaskManager
 from support import workspace
 
 
 class RepeatingProvider:
     def next_turn(self, messages, tools):
         return ModelTurn(tool_calls=(ToolCall("repeat", "missing", {}),))
+
+
+class PlanningProvider:
+    def next_turn(self, messages, tools):
+        last = messages[-1]
+        if last.role == "user":
+            return ModelTurn(tool_calls=(ToolCall("task-1", "task_create", {"title": "inspect", "dependencies": []}),))
+        if last.role == "tool" and last.tool_call_id == "task-1":
+            task_id = json.loads(last.content)["task_id"]
+            return ModelTurn(tool_calls=(
+                ToolCall("task-2", "task_transition", {"task_id": task_id, "action": "start", "result": ""}),
+                ToolCall("task-3", "task_transition", {"task_id": task_id, "action": "complete", "result": "done"}),
+            ))
+        return ModelTurn(content="plan finished")
 
 
 class CoreTests(unittest.TestCase):
@@ -40,3 +55,10 @@ class CoreTests(unittest.TestCase):
         result = Core(self.root, RepeatingProvider()).run("go")
         self.assertEqual(result["status"], "failed")
         self.assertIn("max_steps_exceeded", result["answer"])
+
+    def test_task_tools_persist_through_agent_loop(self):
+        result = Core(self.root, PlanningProvider()).run("plan")
+        self.assertEqual(result["status"], "completed")
+        tasks = TaskManager(self.root / ".doppel-agent" / "tasks.sqlite3").list(result["run_id"])
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["status"], "completed")

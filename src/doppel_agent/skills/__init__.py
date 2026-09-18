@@ -1,0 +1,1 @@
+"""Workspace-local skill documents."""

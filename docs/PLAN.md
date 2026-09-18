@@ -12,10 +12,10 @@
 |---|---|---|---|
 | P0 基础纵向链路 | `src/doppel_agent/{protocol,events,storage,permissions,tools,provider,loop,core,daemon,cli}.py` | Mock 读文件、RPC、事件/Trace/Session 可复现 | 已完成 |
 | P1 可用单次编码 | `provider.py` HTTP 适配；`tools.py` 列表/读/写/命令；`cli.py` 配置和授权；`tests/test_provider.py` | 本地 HTTP fixture 走完整工具调用；默认拒绝写和命令；允许后可执行；18+ 测试通过 | 已实现并本地验证；真实付费 API 待密钥验证 |
-| P2 持久化任务 | 新建 `tasks/models.py`、`tasks/manager.py`、`tasks/store.py`，引入 SQLite DAG 与依赖解锁 | 重启后任务状态、依赖、重试仍正确；环依赖拒绝 | 待做 |
-| P3 上下文治理 | 新建 `context/watermark.py`、`context/compact.py`、`context/notes.py` | 模型对应 token 统计、水位阈值、压缩前后量化；系统/任务关键事实保留 | 待做 |
-| P4 扩展链路 | 新建 `skills/loader.py`、`mcp/client.py`、`subagents/manager.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | 待做 |
-| P5 TUI 和恢复 | 新建 `tui/`、RPC 订阅/回放协议；进程内运行任务表 | TUI 断开重连仍看到任务与事件；审批可交互 | 待做 |
+| P2 持久化任务 | `tasks/manager.py` SQLite DAG、工具与 Web 查询 | 重启后任务状态、依赖、重试仍正确；环依赖拒绝 | 已实现并测试；任务自动调度待做 |
+| P3 上下文治理 | `context/policy.py` 水位估算与完整工具组压缩 | 模型对应 token 统计、水位阈值、压缩前后量化；系统/任务关键事实保留 | 已实现估算压缩及 provider usage 事件；精确 tokenizer/笔记待做 |
+| P4 扩展链路 | `skills/loader.py`、后续 `mcp/client.py`、`subagents/manager.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill 加载已测试；MCP/子 Agent 待做 |
+| P5 UI 和恢复 | `web/` 本机控制台、审批与最近运行回放；后续 TUI/RPC 订阅 | Web 可自主填写 API 并测试；TUI 断开重连仍看到任务与事件；审批可交互 | Web 可运行且可回放已完成任务；TUI/实时订阅待做 |
 | P6 基准与发布 | 新建 `bench/fixtures/`、`bench/run.py`、CI 与威胁模型 | 固定题集、模型、基线、分母、费用日期、失败记录和复现实验；不预填数字 | 待做 |
 
 ## P1 实现/验证明细
@@ -38,6 +38,14 @@ python -m doppel_agent.cli demo 'read README.md'
 ```
 
 远端 API 的最终验收：由用户在当前 Shell 设置 `DOPPEL_AGENT_BASE_URL`、`DOPPEL_AGENT_MODEL`、`DOPPEL_AGENT_API_KEY` 后运行 `ask`，确认真实响应、工具调用、权限拒绝/放行和 `.doppel-agent/runs/<run-id>/` 记录。没有凭据时，不把本地 fixture 说成远端模型实测。
+
+Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`，选择 Mock 并提交 `read README.md`，确认结果和事件列表；重启后从“最近运行”回放；再由用户填写自己的真实 API 参数，执行连接测试与任务。UI 密钥不落盘，浏览器刷新后需重新填写。写入/命令须同时开启对应复选框和逐次批准。
+
+## 版本发布规则
+
+- `v0.1.0`：本地运行时 MVP；`v0.2.0`：用户可配置的 Web 控制台、任务 DAG、估算上下文治理、Skill 读取与审批。
+- 后续 MCP、子 Agent、TUI、基准按功能版本迭代；每次推送前更新 `pyproject.toml`、`__version__`、README 状态和 `CHANGELOG.md`，跑完整测试并打同名 tag。
+- GitHub 发布必须校验远端仓库、推送后的分支 SHA 与 tag；不能把本地提交当成远端发布。
 
 ## 与截图指标的区别
 

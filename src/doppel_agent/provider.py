@@ -40,6 +40,7 @@ class Message:
 class ModelTurn:
     content: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
+    usage: dict[str, int] | None = None
 
 
 class Provider(Protocol):
@@ -102,6 +103,9 @@ class OpenAICompatibleProvider:
                 if not isinstance(arguments, dict):
                     raise ValueError("tool arguments must be an object")
                 calls.append(ToolCall(call["id"], function["name"], arguments))
-            return ModelTurn(message.get("content") or "", tuple(calls))
+            usage = payload.get("usage")
+            if not isinstance(usage, dict):
+                usage = None
+            return ModelTurn(message.get("content") or "", tuple(calls), usage)
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeError("invalid provider response") from exc
