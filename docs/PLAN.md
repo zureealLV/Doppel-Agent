@@ -14,7 +14,7 @@
 | P1 可用单次编码 | `provider.py` HTTP 适配；`tools.py` 列表/读/写/命令；`cli.py` 配置和授权；`tests/test_provider.py` | 本地 HTTP fixture 走完整工具调用；默认拒绝写和命令；允许后可执行；18+ 测试通过 | 已实现并本地验证；真实付费 API 待密钥验证 |
 | P2 持久化任务 | `tasks/manager.py` SQLite DAG、工具与 Web 查询 | 重启后任务状态、依赖、重试仍正确；环依赖拒绝 | 已实现并测试；任务自动调度待做 |
 | P3 上下文治理 | `context/policy.py` 水位估算与完整工具组压缩 | 模型对应 token 统计、水位阈值、压缩前后量化；系统/任务关键事实保留 | 已实现估算压缩及 provider usage 事件；精确 tokenizer/笔记待做 |
-| P4 扩展链路 | `skills/loader.py`、`mcp_bridge.py`、后续 `subagents/manager.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill 与 stdio MCP 已测试；子 Agent、HTTP MCP 待做 |
+| P4 扩展链路 | `skills/loader.py`、`mcp_bridge.py`、`subagents.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill、stdio MCP 与限额只读子任务已测试；取消和 HTTP MCP 待做 |
 | P5 UI 和恢复 | `web/` 本机控制台、审批与最近运行回放；后续 TUI/RPC 订阅 | Web 可自主填写 API 并测试；TUI 断开重连仍看到任务与事件；审批可交互 | Web 可运行且可回放已完成任务；TUI/实时订阅待做 |
 | P6 基准与发布 | 新建 `bench/fixtures/`、`bench/run.py`、CI 与威胁模型 | 固定题集、模型、基线、分母、费用日期、失败记录和复现实验；不预填数字 | 待做 |
 
@@ -43,7 +43,7 @@ Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`
 
 ## 版本发布规则
 
-- `v0.1.0`：本地运行时 MVP；`v0.2.0`：用户可配置的 Web 控制台、任务 DAG、估算上下文治理、Skill 读取与审批；`v0.3.0`：显式配置的 stdio MCP 桥接。
+- `v0.1.0`：本地运行时 MVP；`v0.2.0`：用户可配置的 Web 控制台、任务 DAG、估算上下文治理、Skill 读取与审批；`v0.3.0`：显式配置的 stdio MCP 桥接；`v0.4.0`：限额只读子任务委派。
 - 后续子 Agent、TUI、基准按功能版本迭代；每次推送前更新 `pyproject.toml`、`__version__`、README 状态和 `CHANGELOG.md`，跑完整测试并打同名 tag。
 - GitHub 发布必须校验远端仓库、推送后的分支 SHA 与 tag；不能把本地提交当成远端发布。
 

@@ -4,7 +4,7 @@ A local coding agent with a CLI and a browser-based console. Connect an OpenAI-c
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.3.0
+## Current release: v0.4.0
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Workspace file listing, UTF-8 read/write, and argv-only command execution.
@@ -14,9 +14,10 @@ A local coding agent with a CLI and a browser-based console. Connect an OpenAI-c
 - SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
 - Per-tool manual approval for writes/commands in the web console; saved runs can be replayed after restarting the console.
 - Optional stdio MCP integration using explicitly configured local executables; web calls require per-call approval.
+- Opt-in read-only subagents, capped at two delegations per run and four model turns each; they cannot write, execute commands, call MCP, or delegate again.
 - CLI plus a localhost JSON-RPC/NDJSON daemon.
 
-This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, MCP over HTTP, subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/PLAN.md).
+This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, MCP over HTTP, parallel subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/PLAN.md).
 
 ## Start on Windows
 

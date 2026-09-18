@@ -59,7 +59,8 @@ class JobManager:
         allow_write = data.get("allow_write", False)
         allow_command = data.get("allow_command", False)
         allow_mcp = data.get("allow_mcp", False)
-        if not all(isinstance(value, bool) for value in (allow_write, allow_command, allow_mcp)):
+        allow_delegate = data.get("allow_delegate", False)
+        if not all(isinstance(value, bool) for value in (allow_write, allow_command, allow_mcp, allow_delegate)):
             raise ValueError("permission grants must be booleans")
         with self.lock:
             active = sum(job["status"] in ("queued", "running") for job in self.jobs.values())
@@ -75,7 +76,7 @@ class JobManager:
             try:
                 result = Core(
                     self.workspace, provider, allow_write=allow_write, allow_command=allow_command,
-                    allow_mcp=allow_mcp,
+                    allow_mcp=allow_mcp, allow_delegate=allow_delegate,
                     approver=self.brokers[run_id].request,
                 ).run(prompt, run_id=run_id)
             except Exception as exc:

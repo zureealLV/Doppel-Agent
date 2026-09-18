@@ -263,6 +263,7 @@ $("#run-form").addEventListener("submit", async (event) => {
       allow_write: $("#allow-write").checked,
       allow_command: $("#allow-command").checked,
       allow_mcp: $("#allow-mcp").checked,
+      allow_delegate: $("#allow-delegate").checked,
     });
     state.runId = result.run_id;
     refreshRuns().catch(() => {});

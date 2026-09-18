@@ -44,6 +44,7 @@ def main() -> None:
     parser.add_argument("--allow-write", action="store_true")
     parser.add_argument("--allow-command", action="store_true")
     parser.add_argument("--allow-mcp", action="store_true")
+    parser.add_argument("--allow-delegate", action="store_true")
     args = parser.parse_args()
     port = args.port or (8766 if args.command == "ui" else 8765)
     if args.command in ("demo", "ask", "run") and not args.prompt:
@@ -76,15 +77,19 @@ def main() -> None:
             )
         else:
             provider = MockProvider()
-        core = Core(args.workspace, provider, allow_write=args.allow_write, allow_command=args.allow_command, allow_mcp=args.allow_mcp)
+        core = Core(
+            args.workspace, provider, allow_write=args.allow_write,
+            allow_command=args.allow_command, allow_mcp=args.allow_mcp,
+            allow_delegate=args.allow_delegate,
+        )
         if args.command in ("demo", "ask"):
             result = core.run(args.prompt)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             if result["status"] != "completed":
                 sys.exit(1)
         else:
-            if (args.allow_write or args.allow_command or args.allow_mcp) and not os.getenv("DOPPEL_AGENT_RPC_TOKEN"):
-                parser.error("daemon with write/command/MCP grants requires DOPPEL_AGENT_RPC_TOKEN")
+            if (args.allow_write or args.allow_command or args.allow_mcp or args.allow_delegate) and not os.getenv("DOPPEL_AGENT_RPC_TOKEN"):
+                parser.error("daemon with write/command/MCP/delegation grants requires DOPPEL_AGENT_RPC_TOKEN")
             print(f"Doppel Agent listening on 127.0.0.1:{port}", flush=True)
             asyncio.run(serve(core, port))
     else:

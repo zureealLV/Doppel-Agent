@@ -17,12 +17,14 @@ from .tasks.tools import task_tools
 from .skills.loader import SkillLoader
 from .skills.tools import skill_tools
 from .mcp_bridge import MCPBridge, mcp_tools
+from .subagents import DelegateManager, delegate_tool
 
 
 class Core:
     def __init__(
         self, workspace: Path, provider: Provider | None = None,
         *, allow_write: bool = False, allow_command: bool = False, allow_mcp: bool = False,
+        allow_delegate: bool = False,
         approver: Callable[[str, str, dict[str, Any]], bool] | None = None,
     ):
         self.workspace = workspace.resolve(strict=True)
@@ -35,6 +37,8 @@ class Core:
             capabilities.add("command_execute")
         if allow_mcp:
             capabilities.add("mcp_execute")
+        if allow_delegate:
+            capabilities.add("delegate_readonly")
         self.allowed_capabilities = frozenset(capabilities)
         self.approver = approver
 
@@ -66,6 +70,8 @@ class Core:
             tools.register(tool)
         for tool in skill_tools(SkillLoader(self.workspace)):
             tools.register(tool)
+        if "delegate_readonly" in self.allowed_capabilities:
+            tools.register(delegate_tool(DelegateManager(self.workspace, self.provider, bus)))
         status = "completed"
         try:
             if "mcp_execute" in self.allowed_capabilities:
