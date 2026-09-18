@@ -1,0 +1,10 @@
+.venv/
+.uv-cache/
+.test-tmp/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.doppel-agent/
+.hermes-agent/
+.env
+*.egg-info/
