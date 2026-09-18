@@ -4,7 +4,7 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.4.1`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.5.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ## 功能
 
@@ -67,6 +67,16 @@ python -m unittest discover -s tests -v
 ```
 
 测试包含本地 HTTP 模型替身的完整工具回合、Web 控制台接口、daemon/client 通信、路径越界与权限拒绝。没有配置真实 API Key 时，这些测试**不能**证明某个付费提供商的在线可用性。
+
+### 真实代码审查验收
+
+`bench/` 提供独立的合成代码审查样本：运行时只把样本 `service.py` 放入临时工作区，答案键不会暴露给 Agent。若已拥有 DeepSeek Key，可运行：
+
+```powershell
+python bench/run_review.py --env-file '<你的本机 .env 路径>'
+```
+
+报告存入忽略提交的 `.bench-results/`；密钥不写入报告。两轮真实模型试验的逐项结果、样本范围和不足见 [审查验收记录](bench/reports/2026-09-19-review-001.md)，评分方法见 [基准说明](bench/README.md)。一个样本不能证明通用成功率。
 
 ## 安全边界
 

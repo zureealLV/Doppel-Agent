@@ -1,0 +1,24 @@
+{
+  "case_id": "review_001",
+  "expected_findings": [
+    {
+      "id": "BOLA",
+      "function": "fetch_note",
+      "issue": "The owner_id argument is ignored; looking up by id alone exposes another user's note.",
+      "severity": "high"
+    },
+    {
+      "id": "SQL_INJECTION",
+      "function": "search_notes",
+      "issue": "Untrusted query is interpolated into the SQL string and can bypass the owner filter.",
+      "severity": "high"
+    },
+    {
+      "id": "PATH_TRAVERSAL",
+      "function": "save_attachment",
+      "issue": "Untrusted filename can contain .. or be absolute, writing outside root.",
+      "severity": "high"
+    }
+  ],
+  "safe_control": "update_note_title uses bound parameters and enforces owner_id. Do not flag it as SQL injection or missing owner check."
+}

@@ -169,6 +169,22 @@ class ConsoleHandler(BaseHTTPRequestHandler):
     def _json(self, code: int, payload: dict | list) -> None:
         self._send(code, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
+    def _reject_post(self, code: int, reason: str) -> None:
+        # On Windows, replying while a small POST body is unread can reset the
+        # connection before the browser receives the 403/415 response.
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if 0 < size <= 128 * 1024:
+                previous_timeout = self.connection.gettimeout()
+                try:
+                    self.connection.settimeout(1)
+                    self.rfile.read(size)
+                finally:
+                    self.connection.settimeout(previous_timeout)
+        except (OSError, ValueError):
+            pass
+        self._json(code, {"error": reason})
+
     def do_GET(self) -> None:
         if not self._allowed_host():
             self._json(403, {"error": "invalid host"})
@@ -207,14 +223,14 @@ class ConsoleHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._allowed_host():
-            self._json(403, {"error": "invalid host"})
+            self._reject_post(403, "invalid host")
             return
         origin = self.headers.get("Origin")
         if origin and origin not in (f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"):
-            self._json(403, {"error": "invalid origin"})
+            self._reject_post(403, "invalid origin")
             return
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or self.headers.get("X-Doppel-UI") != "1":
-            self._json(415, {"error": "JSON UI request required"})
+            self._reject_post(415, "JSON UI request required")
             return
         try:
             size = int(self.headers.get("Content-Length", "0"))
