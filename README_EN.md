@@ -4,7 +4,7 @@ A local coding agent with a CLI and a browser-based console. Connect an OpenAI-c
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.2.0
+## Current release: v0.3.0
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Workspace file listing, UTF-8 read/write, and argv-only command execution.
@@ -13,9 +13,10 @@ A local coding agent with a CLI and a browser-based console. Connect an OpenAI-c
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
 - SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
 - Per-tool manual approval for writes/commands in the web console; saved runs can be replayed after restarting the console.
+- Optional stdio MCP integration using explicitly configured local executables; web calls require per-call approval.
 - CLI plus a localhost JSON-RPC/NDJSON daemon.
 
-This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, MCP, subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/PLAN.md).
+This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, MCP over HTTP, subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/PLAN.md).
 
 ## Start on Windows
 
@@ -38,9 +39,11 @@ python -m unittest discover -s tests -v
 
 The mock is deterministic and cannot perform general coding tasks. A live paid-provider call has not been verified in this environment because no API key is configured.
 
+For MCP, install `python -m pip install -e ".[mcp]"` and follow the [stdio MCP setup guide](docs/MCP.md). An external MCP server runs as the current user and is not contained by the workspace path checks.
+
 ## Security
 
-The web console binds to `127.0.0.1` and rejects cross-origin requests. Web write/command calls require both the per-run checkbox and approval of the individual call; approval expires after 120 seconds. CLI/daemon grants are not interactive. File tools enforce workspace boundaries. `--allow-command` runs programs as the current user and is **not** an OS sandbox. A model can receive file content returned by tools; use a trusted workspace and provider.
+The web console binds to `127.0.0.1` and rejects cross-origin requests. Web write/command/MCP calls require both the per-run checkbox and approval of the individual call; approval expires after 120 seconds. CLI/daemon grants are not interactive. File tools enforce workspace boundaries. `--allow-command` and MCP run programs as the current user and are **not** an OS sandbox. A model can receive file content returned by tools; use a trusted workspace and provider.
 
 ## Project notes
 

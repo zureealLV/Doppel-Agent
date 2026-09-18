@@ -8,6 +8,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .doppel-agent/
+.doppel/mcp.json
 .hermes-agent/
 .env
 *.egg-info/

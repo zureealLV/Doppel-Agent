@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 import time
 import unittest
@@ -113,6 +114,43 @@ class WebTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(job["status"], "completed", job)
         self.assertEqual((self.root / "approved.txt").read_text(encoding="utf-8"), "approved")
+
+    def test_mcp_approval_shows_configured_command(self):
+        (self.root / ".doppel").mkdir()
+        (self.root / ".doppel" / "mcp.json").write_text(json.dumps({
+            "servers": {"fixture": {"command": sys.executable, "args": ["server.py"]}}
+        }), encoding="utf-8")
+
+        class ScriptedProvider:
+            calls = 0
+
+            def next_turn(self, messages, tools):
+                self.calls += 1
+                if self.calls == 1:
+                    return ModelTurn(tool_calls=(ToolCall("mcp-1", "mcp_list", {"server": "fixture"}),))
+                return ModelTurn(content="finished")
+
+        self.server.manager._provider = lambda config: ScriptedProvider()
+        _, submitted = self.post("/api/runs", {
+            "prompt": "list MCP tools", "config": {"provider": "mock"}, "allow_mcp": True,
+        })
+        run_id = submitted["run_id"]
+        for _ in range(100):
+            approvals = json.loads(self.get(f"/api/runs/{run_id}/approvals")[1])
+            if approvals:
+                break
+            time.sleep(0.05)
+        self.assertEqual(len(approvals), 1, self.server.manager.status(run_id))
+        self.assertEqual(approvals[0]["arguments"]["configured_command"], sys.executable)
+        self.post(f"/api/runs/{run_id}/approvals/{approvals[0]['id']}/decision", {"allow": False})
+        for _ in range(100):
+            job = json.loads(self.get(f"/api/runs/{run_id}")[1])
+            if job["status"] in ("completed", "failed"):
+                break
+            time.sleep(0.05)
+        self.assertEqual(job["status"], "completed", job)
+        events = json.loads(self.get(f"/api/runs/{run_id}/events")[1])
+        self.assertIn("tool_failed", [event["kind"] for event in events])
 
 
 class ApprovalBrokerTests(unittest.TestCase):

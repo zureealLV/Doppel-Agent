@@ -262,6 +262,7 @@ $("#run-form").addEventListener("submit", async (event) => {
       prompt, config: config(),
       allow_write: $("#allow-write").checked,
       allow_command: $("#allow-command").checked,
+      allow_mcp: $("#allow-mcp").checked,
     });
     state.runId = result.run_id;
     refreshRuns().catch(() => {});

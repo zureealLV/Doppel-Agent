@@ -24,7 +24,7 @@ class PermissionManager:
     def check(self, capability: str, tool_name: str = "", arguments: dict[str, Any] | None = None) -> PermissionDecision:
         if capability not in self.allowed_capabilities:
             return PermissionDecision(False, f"capability denied: {capability}")
-        if capability in {"workspace_write", "command_execute"} and self.approver is not None:
+        if capability in {"workspace_write", "command_execute", "mcp_execute"} and self.approver is not None:
             if not self.approver(capability, tool_name, arguments or {}):
                 return PermissionDecision(False, "tool call was denied or approval timed out")
             return PermissionDecision(True, "approved for this tool call")

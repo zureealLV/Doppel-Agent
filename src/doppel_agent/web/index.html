@@ -15,7 +15,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
         <span><strong>DOPPEL</strong><small>AGENT / LOCAL CONSOLE</small></span>
       </a>
-      <div class="top-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span><span class="version-tag">v0.2 · ALPHA</span></div>
+      <div class="top-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span><span class="version-tag">v0.3 · ALPHA</span></div>
     </header>
 
     <main class="workspace-layout">
@@ -68,10 +68,11 @@
             <div class="capabilities" aria-label="工具权限">
               <label class="switch-line"><input type="checkbox" id="allow-write"><span>允许写文件</span></label>
               <label class="switch-line"><input type="checkbox" id="allow-command"><span>允许运行命令</span></label>
+              <label class="switch-line"><input type="checkbox" id="allow-mcp"><span>允许 MCP 服务</span></label>
             </div>
             <button type="submit" id="run-button" class="primary-button"><span class="run-icon" aria-hidden="true">▶</span> 启动任务</button>
           </div>
-          <p class="permission-note">默认仅可读取工作区。写入与命令权限只作用于这次运行；命令工具不是 OS 沙箱。</p>
+          <p class="permission-note">默认仅可读取工作区。写入、命令和 MCP 均需本次启用并逐次批准；外部 MCP 服务不是 OS 沙箱。</p>
         </form>
 
         <section class="recent-card" aria-labelledby="recent-title">

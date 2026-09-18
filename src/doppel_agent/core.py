@@ -16,12 +16,13 @@ from .tasks.manager import TaskManager
 from .tasks.tools import task_tools
 from .skills.loader import SkillLoader
 from .skills.tools import skill_tools
+from .mcp_bridge import MCPBridge, mcp_tools
 
 
 class Core:
     def __init__(
         self, workspace: Path, provider: Provider | None = None,
-        *, allow_write: bool = False, allow_command: bool = False,
+        *, allow_write: bool = False, allow_command: bool = False, allow_mcp: bool = False,
         approver: Callable[[str, str, dict[str, Any]], bool] | None = None,
     ):
         self.workspace = workspace.resolve(strict=True)
@@ -32,6 +33,8 @@ class Core:
             capabilities.add("workspace_write")
         if allow_command:
             capabilities.add("command_execute")
+        if allow_mcp:
+            capabilities.add("mcp_execute")
         self.allowed_capabilities = frozenset(capabilities)
         self.approver = approver
 
@@ -40,10 +43,12 @@ class Core:
             raise ValueError("prompt must contain 1 to 100000 characters")
         run_id = run_id or uuid4().hex
         bus = EventBus(run_id, lambda event: self.store.append_event(run_id, event))
+        mcp_bridge: MCPBridge | None = None
 
         def request_approval(capability: str, name: str, arguments: dict[str, Any]) -> bool:
-            bus.emit("approval_requested", capability=capability, tool=name, arguments=arguments)
-            allowed = bool(self.approver and self.approver(capability, name, arguments))
+            visible_arguments = mcp_bridge.approval_context(arguments) if capability == "mcp_execute" and mcp_bridge else arguments
+            bus.emit("approval_requested", capability=capability, tool=name, arguments=visible_arguments)
+            allowed = bool(self.approver and self.approver(capability, name, visible_arguments))
             bus.emit("approval_decided", capability=capability, tool=name, allowed=allowed)
             return allowed
 
@@ -63,6 +68,10 @@ class Core:
             tools.register(tool)
         status = "completed"
         try:
+            if "mcp_execute" in self.allowed_capabilities:
+                mcp_bridge = MCPBridge(self.workspace)
+                for tool in mcp_tools(mcp_bridge):
+                    tools.register(tool)
             answer = AgentLoop(self.provider, tools, bus).run(prompt)
         except Exception as exc:
             status = "failed"

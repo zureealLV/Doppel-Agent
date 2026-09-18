@@ -4,7 +4,7 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.2.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.3.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ## 功能
 
@@ -15,12 +15,12 @@
 - **本地控制台**：配置、连接测试、任务提交、执行轨迹与结果集中在一个页面。API Key 不写入项目文件或浏览器存储。
 - **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
 - **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
-- **扩展**：工作区 `.doppel/skills/` 中的 Skill 可经校验后读取；Web 中的写入和命令操作需要逐次人工批准。
+- **扩展**：工作区 `.doppel/skills/` 中的 Skill 可经校验后读取；可选 stdio MCP 服务通过显式配置接入。Web 中的写入、命令和 MCP 操作需要逐次人工批准。
 - **常驻 Core**：CLI 与 daemon 使用 localhost JSON-RPC/NDJSON 通信。
 
 ## 快速开始
 
-要求：Windows 10、Python 3.11 或更新版本。运行时不依赖第三方 Python 包。
+要求：Windows 10、Python 3.11 或更新版本。基础运行时不依赖第三方 Python 包；MCP 扩展需额外安装 `mcp` SDK。
 
 ```powershell
 cd '<你的 Doppel-Agent 仓库目录>'
@@ -50,6 +50,10 @@ $env:DOPPEL_AGENT_API_KEY = '<你的 API Key>'
 
 Base URL 后会自动追加 `/chat/completions`。服务需要兼容 Chat Completions 的 `tools` / `tool_calls` 格式；不同提供商的模型名请以其文档为准。
 
+### MCP 扩展
+
+先安装 `python -m pip install -e ".[mcp]"`，再按 [MCP 配置说明](docs/MCP.md) 创建本机配置。Web 提交任务时勾选“允许 MCP 服务”，每次启动服务/调用工具都需检查实际命令并审批；CLI 则使用 `--allow-mcp`。**外部 MCP 服务作为当前用户运行，不受工作区文件边界约束。**
+
 ### 测试
 
 ```powershell
@@ -63,7 +67,7 @@ python -m unittest discover -s tests -v
 
 Web 控制台只向本机开放，拒绝跨站来源请求；API Key 不持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
 
-Web 已提供写入/命令的逐工具审批（120 秒超时自动拒绝），但 CLI/daemon 不提供交互审批；其显式授权会直接生效。上下文水位使用启发式 token 估算，不等同于模型精确 tokenizer。当前尚无强隔离、MCP、子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)。
+Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝），但 CLI/daemon 不提供交互审批；其显式授权会直接生效。上下文水位使用启发式 token 估算，不等同于模型精确 tokenizer。当前尚无强隔离、MCP HTTP 传输、子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)。
 
 ## 版本与来源
 
