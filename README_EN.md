@@ -4,7 +4,7 @@ A local coding agent with a CLI and a browser-based console. Connect an OpenAI-c
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.4.0
+## Current release: v0.4.1
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Workspace file listing, UTF-8 read/write, and argv-only command execution.

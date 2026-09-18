@@ -160,7 +160,13 @@ async function refreshRuns() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "recent-run";
-    button.textContent = `${run.status.toUpperCase()} · ${(run.prompt || run.run_id).slice(0, 90)}`;
+    const status = document.createElement("span");
+    status.className = `recent-run-status ${run.status}`;
+    status.textContent = run.status.toUpperCase();
+    const prompt = document.createElement("span");
+    prompt.className = "recent-run-prompt";
+    prompt.textContent = (run.prompt || run.run_id).slice(0, 120);
+    button.append(status, prompt);
     button.addEventListener("click", async () => {
       if (state.busy) return;
       state.runId = run.run_id;
