@@ -34,7 +34,7 @@ async def rpc_run(port: int, prompt: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="doppel-agent")
-    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor", "ui", "tasks"))
+    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor", "ui", "desktop", "tasks"))
     parser.add_argument("prompt", nargs="?")
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--port", type=int)
@@ -60,6 +60,10 @@ def main() -> None:
         return
     if args.command == "ui":
         serve_ui(args.workspace, port)
+        return
+    if args.command == "desktop":
+        from .desktop import launch_desktop
+        launch_desktop(args.workspace)
         return
     if args.command == "tasks":
         if not args.prompt:

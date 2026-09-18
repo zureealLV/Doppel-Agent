@@ -41,7 +41,7 @@ function setRunStatus(status) {
   const labels = { queued: "等待执行", running: "正在执行", completed: "已完成", failed: "执行失败" };
   target.textContent = labels[status] || "等待任务";
   target.className = `result-state ${status || "idle"}`;
-  $("#trace-indicator").textContent = status === "running" ? "● LIVE" : `● ${(status || "idle").toUpperCase()}`;
+  $("#trace-indicator").textContent = `● ${labels[status] || "空闲"}`;
 }
 
 function eventDetail(event) {
@@ -57,7 +57,7 @@ function eventDetail(event) {
 function renderEvents(events) {
   const list = $("#event-list");
   list.replaceChildren();
-  $("#event-count").textContent = `${events.length} EVENTS`;
+  $("#event-count").textContent = `${events.length} 条`;
   if (!events.length) {
     const empty = document.createElement("li");
     empty.className = "trace-empty";
@@ -89,7 +89,7 @@ function renderEvents(events) {
 function renderTasks(tasks) {
   const list = $("#task-list");
   list.replaceChildren();
-  $("#task-count").textContent = `${tasks.length} TASKS`;
+  $("#task-count").textContent = `${tasks.length} 项`;
   if (!tasks.length) {
     const item = document.createElement("li");
     item.className = "trace-empty";

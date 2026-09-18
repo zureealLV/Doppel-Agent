@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doppel-agent"
-version = "0.5.0"
+version = "0.6.0"
 description = "A local coding-agent runtime built as an independent study project"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,9 +12,11 @@ dependencies = []
 
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]
+desktop = ["pywebview>=5,<7"]
 
 [project.scripts]
 doppel-agent = "doppel_agent.cli:main"
+doppel-desktop = "doppel_agent.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

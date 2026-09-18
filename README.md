@@ -1,10 +1,10 @@
 # Doppel Agent
 
-一个在本机运行的编程 Agent。用户可以通过命令行或 Web 控制台连接模型、执行任务，并查看模型回合、工具调用与最终结果。
+一个在本机运行的编程 Agent。可通过 Windows 桌面窗口、浏览器工作台或命令行连接模型、执行任务，并查看模型回合、工具调用与最终结果。
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.5.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.6.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ## 功能
 
@@ -13,6 +13,7 @@
 - **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
 - **模型接入**：支持 OpenAI-compatible Chat Completions；可填写 API Base URL、模型名和 API Key，也提供离线 Mock 用于功能测试。
 - **本地控制台**：配置、连接测试、任务提交、执行轨迹与结果集中在一个页面。API Key 不写入项目文件或浏览器存储。
+- **Windows GUI**：独立桌面窗口复用同一套本机工作台；无需使用 TUI，关闭窗口即停止该实例的本地服务。
 - **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
 - **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
 - **扩展**：工作区 `.doppel/skills/` 中的 Skill 可经校验后读取；可选 stdio MCP 服务通过显式配置接入。Web 中的写入、命令和 MCP 操作需要逐次人工批准。
@@ -30,6 +31,18 @@ cd '<你的 Doppel-Agent 仓库目录>'
 ```
 
 打开 [http://127.0.0.1:8766/](http://127.0.0.1:8766/)；左侧填写 API Base URL、模型名称和 API Key，点“测试 API 连接”，再提交任务。`ui` 仅监听 `127.0.0.1`。页面中的密钥只保留在当前页面内存，并随请求发送给本机 Core；Core 请求远端模型时会将其作为认证信息发送给你填写的服务。
+
+### Windows 桌面 GUI（无需 TUI）
+
+已构建的程序位于 `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`。保留同目录的 `_internal` 文件夹；双击 EXE 即可打开独立窗口。默认把启动时的当前目录作为工作区；指定其他项目时：
+
+```powershell
+& 'D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe' --workspace 'D:\your-project'
+```
+
+桌面 GUI 需要系统安装 Microsoft Edge WebView2 Runtime；Windows 10 上如果缺少它，程序会显示启动错误。它复用 Web 控制台的功能和安全边界，但使用随机的 `127.0.0.1` 端口，关闭窗口会停止这个实例。API Key 同样不持久化。
+
+重新构建：`./scripts/build-desktop.ps1`。脚本在项目 `.venv` 安装 `pywebview` 和 `PyInstaller`，产出无控制台窗口的 onedir EXE。也可通过 `python -m pip install -e '.[desktop]'` 后执行 `doppel-agent desktop --workspace 'D:\your-project'`。
 
 不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
 

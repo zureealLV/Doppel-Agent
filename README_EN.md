@@ -1,15 +1,16 @@
 # Doppel Agent
 
-A local coding agent with a CLI and a browser-based console. Connect an OpenAI-compatible Chat Completions endpoint, run a task, and inspect every model/tool step.
+A local coding agent with a Windows desktop GUI, a browser-based console, and a CLI. Connect an OpenAI-compatible Chat Completions endpoint, run a task, and inspect every model/tool step.
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.5.0
+## Current release: v0.6.0
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Workspace file listing, UTF-8 read/write, and argv-only command execution.
 - Read-only by default; writing and command execution require explicit per-run grants.
 - User-supplied API base URL, model and key in the local web console. An offline mock is available for UI tests.
+- A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
 - SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
 - Per-tool manual approval for writes/commands in the web console; saved runs can be replayed after restarting the console.
@@ -39,7 +40,11 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 python -m unittest discover -s tests -v
 ```
 
-The mock is deterministic and cannot perform general coding tasks. A live paid-provider call has not been verified in this environment because no API key is configured.
+The mock is deterministic and cannot perform general coding tasks. A separate single-case live DeepSeek code-review check is documented in [the review report](bench/reports/2026-09-19-review-001.md); it is not a general benchmark.
+
+### Windows GUI executable
+
+The tested onedir build is at `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`. Keep the `_internal` directory beside it. Double-click to use the current directory as workspace, or pass `--workspace 'D:\your-project'`. The GUI needs Microsoft Edge WebView2 Runtime. Rebuild with `./scripts/build-desktop.ps1`; the script installs the optional desktop dependencies into `.venv`. The embedded server binds to a random `127.0.0.1` port and stops when the window closes.
 
 For MCP, install `python -m pip install -e ".[mcp]"` and follow the [stdio MCP setup guide](docs/MCP.md). An external MCP server runs as the current user and is not contained by the workspace path checks.
 
