@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import sys
 import threading
 from pathlib import Path
 
 from .web.server import ConsoleServer
+
+
+def _apply_windows_rounding(window) -> None:
+    """Ask modern DWM for native rounded corners without transparent padding."""
+    if sys.platform != "win32":
+        return
+    try:
+        handle = int(window.native.Handle.ToInt64())
+        preference = ctypes.c_int(2)  # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            handle, 33, ctypes.byref(preference), ctypes.sizeof(preference),
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        # Older Windows versions keep a square, solid-color frameless window.
+        pass
 
 
 class WindowApi:
@@ -47,7 +63,7 @@ def launch_desktop(workspace: Path) -> None:
     worker = threading.Thread(target=server.serve_forever, name="doppel-ui", daemon=True)
     worker.start()
     try:
-        webview.create_window(
+        window = webview.create_window(
             "Doppel Agent",
             f"http://127.0.0.1:{server.server_port}/",
             width=1280,
@@ -55,10 +71,11 @@ def launch_desktop(workspace: Path) -> None:
             min_size=(900, 620),
             frameless=True,
             easy_drag=True,
-            transparent=True,
-            background_color="#000000",
+            transparent=False,
+            background_color="#1b1921",
             js_api=WindowApi(),
         )
+        window.events.shown += _apply_windows_rounding
         bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).parents[2]))
         icon = bundle_root / "assets" / "doppel-agent.ico"
         webview.start(gui="edgechromium", icon=str(icon) if icon.is_file() else None)

@@ -4,16 +4,16 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.8.1
+## Current release: v0.8.2
 
-![Doppel Agent v0.8.1 desktop workspace](docs/images/doppel-agent-v081.png)
+![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Compact workspace maps, recursive text search, line-range reads, UTF-8 read/write, and argv-only command execution.
 - Read-only by default; writing and command execution require explicit per-run grants.
-- A rounded frameless desktop window with Ghostty-style traffic-light controls and a Codex-style Agent workspace with resizable/collapsible panes.
+- A frameless desktop window without transparent white padding, Ghostty-style traffic-light controls, and a Codex-style two-pane default workspace; the resizable run inspector opens from the top-right menu.
 - Multiple custom provider profiles and per-conversation model switching; optional prices drive transparent per-run cost estimates.
-- Per-workspace provider settings; API keys are encrypted with Windows DPAPI for the current user and never returned to the browser in plaintext.
+- Persistent conversations with `Ctrl+K` search across titles, message bodies, and archived items; per-workspace provider settings use Windows DPAPI for API keys.
 - A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
 - SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
@@ -50,7 +50,7 @@ The mock is deterministic and cannot perform general coding tasks. The synthetic
 
 The tested onedir build is at `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`. Keep the `_internal` directory beside it. Double-click to use the current directory as workspace, or pass `--workspace 'D:\your-project'`. The GUI needs Microsoft Edge WebView2 Runtime. Rebuild with `./scripts/build-desktop.ps1`; the script installs the optional desktop dependencies into `.venv`. The embedded server binds to a random `127.0.0.1` port and stops when the window closes.
 
-The traffic-light buttons close, minimize, and maximize/restore the window. **Code Review** prepares and reuses a draft with a review prompt; it does not call the model until the user explicitly sends the prompt. This prevents accidental spend and duplicate review conversations from repeated clicks.
+The traffic-light buttons close, minimize, and maximize/restore the window. The top-right menu toggles the run inspector. **New Conversation** and **Code Review** each reuse an existing empty draft. Code Review first offers four review templates and only fills the composer after a choice; it never calls the model until the user explicitly sends the prompt. Press `Ctrl+K` to search all active and archived conversations.
 
 For MCP, install `python -m pip install -e ".[mcp]"` and follow the [stdio MCP setup guide](docs/MCP.md). An external MCP server runs as the current user and is not contained by the workspace path checks.
 

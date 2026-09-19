@@ -131,6 +131,33 @@ class WebTests(unittest.TestCase):
         self.assertEqual([item["title"] for item in conversations], ["代码审查"])
         self.assertEqual(json.loads(self.get("/api/runs")[1]), [])
 
+    def test_new_draft_is_reused_and_global_search_matches_messages(self):
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            drafts = list(pool.map(
+                lambda _: self.post("/api/conversations/new-draft", {})[1],
+                range(10),
+            ))
+        self.assertEqual(len({draft["id"] for draft in drafts}), 1)
+
+        conversation_id = drafts[0]["id"]
+        self.server.manager.conversations.add_message(
+            conversation_id, "user", "只存在消息正文中的检索哨兵词",
+        )
+        encoded = "%E6%A3%80%E7%B4%A2%E5%93%A8%E5%85%B5%E8%AF%8D"
+        results = json.loads(self.get(f"/api/conversations/search?q={encoded}")[1])
+        self.assertEqual([item["id"] for item in results], [conversation_id])
+
+    def test_workspace_starts_two_pane_with_one_inspector_toggle(self):
+        _, page, _ = self.get("/")
+        html = page.decode("utf-8")
+        self.assertIn('class="app-shell inspector-hidden"', html)
+        self.assertEqual(html.count('id="toggle-inspector"'), 1)
+        self.assertNotIn('id="toggle-sidebar"', html)
+        self.assertNotIn('id="collapse-sidebar"', html)
+        self.assertNotIn('id="server-status"', html)
+        self.assertIn('id="open-search"', html)
+        self.assertIn('id="review-options"', html)
+
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI test")
     def test_saved_api_key_is_dpapi_encrypted_and_never_returned(self):
         key = "SECRET-DPAPI-SENTINEL"

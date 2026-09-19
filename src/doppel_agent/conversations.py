@@ -152,6 +152,28 @@ class ConversationStore:
             """, (int(archived), limit)).fetchall()
         return [dict(row) for row in rows]
 
+    def search(self, query: str, limit: int = 50) -> list[dict]:
+        query = " ".join(query.split())[:200]
+        if not query:
+            return []
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        with self._database() as db:
+            rows = db.execute("""
+                SELECT c.id, c.title, c.created_at, c.updated_at, c.archived,
+                       c.group_id, c.profile_id, g.name AS group_name,
+                       COALESCE((SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1), '') AS preview,
+                       (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+                FROM conversations c LEFT JOIN conversation_groups g ON g.id = c.group_id
+                WHERE c.title LIKE ? ESCAPE '\\'
+                   OR EXISTS (
+                       SELECT 1 FROM messages m
+                       WHERE m.conversation_id = c.id AND m.content LIKE ? ESCAPE '\\'
+                   )
+                ORDER BY c.updated_at DESC LIMIT ?
+            """, (pattern, pattern, limit)).fetchall()
+        return [dict(row) for row in rows]
+
     def add_message(
         self, conversation_id: str, role: str, content: str,
         run_id: str | None = None, model: str | None = None,

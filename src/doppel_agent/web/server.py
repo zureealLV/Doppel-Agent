@@ -271,6 +271,9 @@ class ConsoleHandler(BaseHTTPRequestHandler):
         elif path == "/api/conversations":
             archived = parse_qs(parsed.query).get("archived", ["0"])[0] == "1"
             self._json(200, self.server.manager.conversations.list(archived=archived))
+        elif path == "/api/conversations/search":
+            query = parse_qs(parsed.query).get("q", [""])[0]
+            self._json(200, self.server.manager.conversations.search(query))
         elif path.startswith("/api/conversations/"):
             parts = path.split("/")
             if len(parts) == 4:
@@ -349,6 +352,8 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 self._json(201, self.server.manager.conversations.create(title))
             elif path == "/api/conversations/review-draft":
                 self._json(200, self.server.manager.conversations.get_or_create_empty("代码审查"))
+            elif path == "/api/conversations/new-draft":
+                self._json(200, self.server.manager.conversations.get_or_create_empty("新对话"))
             elif path.startswith("/api/conversations/"):
                 parts = path.split("/")
                 if len(parts) != 5:
