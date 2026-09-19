@@ -3,109 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <title>Doppel Agent · 工作台</title>
+  <meta name="color-scheme" content="dark">
+  <title>Doppel Agent</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="/" aria-label="Doppel Agent 控制台首页">
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
-        <span><strong>Doppel Agent</strong><small>本地编程工作台</small></span>
-      </a>
-      <div class="top-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span><span class="version-tag">本机运行</span></div>
-    </header>
+    <aside class="sidebar">
+      <div class="brand-row"><span class="brand-mark" aria-hidden="true">D</span><div><strong>Doppel</strong><small>Local coding agent</small></div></div>
+      <button id="new-conversation" class="new-chat" type="button"><span>＋</span> 新建对话</button>
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" placeholder="搜索对话" autocomplete="off"></label>
+      <div class="sidebar-label">对话</div>
+      <nav id="conversation-list" class="conversation-list" aria-label="对话列表"><p class="list-empty">还没有保存的对话</p></nav>
+      <div class="sidebar-bottom">
+        <button id="open-settings" class="sidebar-action" type="button"><span>⚙</span><span><b>模型与密钥</b><small id="provider-summary">尚未配置</small></span></button>
+        <div class="core-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span></div>
+      </div>
+    </aside>
 
-    <main class="workspace-layout">
-      <aside class="settings-panel" aria-labelledby="settings-title">
-        <div class="section-kicker">连接设置</div>
-        <h1 id="settings-title">模型配置</h1>
-        <p class="muted intro">设置本次运行使用的模型。密钥仅保留在当前页面，不会写入浏览器存储或项目文件。</p>
+    <main class="chat-pane">
+      <header class="chat-header">
+        <div class="chat-title-wrap"><h1 id="conversation-title">新对话</h1><span id="workspace-path" title="当前工作区">正在读取工作区…</span></div>
+        <div class="chat-actions"><button id="rename-conversation" class="quiet-button" type="button">重命名</button><button id="delete-conversation" class="quiet-button danger-text" type="button">删除</button><span id="run-status" class="run-state idle">空闲</span></div>
+      </header>
 
-        <form id="config-form" autocomplete="off">
-          <label for="preset">服务类型</label>
-          <select id="preset" name="preset">
-            <option value="deepseek">DeepSeek API</option>
-            <option value="openai">OpenAI-compatible</option>
-            <option value="local">本地兼容服务</option>
-            <option value="mock">离线 Mock（功能演示）</option>
-          </select>
-
-          <label for="base-url">API Base URL <span class="field-hint">自动追加 /chat/completions</span></label>
-          <input id="base-url" name="base-url" type="url" spellcheck="false" value="https://api.deepseek.com" placeholder="https://api.example.com/v1">
-
-          <label for="model">模型名称</label>
-          <input id="model" name="model" type="text" spellcheck="false" value="deepseek-flash" placeholder="model-id">
-
-          <label for="api-key">API Key <span class="field-hint">仅保留在本页内存</span></label>
-          <div class="secret-wrap"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button type="button" id="toggle-key" class="icon-button" aria-label="显示 API Key">显示</button></div>
-
-          <button type="button" id="probe-button" class="secondary-button">测试 API 连接 <span aria-hidden="true">↗</span></button>
-          <div id="probe-result" class="inline-result" role="status" aria-live="polite">尚未测试</div>
-        </form>
-
-        <div class="settings-foot">
-          <div class="mini-label">当前工作区</div>
-          <code id="workspace-path">正在读取…</code>
-          <p>模型会收到工具读取的文件内容；请只连接你信任的服务。</p>
-        </div>
-      </aside>
-
-      <section class="main-panel" aria-labelledby="run-title">
-        <div class="hero-line"><span class="section-kicker">任务工作台</span><span class="mode-pill"><span></span> 就绪后可开始</span></div>
-        <div class="hero">
-          <h2 id="run-title">新建任务</h2>
-          <p>描述你想完成的代码任务。执行过程、权限请求和结果会保留在下方，方便核查。</p>
-        </div>
-
-        <form id="run-form" class="composer">
-          <label for="prompt">你的任务 <span class="field-hint">Ctrl + Enter 运行</span></label>
-          <textarea id="prompt" rows="6" placeholder="例如：先列出当前目录，阅读 README，然后总结这个项目还缺哪些功能。"></textarea>
-          <div class="composer-footer">
-            <div class="capabilities" aria-label="工具权限">
-              <label class="switch-line"><input type="checkbox" id="allow-write"><span>允许写文件</span></label>
-              <label class="switch-line"><input type="checkbox" id="allow-command"><span>允许运行命令</span></label>
-              <label class="switch-line"><input type="checkbox" id="allow-mcp"><span>允许 MCP 服务</span></label>
-              <label class="switch-line"><input type="checkbox" id="allow-delegate"><span>允许只读子任务（额外模型调用）</span></label>
-            </div>
-            <button type="submit" id="run-button" class="primary-button"><span class="run-icon" aria-hidden="true">▶</span> 启动任务</button>
+      <section id="message-scroll" class="message-scroll" aria-live="polite">
+        <div id="welcome" class="welcome">
+          <span class="welcome-mark">D</span><h2>今天要处理什么代码？</h2>
+          <p>Doppel 会先检查工作区，再调用工具完成任务。后续消息会带上本对话历史。</p>
+          <div class="suggestions">
+            <button type="button" data-prompt="先阅读 README 和项目结构，告诉我这个项目的核心架构。">理解这个项目</button>
+            <button type="button" data-prompt="只读审查当前项目，找出可复现的高优先级缺陷，给出文件位置和依据。">进行代码审查</button>
+            <button type="button" data-prompt="检查当前测试覆盖和失败风险，给出最值得补充的测试。">检查测试质量</button>
           </div>
-          <p class="permission-note">默认仅可读取工作区。写入、命令和 MCP 均需本次启用并逐次批准；外部 MCP 服务不是 OS 沙箱。</p>
-        </form>
-
-        <section class="recent-card" aria-labelledby="recent-title">
-          <div class="card-heading"><div><h3 id="recent-title">最近运行</h3></div><button id="refresh-runs" type="button" class="secondary-button">刷新</button></div>
-          <div id="recent-runs" class="recent-runs">暂无已保存的运行。</div>
-        </section>
-
-        <section class="result-card" aria-labelledby="result-title">
-          <div class="card-heading"><div><h3 id="result-title">运行结果</h3></div><span id="run-status" class="result-state idle">等待任务</span></div>
-          <div id="empty-state" class="empty-state"><span class="empty-symbol" aria-hidden="true">⌁</span><strong>还没有运行记录</strong><p>填写左侧 API 配置，先测试连接，再发送第一条任务。</p></div>
-          <pre id="answer" class="answer" hidden></pre>
-          <p id="run-id" class="run-id" hidden></p>
-        </section>
+        </div>
+        <div id="message-list" class="message-list"></div>
       </section>
 
-      <aside class="trace-panel" aria-labelledby="trace-title">
-        <div class="section-kicker">执行详情</div>
-        <section id="approval-section" class="approval-section" aria-labelledby="approval-title" hidden>
-          <div class="trace-heading"><h2 id="approval-title">等待权限审批</h2><span>需要你确认</span></div>
-          <p>检查完整参数后决定。120 秒内未处理会自动拒绝。</p>
-          <div id="approval-list"></div>
-        </section>
-        <section class="task-section" aria-labelledby="tasks-title">
-          <div class="trace-heading"><h2 id="tasks-title">任务计划</h2><span id="task-count">0 项</span></div>
-          <ol id="task-list" class="task-list"><li class="trace-empty">任务创建后显示在这里。</li></ol>
-        </section>
-        <div class="trace-heading"><h2 id="trace-title">执行轨迹</h2><span id="event-count">0 条</span></div>
-        <p class="muted">模型回合、工具请求与错误在这里按时间顺序出现。</p>
-        <ol id="event-list" class="event-list" aria-live="polite"><li class="trace-empty">等待事件流…</li></ol>
-        <div class="trace-footer"><span>事件记录保存在工作区</span><span id="trace-indicator">● 空闲</span></div>
-      </aside>
+      <section id="approval-section" class="approval-dock" hidden><div class="approval-dock-title"><strong>需要你的授权</strong><span>120 秒后自动拒绝</span></div><div id="approval-list"></div></section>
+
+      <form id="run-form" class="composer" autocomplete="off">
+        <textarea id="prompt" rows="3" placeholder="给 Doppel 一个任务，Enter 发送，Shift + Enter 换行"></textarea>
+        <div class="composer-toolbar">
+          <details class="permission-menu"><summary>权限 <span id="permission-count">只读</span></summary><div class="permission-popover">
+            <label><input type="checkbox" id="allow-write"><span><b>写入文件</b><small>仍需逐次批准</small></span></label>
+            <label><input type="checkbox" id="allow-command"><span><b>运行命令</b><small>以当前 Windows 用户执行</small></span></label>
+            <label><input type="checkbox" id="allow-mcp"><span><b>MCP 服务</b><small>外部服务不受工作区沙箱保护</small></span></label>
+            <label><input type="checkbox" id="allow-delegate"><span><b>只读子任务</b><small>会产生额外模型调用</small></span></label>
+          </div></details>
+          <span class="composer-note">默认只读 · 对话自动保存</span><button type="submit" id="run-button" class="send-button" aria-label="发送任务">↑</button>
+        </div>
+      </form>
     </main>
-    <footer class="footer"><span>Doppel Agent</span><span>本地运行 · 显式授权 · 可追溯记录</span></footer>
+
+    <aside class="activity-pane">
+      <header class="activity-header"><div><span>ACTIVITY</span><h2>执行详情</h2></div><span id="trace-indicator" class="live-indicator">● 空闲</span></header>
+      <section class="activity-section"><div class="section-title"><h3>任务计划</h3><span id="task-count">0 项</span></div><ol id="task-list" class="task-list"><li class="trace-empty">任务创建后显示在这里。</li></ol></section>
+      <section class="activity-section activity-events"><div class="section-title"><h3>工具与模型</h3><span id="event-count">0 条</span></div><ol id="event-list" class="event-list"><li class="trace-empty">等待任务事件…</li></ol></section>
+      <footer><span>记录保存在 .doppel-agent</span><span id="active-run-id"></span></footer>
+    </aside>
   </div>
+
+  <dialog id="settings-dialog" class="settings-dialog">
+    <form method="dialog" class="dialog-card" id="config-form" autocomplete="off">
+      <header><div><span class="dialog-kicker">PROVIDER</span><h2>模型与 API</h2><p>配置保存在当前工作区。API Key 使用 Windows DPAPI 加密，只能由当前 Windows 用户在本机解密。</p></div><button id="close-settings" class="close-button" value="cancel" aria-label="关闭">×</button></header>
+      <div class="form-grid">
+        <label>服务类型<select id="preset" name="preset"><option value="deepseek">DeepSeek API</option><option value="openai">OpenAI-compatible</option><option value="local">本地兼容服务</option><option value="mock">离线 Mock</option></select></label>
+        <label>模型名称<input id="model" name="model" type="text" spellcheck="false" value="deepseek-flash" placeholder="model-id"></label>
+        <label class="full-field">API Base URL <span>自动追加 /chat/completions</span><input id="base-url" name="base-url" type="url" spellcheck="false" value="https://api.deepseek.com"></label>
+        <label class="full-field">API Key <span id="key-state">尚未保存</span><div class="secret-wrap"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="输入新 Key，留空则保留已保存的 Key"><button type="button" id="toggle-key">显示</button></div></label>
+      </div>
+      <div id="probe-result" class="inline-result" role="status">尚未测试</div>
+      <footer class="dialog-actions"><button type="button" id="forget-key" class="text-button danger-text">删除已保存 Key</button><span></span><button type="button" id="probe-button" class="secondary-button">测试连接</button><button type="button" id="save-settings" class="primary-button">保存设置</button></footer>
+    </form>
+  </dialog>
 </body>
 </html>

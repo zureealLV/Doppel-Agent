@@ -85,11 +85,31 @@ def _target(workspace: Path, raw_path: str, *, must_exist: bool) -> Path:
     return target
 
 
+def _sensitive_path(path: Path) -> bool:
+    name = path.name.lower()
+    if name == ".env.example":
+        return False
+    return (
+        name == ".env" or name.startswith(".env.") or name in {
+            "credentials", "credentials.json", "secrets.json",
+            "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa",
+            ".npmrc", ".netrc", ".pgpass", ".git-credentials", ".htpasswd",
+        } or path.suffix.lower() in {".pem", ".pfx", ".p12", ".key"}
+    )
+
+
+def _reserved_path(workspace: Path, path: Path) -> bool:
+    relative = path.relative_to(workspace.resolve(strict=True))
+    return any(part.lower() in {".git", ".doppel-agent", ".ssh", ".aws", ".docker"} for part in relative.parts)
+
+
 def read_file_tool(workspace: Path, max_bytes: int = 64 * 1024) -> Tool:
     def read(arguments: dict[str, Any]) -> str:
         target = _target(workspace, arguments["path"], must_exist=True)
         if not target.is_file():
             raise ValueError("path is not a file")
+        if _sensitive_path(target) or _reserved_path(workspace, target):
+            raise PermissionError("reading secret-bearing files is blocked")
         if target.stat().st_size > max_bytes:
             raise ValueError("file exceeds read limit")
         return target.read_text(encoding="utf-8")
@@ -111,6 +131,8 @@ def list_files_tool(workspace: Path, max_entries: int = 200) -> Tool:
 def write_file_tool(workspace: Path, max_bytes: int = 256 * 1024) -> Tool:
     def write(arguments: dict[str, Any]) -> str:
         target = _target(workspace, arguments["path"], must_exist=False)
+        if _sensitive_path(target) or _reserved_path(workspace, target):
+            raise PermissionError("writing secret-bearing or agent-state files is blocked")
         if target.exists() and not target.is_file():
             raise ValueError("path is not a file")
         payload = arguments["content"].encode("utf-8")

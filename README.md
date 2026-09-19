@@ -4,7 +4,7 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.6.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.7.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ## 功能
 
@@ -12,7 +12,9 @@
 - **工具**：列目录、读取 UTF-8 文件、写入 UTF-8 文件、运行不经过 Shell 的 argv 命令。
 - **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
 - **模型接入**：支持 OpenAI-compatible Chat Completions；可填写 API Base URL、模型名和 API Key，也提供离线 Mock 用于功能测试。
-- **本地控制台**：配置、连接测试、任务提交、执行轨迹与结果集中在一个页面。API Key 不写入项目文件或浏览器存储。
+- **Agent 工作台**：Codex 风格三栏界面将对话、聊天任务与工具活动分开呈现，模型设置收进独立弹窗。
+- **持久对话**：消息自动写入 SQLite，支持搜索、重命名、删除和重启恢复；同一对话的历史会继续参与模型推理。
+- **安全保存模型配置**：Base URL 与模型名保存在当前工作区；API Key 使用 Windows DPAPI 按当前用户加密，明文不会返回浏览器。
 - **Windows GUI**：独立桌面窗口复用同一套本机工作台；无需使用 TUI，关闭窗口即停止该实例的本地服务。
 - **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
 - **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
@@ -30,7 +32,7 @@ cd '<你的 Doppel-Agent 仓库目录>'
 .\doppel.cmd ui
 ```
 
-打开 [http://127.0.0.1:8766/](http://127.0.0.1:8766/)；左侧填写 API Base URL、模型名称和 API Key，点“测试 API 连接”，再提交任务。`ui` 仅监听 `127.0.0.1`。页面中的密钥只保留在当前页面内存，并随请求发送给本机 Core；Core 请求远端模型时会将其作为认证信息发送给你填写的服务。
+打开 [http://127.0.0.1:8766/](http://127.0.0.1:8766/)；点击左下角“模型与密钥”，填写 API Base URL、模型名称和 API Key，测试后保存，再开始对话。`ui` 仅监听 `127.0.0.1`。配置保存在当前工作区 `.doppel-agent/`；Key 由 Windows DPAPI 加密，只能由同一台电脑上的当前 Windows 用户解密，接口不会把明文发回页面。
 
 ### Windows 桌面 GUI（无需 TUI）
 
@@ -40,7 +42,7 @@ cd '<你的 Doppel-Agent 仓库目录>'
 & 'D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe' --workspace 'D:\your-project'
 ```
 
-桌面 GUI 需要系统安装 Microsoft Edge WebView2 Runtime；Windows 10 上如果缺少它，程序会显示启动错误。它复用 Web 控制台的功能和安全边界，但使用随机的 `127.0.0.1` 端口，关闭窗口会停止这个实例。API Key 同样不持久化。
+桌面 GUI 需要系统安装 Microsoft Edge WebView2 Runtime；Windows 10 上如果缺少它，程序会显示启动错误。它复用 Web 控制台的功能和安全边界，但使用随机的 `127.0.0.1` 端口，关闭窗口会停止这个实例。对话和加密后的 API Key 会保存在所选工作区。
 
 重新构建：`./scripts/build-desktop.ps1`。脚本在项目 `.venv` 安装 `pywebview` 和 `PyInstaller`，产出无控制台窗口的 onedir EXE。也可通过 `python -m pip install -e '.[desktop]'` 后执行 `doppel-agent desktop --workspace 'D:\your-project'`。
 
@@ -89,11 +91,11 @@ python -m unittest discover -s tests -v
 python bench/run_review.py --env-file '<你的本机 .env 路径>'
 ```
 
-报告存入忽略提交的 `.bench-results/`；密钥不写入报告。两轮真实模型试验的逐项结果、样本范围和不足见 [审查验收记录](bench/reports/2026-09-19-review-001.md)，评分方法见 [基准说明](bench/README.md)。一个样本不能证明通用成功率。
+报告存入忽略提交的 `.bench-results/`；密钥不写入报告。三轮合成题与三个真实项目的分层结果、SWE-bench 接入边界见 [代码审查测试策略](docs/BENCHMARK_STRATEGY.md)，早期逐项结果见 [审查验收记录](bench/reports/2026-09-19-review-001.md)。一个样本不能证明通用成功率。
 
 ## 安全边界
 
-Web 控制台只向本机开放，拒绝跨站来源请求；API Key 不持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
+Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
 
 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝），但 CLI/daemon 不提供交互审批；其显式授权会直接生效。子任务仅在显式启用后可用，但不会再次弹出审批。上下文水位使用启发式 token 估算，不等同于模型精确 tokenizer。当前尚无强隔离、MCP HTTP 传输、并行子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)。
 

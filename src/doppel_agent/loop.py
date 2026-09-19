@@ -25,8 +25,11 @@ class AgentLoop:
         self.max_steps = max_steps
         self.context = ContextPolicy(context_limit_tokens)
 
-    def run(self, prompt: str) -> str:
-        messages = [Message("system", SYSTEM_PROMPT), Message("user", prompt)]
+    def run(self, prompt: str, history: list[Message] | None = None) -> str:
+        history = list(history or [])
+        if any(message.role not in ("user", "assistant") or message.tool_calls or message.tool_call_id for message in history):
+            raise ValueError("conversation history may contain only plain user/assistant messages")
+        messages = [Message("system", SYSTEM_PROMPT), *history, Message("user", prompt)]
         self.bus.emit("run_started", prompt=prompt)
         for step in range(1, self.max_steps + 1):
             messages, waterline = self.context.compact(messages)

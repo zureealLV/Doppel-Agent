@@ -36,7 +36,11 @@ def read_key(env_file: Path | None) -> str:
         raise ValueError("env file does not exist")
     for raw in env_file.read_text(encoding="utf-8-sig").splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line and line.startswith("sk-"):
+            return line
+        if "=" not in line:
             continue
         name, value = line.split("=", 1)
         if name.strip().removeprefix("export ").strip() == "DEEPSEEK_API_KEY":

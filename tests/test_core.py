@@ -46,6 +46,17 @@ class CoreTests(unittest.TestCase):
         self.assertIn("tool_completed", [event["kind"] for event in events])
         self.assertIn("tool_completed", [event["kind"] for event in trace])
 
+    def test_external_state_root_keeps_target_workspace_clean(self):
+        state_root = self.root.parent / f"{self.root.name}-state"
+        self.addCleanup(lambda: __import__("shutil").rmtree(state_root, ignore_errors=True))
+        (self.root / "hello.txt").write_text("hello world", encoding="utf-8")
+
+        result = Core(self.root, state_root=state_root).run("read hello.txt")
+
+        self.assertEqual(result["status"], "completed")
+        self.assertFalse((self.root / ".doppel-agent").exists())
+        self.assertTrue((state_root / "runs" / result["run_id"] / "session.json").is_file())
+
     def test_tool_failure_returned_to_model(self):
         result = Core(self.root).run("read missing.txt")
         self.assertEqual(result["status"], "completed")

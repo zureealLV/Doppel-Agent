@@ -78,6 +78,63 @@ class WebTests(unittest.TestCase):
         finally:
             replacement.server_close()
 
+    def test_conversation_persists_and_is_sent_as_context(self):
+        class CapturingProvider:
+            def __init__(self):
+                self.calls = []
+
+            def next_turn(self, messages, tools):
+                self.calls.append([(message.role, message.content) for message in messages])
+                return ModelTurn(content=f"answer-{len(self.calls)}")
+
+        provider = CapturingProvider()
+        self.server.manager._provider = lambda config: provider
+        _, conversation = self.post("/api/conversations", {"title": "新对话"})
+        conversation_id = conversation["id"]
+
+        for prompt in ("first question", "follow-up question"):
+            _, submitted = self.post("/api/runs", {
+                "prompt": prompt, "conversation_id": conversation_id,
+                "config": {"provider": "mock"}, "allow_write": False,
+            })
+            for _ in range(100):
+                job = json.loads(self.get(f"/api/runs/{submitted['run_id']}")[1])
+                if job["status"] in ("completed", "failed"):
+                    break
+                time.sleep(0.03)
+            self.assertEqual(job["status"], "completed")
+
+        saved = json.loads(self.get(f"/api/conversations/{conversation_id}")[1])
+        self.assertEqual([item["role"] for item in saved["messages"]], ["user", "assistant", "user", "assistant"])
+        self.assertEqual(saved["title"], "first question")
+        self.assertIn(("user", "first question"), provider.calls[1])
+        self.assertIn(("assistant", "answer-1"), provider.calls[1])
+        self.assertEqual(provider.calls[1][-1], ("user", "follow-up question"))
+
+        replacement = ConsoleServer(("127.0.0.1", 0), self.root)
+        try:
+            self.assertEqual(replacement.manager.conversations.get(conversation_id)["messages"], saved["messages"])
+        finally:
+            replacement.server_close()
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI test")
+    def test_saved_api_key_is_dpapi_encrypted_and_never_returned(self):
+        key = "SECRET-DPAPI-SENTINEL"
+        _, saved = self.post("/api/settings", {
+            "config": {
+                "provider": "openai", "preset": "deepseek",
+                "base_url": "https://api.deepseek.com", "model": "deepseek-flash", "api_key": key,
+            }
+        })
+        self.assertTrue(saved["api_key_saved"])
+        self.assertNotIn("api_key", saved)
+        raw = (self.root / ".doppel-agent" / "provider-settings.json").read_text(encoding="utf-8")
+        self.assertNotIn(key, raw)
+        self.assertEqual(self.server.manager.settings.api_key(), key)
+        public = json.loads(self.get("/api/settings")[1])
+        self.assertTrue(public["api_key_saved"])
+        self.assertNotIn("api_key", public)
+
     def test_rejects_cross_origin(self):
         with self.assertRaises(HTTPError) as caught:
             self.post("/api/probe", {"config": {"provider": "mock"}}, {"Origin": "https://example.com"})

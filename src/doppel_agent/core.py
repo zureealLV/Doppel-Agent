@@ -9,7 +9,7 @@ from uuid import uuid4
 from .events import EventBus
 from .loop import AgentLoop
 from .permissions import PermissionManager
-from .provider import MockProvider, Provider
+from .provider import Message, MockProvider, Provider
 from .storage import RunStore
 from .tools import ToolRegistry, list_files_tool, read_file_tool, run_command_tool, write_file_tool
 from .tasks.manager import TaskManager
@@ -26,10 +26,14 @@ class Core:
         *, allow_write: bool = False, allow_command: bool = False, allow_mcp: bool = False,
         allow_delegate: bool = False,
         approver: Callable[[str, str, dict[str, Any]], bool] | None = None,
+        state_root: Path | None = None,
+        max_steps: int = 8,
     ):
         self.workspace = workspace.resolve(strict=True)
         self.provider = provider or MockProvider()
-        self.store = RunStore(self.workspace / ".doppel-agent")
+        self.state_root = (state_root or (self.workspace / ".doppel-agent")).resolve()
+        self.store = RunStore(self.state_root)
+        self.max_steps = max_steps
         capabilities = {"workspace_read", "task_manage"}
         if allow_write:
             capabilities.add("workspace_write")
@@ -42,7 +46,7 @@ class Core:
         self.allowed_capabilities = frozenset(capabilities)
         self.approver = approver
 
-    def run(self, prompt: str, *, run_id: str | None = None) -> dict[str, str]:
+    def run(self, prompt: str, *, run_id: str | None = None, history: list[Message] | None = None) -> dict[str, str]:
         if not prompt or len(prompt) > 100_000:
             raise ValueError("prompt must contain 1 to 100000 characters")
         run_id = run_id or uuid4().hex
@@ -65,7 +69,7 @@ class Core:
         tools.register(list_files_tool(self.workspace))
         tools.register(write_file_tool(self.workspace))
         tools.register(run_command_tool(self.workspace))
-        manager = TaskManager(self.workspace / ".doppel-agent" / "tasks.sqlite3")
+        manager = TaskManager(self.state_root / "tasks.sqlite3")
         for tool in task_tools(manager, run_id):
             tools.register(tool)
         for tool in skill_tools(SkillLoader(self.workspace)):
@@ -78,7 +82,7 @@ class Core:
                 mcp_bridge = MCPBridge(self.workspace)
                 for tool in mcp_tools(mcp_bridge):
                     tools.register(tool)
-            answer = AgentLoop(self.provider, tools, bus).run(prompt)
+            answer = AgentLoop(self.provider, tools, bus, max_steps=self.max_steps).run(prompt, history)
         except Exception as exc:
             status = "failed"
             answer = f"{type(exc).__name__}: {exc}"

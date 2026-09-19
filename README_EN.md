@@ -4,12 +4,13 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.6.0
+## Current release: v0.7.0
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
 - Workspace file listing, UTF-8 read/write, and argv-only command execution.
 - Read-only by default; writing and command execution require explicit per-run grants.
-- User-supplied API base URL, model and key in the local web console. An offline mock is available for UI tests.
+- A Codex-style three-pane Agent workspace with persisted, searchable conversations and real multi-turn model context.
+- Per-workspace provider settings; API keys are encrypted with Windows DPAPI for the current user and never returned to the browser in plaintext.
 - A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
 - SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
@@ -30,7 +31,7 @@ cd '<your Doppel-Agent repository directory>'
 .\doppel.cmd ui
 ```
 
-Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), enter your API base URL, model and key, test the connection, then submit a task. The key is not stored in browser storage or project files. It is passed to the local Core for the request and then to the endpoint you selected.
+Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), open **Model & API** in the lower-left corner, enter the endpoint, model and key, test, save, then start a conversation. Conversations and settings live under the selected workspace's `.doppel-agent/`; the key is stored only as a current-user Windows DPAPI ciphertext and is never returned by the settings API.
 
 Offline smoke test:
 
@@ -40,7 +41,7 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 python -m unittest discover -s tests -v
 ```
 
-The mock is deterministic and cannot perform general coding tasks. A separate single-case live DeepSeek code-review check is documented in [the review report](bench/reports/2026-09-19-review-001.md); it is not a general benchmark.
+The mock is deterministic and cannot perform general coding tasks. The synthetic live review plus read-only reviews of three real local projects are documented in the [benchmark strategy](docs/BENCHMARK_STRATEGY.md); they are not a general benchmark or a SWE-bench score.
 
 ### Windows GUI executable
 

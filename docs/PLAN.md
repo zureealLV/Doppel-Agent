@@ -15,8 +15,8 @@
 | P2 持久化任务 | `tasks/manager.py` SQLite DAG、工具与 Web 查询 | 重启后任务状态、依赖、重试仍正确；环依赖拒绝 | 已实现并测试；任务自动调度待做 |
 | P3 上下文治理 | `context/policy.py` 水位估算与完整工具组压缩 | 模型对应 token 统计、水位阈值、压缩前后量化；系统/任务关键事实保留 | 已实现估算压缩及 provider usage 事件；精确 tokenizer/笔记待做 |
 | P4 扩展链路 | `skills/loader.py`、`mcp_bridge.py`、`subagents.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill、stdio MCP 与限额只读子任务已测试；取消和 HTTP MCP 待做 |
-| P5 UI 和恢复 | `web/` 本机控制台、`desktop.py` 桌面窗口、审批与最近运行回放；后续 RPC 订阅 | Web/桌面可自主填写 API 并测试；窗口重新打开仍看到已保存任务；审批可交互 | Web 与 Windows EXE 已运行验证，回放已实现；实时订阅待做。按使用偏好暂不优先实现 TUI |
-| P6 基准与发布 | `bench/cases/`、`bench/run_review.py`、验收报告；后续扩充题集与对照 | 固定题集、模型、基线、分母、费用日期、失败记录和复现实验；不预填数字 | 已完成 1 个合成审查样本与 2 次真实模型试验；多题集、基线、成本对照待做 |
+| P5 UI 和恢复 | `web/` 三栏 Agent 工作台、`desktop.py` 桌面窗口、SQLite 对话、DPAPI 设置与审批；后续 RPC 订阅 | 重启后恢复对话与模型设置；历史真正进入模型上下文；审批可交互 | 已完成并测试；实时订阅待做。按使用偏好不优先实现 TUI |
+| P6 基准与发布 | `bench/cases/`、合成/真实项目 runner、测试策略；后续接官方 harness | 固定题集、模型、基线、分母、费用日期、失败记录和复现实验；不预填数字 | 合成题已跑 3 次，三个真实项目只读链路完成；SWE-bench harness、基线、成本对照待做 |
 
 ## P1 实现/验证明细
 
@@ -39,11 +39,11 @@ python -m doppel_agent.cli demo 'read README.md'
 
 远端 API 的持续验收：由用户在当前 Shell 设置 `DOPPEL_AGENT_BASE_URL`、`DOPPEL_AGENT_MODEL`、`DOPPEL_AGENT_API_KEY` 后运行 `ask`，确认真实响应、工具调用、权限拒绝/放行和 `.doppel-agent/runs/<run-id>/` 记录。已有一次真实模型的单样本代码审查记录（见 `bench/reports/`）；没有凭据的本地 fixture 不等于远端模型实测。
 
-Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`，选择 Mock 并提交 `read README.md`，确认结果和事件列表；重启后从“最近运行”回放；再由用户填写自己的真实 API 参数，执行连接测试与任务。UI 密钥不落盘，浏览器刷新后需重新填写。写入/命令须同时开启对应复选框和逐次批准。
+Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`，选择 Mock 并提交 `read README.md`，确认消息和活动流；追加追问并重启服务，确认对话、上下文和 DPAPI 加密设置恢复。写入/命令须同时开启对应选项和逐次批准。
 
 ## 版本发布规则
 
-- `v0.1.0`：本地运行时 MVP；`v0.2.0`：用户可配置的 Web 控制台、任务 DAG、估算上下文治理、Skill 读取与审批；`v0.3.0`：显式配置的 stdio MCP 桥接；`v0.4.0`：限额只读子任务委派；`v0.5.0`：代码审查验收样本和真实模型记录；`v0.6.0`：工作台改版与 Windows 桌面 GUI。
+- `v0.1.0`：本地运行时 MVP；`v0.2.0`：Web 控制台、任务 DAG、上下文治理、Skill 与审批；`v0.3.0`：stdio MCP；`v0.4.0`：限额只读子任务；`v0.5.0`：代码审查样本；`v0.6.0`：Windows GUI；`v0.7.0`：三栏 Agent UI、持久对话、DPAPI 设置与真实项目审查。
 - 后续扩展、基准按功能版本迭代；TUI 不再优先。每次推送前更新 `pyproject.toml`、`__version__`、README 状态和 `CHANGELOG.md`，跑完整测试并打同名 tag。
 - GitHub 发布必须校验远端仓库、推送后的分支 SHA 与 tag；不能把本地提交当成远端发布。
 

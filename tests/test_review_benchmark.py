@@ -59,3 +59,8 @@ class ReviewBenchmarkTests(unittest.TestCase):
         env.write_text("# test\nDEEPSEEK_API_KEY='test-secret-value'\n", encoding="utf-8")
         self.assertEqual(read_key(env), "test-secret-value")
         self.assertEqual(list(self.root.iterdir()), [env])
+
+    def test_env_key_reader_accepts_raw_test_key(self):
+        env = self.root / ".env"
+        env.write_text("sk-test-raw-key\n", encoding="utf-8")
+        self.assertEqual(read_key(env), "sk-test-raw-key")

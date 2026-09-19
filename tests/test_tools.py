@@ -18,6 +18,25 @@ class ToolTests(unittest.TestCase):
     def test_reads_inside_workspace(self):
         self.assertEqual(self.registry.execute("read_file", {"path": "note.txt"}), "safe")
 
+    def test_blocks_secret_bearing_files(self):
+        for name in (".env", ".env.local", "credentials.json", ".npmrc", "private.pem"):
+            (self.root / name).write_text("do-not-leak", encoding="utf-8")
+            with self.subTest(name=name), self.assertRaises(PermissionError):
+                self.registry.execute("read_file", {"path": name})
+
+        (self.root / ".env.example").write_text("SAFE_EXAMPLE=1", encoding="utf-8")
+        self.assertEqual(
+            self.registry.execute("read_file", {"path": ".env.example"}),
+            "SAFE_EXAMPLE=1",
+        )
+
+    def test_blocks_reserved_state_and_metadata_directories(self):
+        for directory in (".doppel-agent", ".git", ".ssh"):
+            (self.root / directory).mkdir()
+            (self.root / directory / "data.txt").write_text("private", encoding="utf-8")
+            with self.subTest(directory=directory), self.assertRaises(PermissionError):
+                self.registry.execute("read_file", {"path": f"{directory}/data.txt"})
+
     def test_rejects_absolute_path(self):
         with self.assertRaises(PermissionError):
             self.registry.execute("read_file", {"path": str(self.root / "note.txt")})
@@ -50,6 +69,15 @@ class ToolTests(unittest.TestCase):
         registry.register(write_file_tool(self.root))
         registry.execute("write_file", {"path": "new.txt", "content": "hello"})
         self.assertEqual((self.root / "new.txt").read_text(encoding="utf-8"), "hello")
+
+    def test_write_cannot_replace_secrets_or_agent_state(self):
+        registry = ToolRegistry(PermissionManager(frozenset({"workspace_write"})))
+        registry.register(write_file_tool(self.root))
+        (self.root / ".doppel-agent").mkdir()
+        for path in (".env", ".npmrc", ".doppel-agent/session.json"):
+            with self.subTest(path=path), self.assertRaises(PermissionError):
+                registry.execute("write_file", {"path": path, "content": "overwrite"})
+            self.assertFalse((self.root / path).exists())
 
     def test_approval_requires_grant_and_consent(self):
         calls = []

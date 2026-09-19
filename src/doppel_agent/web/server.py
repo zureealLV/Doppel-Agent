@@ -10,8 +10,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from ..conversations import ConversationStore
 from ..core import Core
 from ..provider import Message, MockProvider, OpenAICompatibleProvider
+from ..settings import SettingsStore
 from ..storage import RunStore
 from ..tasks.manager import TaskManager
 from .approvals import ApprovalBroker
@@ -24,6 +26,8 @@ class JobManager:
     def __init__(self, workspace: Path):
         self.workspace = workspace.resolve(strict=True)
         self.store = RunStore(self.workspace / ".doppel-agent")
+        self.conversations = ConversationStore(self.workspace / ".doppel-agent" / "conversations.sqlite3")
+        self.settings = SettingsStore(self.workspace / ".doppel-agent" / "provider-settings.json")
         self.jobs: dict[str, dict] = {}
         self.brokers: dict[str, ApprovalBroker] = {}
         self.lock = threading.Lock()
@@ -36,7 +40,7 @@ class JobManager:
             raise ValueError("provider must be 'openai' or 'mock'")
         base_url = config.get("base_url")
         model = config.get("model")
-        key = config.get("api_key", "")
+        key = config.get("api_key", "") or self.settings.api_key()
         if not isinstance(base_url, str) or not isinstance(model, str) or not isinstance(key, str):
             raise ValueError("base_url, model and api_key must be strings")
         return OpenAICompatibleProvider(base_url, model, key)
@@ -48,7 +52,7 @@ class JobManager:
         turn = provider.next_turn([Message("user", "Reply briefly: Doppel Agent API connection OK")], [])
         return {"ok": True, "reply": turn.content[:1000]}
 
-    def submit(self, data: dict) -> str:
+    def submit(self, data: dict) -> dict:
         prompt = data.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 100_000:
             raise ValueError("prompt must contain 1 to 100000 characters")
@@ -60,6 +64,9 @@ class JobManager:
         allow_command = data.get("allow_command", False)
         allow_mcp = data.get("allow_mcp", False)
         allow_delegate = data.get("allow_delegate", False)
+        conversation_id = data.get("conversation_id")
+        if conversation_id is not None and not isinstance(conversation_id, str):
+            raise ValueError("conversation_id must be a string")
         if not all(isinstance(value, bool) for value in (allow_write, allow_command, allow_mcp, allow_delegate)):
             raise ValueError("permission grants must be booleans")
         with self.lock:
@@ -67,7 +74,15 @@ class JobManager:
             if active >= 2:
                 raise RuntimeError("two runs are already active")
             run_id = uuid4().hex
-            self.jobs[run_id] = {"run_id": run_id, "status": "queued", "answer": "", "prompt": prompt}
+            history: list[Message] = []
+            if conversation_id:
+                self.conversations.set_title_from_prompt(conversation_id, prompt)
+                history = [Message(item["role"], item["content"]) for item in self.conversations.history(conversation_id)]
+                self.conversations.add_message(conversation_id, "user", prompt, run_id)
+            self.jobs[run_id] = {
+                "run_id": run_id, "status": "queued", "answer": "", "prompt": prompt,
+                "conversation_id": conversation_id,
+            }
             self.brokers[run_id] = ApprovalBroker()
 
         def run() -> None:
@@ -78,15 +93,19 @@ class JobManager:
                     self.workspace, provider, allow_write=allow_write, allow_command=allow_command,
                     allow_mcp=allow_mcp, allow_delegate=allow_delegate,
                     approver=self.brokers[run_id].request,
-                ).run(prompt, run_id=run_id)
+                ).run(prompt, run_id=run_id, history=history)
             except Exception as exc:
                 result = {"run_id": run_id, "status": "failed", "answer": f"{type(exc).__name__}: {exc}"}
+            result["prompt"] = prompt
+            result["conversation_id"] = conversation_id
+            self.store.write_session(run_id, result)
+            if conversation_id:
+                self.conversations.add_message(conversation_id, "assistant", result["answer"], run_id)
             with self.lock:
-                result["prompt"] = prompt
                 self.jobs[run_id] = result
 
         self.pool.submit(run)
-        return run_id
+        return {"run_id": run_id, "conversation_id": conversation_id}
 
     def status(self, run_id: str) -> dict | None:
         with self.lock:
@@ -99,9 +118,23 @@ class JobManager:
         saved = self.store.list_sessions()
         known = {job["run_id"] for job in live}
         return [
-            {"run_id": job["run_id"], "status": job["status"], "prompt": job.get("prompt", "")}
+            {"run_id": job["run_id"], "status": job["status"], "prompt": job.get("prompt", ""),
+             "conversation_id": job.get("conversation_id")}
             for job in live + [job for job in saved if job["run_id"] not in known]
         ]
+
+    def public_settings(self) -> dict:
+        return self.settings.public()
+
+    def save_settings(self, data: dict) -> dict:
+        config = data.get("config")
+        if not isinstance(config, dict):
+            raise ValueError("config must be an object")
+        key = config.pop("api_key", "")
+        forget = data.get("forget_key", False)
+        if not isinstance(key, str) or not isinstance(forget, bool):
+            raise ValueError("invalid key settings")
+        return self.settings.save(config, api_key=key, forget_key=forget)
 
     def events(self, run_id: str) -> list[dict] | None:
         if self.status(run_id) is None:
@@ -198,6 +231,17 @@ class ConsoleHandler(BaseHTTPRequestHandler):
             self._json(200, {"status": "ok", "workspace": str(self.server.manager.workspace)})
         elif path == "/api/runs":
             self._json(200, self.server.manager.recent())
+        elif path == "/api/settings":
+            self._json(200, self.server.manager.public_settings())
+        elif path == "/api/conversations":
+            self._json(200, self.server.manager.conversations.list())
+        elif path.startswith("/api/conversations/"):
+            parts = path.split("/")
+            if len(parts) == 4:
+                conversation = self.server.manager.conversations.get(parts[3])
+                self._json(200, conversation) if conversation else self._json(404, {"error": "conversation not found"})
+            else:
+                self._json(404, {"error": "not found"})
         elif path.startswith("/api/runs/"):
             parts = path.split("/")
             if len(parts) not in (4, 5):
@@ -242,8 +286,31 @@ class ConsoleHandler(BaseHTTPRequestHandler):
             path = urlparse(self.path).path
             if path == "/api/probe":
                 self._json(200, self.server.manager.probe(body.get("config", {})))
+            elif path == "/api/settings":
+                self._json(200, self.server.manager.save_settings(body))
+            elif path == "/api/conversations":
+                title = body.get("title", "新对话")
+                if not isinstance(title, str):
+                    raise ValueError("title must be a string")
+                self._json(201, self.server.manager.conversations.create(title))
+            elif path.startswith("/api/conversations/"):
+                parts = path.split("/")
+                if len(parts) != 5:
+                    self._json(404, {"error": "not found"})
+                elif parts[4] == "rename":
+                    title = body.get("title")
+                    if not isinstance(title, str):
+                        raise ValueError("title must be a string")
+                    self._json(200, self.server.manager.conversations.rename(parts[3], title))
+                elif parts[4] == "delete":
+                    if self.server.manager.conversations.delete(parts[3]):
+                        self._json(200, {"ok": True})
+                    else:
+                        self._json(404, {"error": "conversation not found"})
+                else:
+                    self._json(404, {"error": "not found"})
             elif path == "/api/runs":
-                self._json(202, {"run_id": self.server.manager.submit(body)})
+                self._json(202, self.server.manager.submit(body))
             elif path.startswith("/api/runs/") and path.endswith("/decision"):
                 parts = path.split("/")
                 if len(parts) != 7 or parts[4] != "approvals" or not isinstance(body.get("allow"), bool):
