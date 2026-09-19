@@ -4,12 +4,13 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.7.0
+## Current release: v0.8.0
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
-- Workspace file listing, UTF-8 read/write, and argv-only command execution.
+- Compact workspace maps, recursive text search, line-range reads, UTF-8 read/write, and argv-only command execution.
 - Read-only by default; writing and command execution require explicit per-run grants.
-- A Codex-style three-pane Agent workspace with persisted, searchable conversations and real multi-turn model context.
+- A frameless Codex-style Agent workspace with resizable/collapsible panes, grouped and archived conversations, and real multi-turn model context.
+- Multiple custom provider profiles and per-conversation model switching; optional prices drive transparent per-run cost estimates.
 - Per-workspace provider settings; API keys are encrypted with Windows DPAPI for the current user and never returned to the browser in plaintext.
 - A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.

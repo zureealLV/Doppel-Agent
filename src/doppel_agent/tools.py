@@ -63,6 +63,8 @@ class ToolRegistry:
                 not isinstance(value, list) or not all(isinstance(item, str) for item in value)
             ):
                 raise ValueError(f"{key} must be a string array")
+            if schema["type"] == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+                raise ValueError(f"{key} must be an integer")
         decision = self.permissions.check(tool.capability, name, arguments)
         if not decision.allowed:
             raise PermissionError(decision.reason)
@@ -114,7 +116,83 @@ def read_file_tool(workspace: Path, max_bytes: int = 64 * 1024) -> Tool:
             raise ValueError("file exceeds read limit")
         return target.read_text(encoding="utf-8")
 
-    return Tool("read_file", "Read a UTF-8 file within the workspace", "workspace_read", {"path": {"type": "string"}}, read)
+    return Tool("read_file", "Read one small UTF-8 file. Prefer search_text and read_file_range during review.", "workspace_read", {"path": {"type": "string"}}, read)
+
+
+_IGNORED_DIRS = {".git", ".doppel-agent", ".venv", "node_modules", "dist", ".dist", ".dist-debug", "build", ".build-tmp", ".next", "artifacts", "__pycache__", ".pytest_cache", ".ssh", ".aws", ".docker"}
+_TEXT_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".cs", ".java", ".go", ".rs", ".cpp", ".c", ".h", ".html", ".css", ".json", ".toml", ".yaml", ".yml", ".md", ".txt", ".sql", ".ps1", ".sh"}
+
+
+def _source_files(root: Path):
+    for current, dirs, files in os.walk(root):
+        dirs[:] = sorted(name for name in dirs if not name.startswith(".") and name.lower() not in _IGNORED_DIRS)
+        for name in sorted(files):
+            path = Path(current) / name
+            if path.suffix.lower() in _TEXT_SUFFIXES and not _sensitive_path(path):
+                yield path
+
+
+def workspace_map_tool(workspace: Path, max_entries: int = 180) -> Tool:
+    used = False
+
+    def workspace_map(arguments: dict[str, Any]) -> str:
+        nonlocal used
+        if used:
+            return "Workspace map was already returned. Use search_text and read_file_range now."
+        used = True
+        target = _target(workspace, arguments["path"], must_exist=True)
+        if not target.is_dir() or _reserved_path(workspace, target):
+            raise ValueError("path is not a readable directory")
+        files = []
+        for path in _source_files(target):
+            files.append(f"{path.relative_to(workspace).as_posix()}\t{path.stat().st_size} B")
+            if len(files) >= max_entries:
+                files.append("...truncated")
+                break
+        return "\n".join(files)
+
+    return Tool("workspace_map", "Return a compact recursive source-file map with sizes; use this first for code review.", "workspace_read", {"path": {"type": "string"}}, workspace_map)
+
+
+def search_text_tool(workspace: Path, max_matches: int = 30) -> Tool:
+    def search(arguments: dict[str, Any]) -> str:
+        query = arguments["query"]
+        if not query or len(query) > 200:
+            raise ValueError("query must contain 1 to 200 characters")
+        target = _target(workspace, arguments["path"], must_exist=True)
+        candidates = [target] if target.is_file() else _source_files(target)
+        matches: list[str] = []
+        for path in candidates:
+            if not path.is_file() or _sensitive_path(path) or _reserved_path(workspace, path) or path.stat().st_size > 1024 * 1024:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except (UnicodeError, OSError):
+                continue
+            for number, line in enumerate(lines, 1):
+                if query.casefold() in line.casefold():
+                    matches.append(f"{path.relative_to(workspace).as_posix()}:{number}: {line.strip()[:180]}")
+                    if len(matches) >= max_matches:
+                        return "\n".join(matches) + "\n...truncated"
+        return "\n".join(matches) if matches else "No matches."
+
+    return Tool("search_text", "Search source text recursively and return concise file:line matches.", "workspace_read", {"query": {"type": "string"}, "path": {"type": "string"}}, search)
+
+
+def read_file_range_tool(workspace: Path) -> Tool:
+    def read_range(arguments: dict[str, Any]) -> str:
+        start, end = arguments["start_line"], arguments["end_line"]
+        if start < 1 or end < start or end - start > 400:
+            raise ValueError("line range must be positive and no more than 401 lines")
+        target = _target(workspace, arguments["path"], must_exist=True)
+        if not target.is_file() or _sensitive_path(target) or _reserved_path(workspace, target):
+            raise PermissionError("file is not readable")
+        if target.stat().st_size > 1024 * 1024:
+            raise ValueError("file exceeds range-read limit")
+        lines = target.read_text(encoding="utf-8").splitlines()
+        return "\n".join(f"{i}: {lines[i - 1]}" for i in range(start, min(end, len(lines)) + 1))
+
+    return Tool("read_file_range", "Read only the relevant numbered line range from a UTF-8 file.", "workspace_read", {"path": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, read_range)
 
 
 def list_files_tool(workspace: Path, max_entries: int = 200) -> Tool:

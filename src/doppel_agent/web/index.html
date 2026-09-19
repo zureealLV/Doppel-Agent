@@ -1,82 +1,38 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Doppel Agent</title>
-  <link rel="stylesheet" href="/app.css">
-  <script src="/app.js" defer></script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>Doppel Agent</title>
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
 </head>
 <body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4.5a2.5 2.5 0 0 1-1-2z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM3 3h18v4H3zM9 11h6"/></symbol>
+    <symbol id="i-review" viewBox="0 0 24 24"><path d="M5 3h14v18H5zM8 8h8M8 12h5M8 16h3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></symbol>
+  </svg>
+  <div id="titlebar" class="titlebar pywebview-drag-region"><div class="titlebar-left"><button id="toggle-sidebar" class="icon-button no-drag" title="切换侧栏">☰</button><b>Doppel Agent</b><span id="title-workspace">本地工作区</span></div><div id="window-controls" class="window-controls no-drag"><button data-window-action="minimize">—</button><button data-window-action="maximize">□</button><button data-window-action="close">×</button></div></div>
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand-row"><span class="brand-mark" aria-hidden="true">D</span><div><strong>Doppel</strong><small>Local coding agent</small></div></div>
-      <button id="new-conversation" class="new-chat" type="button"><span>＋</span> 新建对话</button>
-      <label class="search-box"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" placeholder="搜索对话" autocomplete="off"></label>
-      <div class="sidebar-label">对话</div>
-      <nav id="conversation-list" class="conversation-list" aria-label="对话列表"><p class="list-empty">还没有保存的对话</p></nav>
-      <div class="sidebar-bottom">
-        <button id="open-settings" class="sidebar-action" type="button"><span>⚙</span><span><b>模型与密钥</b><small id="provider-summary">尚未配置</small></span></button>
-        <div class="core-status"><span class="status-dot" id="server-dot"></span><span id="server-status">正在连接本地核心</span></div>
-      </div>
-    </aside>
-
+    <aside id="sidebar" class="sidebar">
+      <div class="product-name"><b>Doppel</b><button id="collapse-sidebar" class="icon-button">‹</button></div>
+      <nav class="primary-nav"><button id="new-conversation"><svg><use href="#i-chat"/></svg>新对话</button><button id="start-review"><svg><use href="#i-review"/></svg>代码审查</button><button id="show-active" class="active"><svg><use href="#i-folder"/></svg>对话</button><button id="show-archive"><svg><use href="#i-archive"/></svg>归档</button></nav>
+      <label class="search-box"><svg><use href="#i-search"/></svg><input id="conversation-search" type="search" placeholder="搜索对话"></label>
+      <div class="section-label"><span>分组</span><button id="add-group">＋</button></div><nav id="group-list" class="group-list"></nav>
+      <div class="section-label"><span id="conversation-section-title">最近对话</span></div><nav id="conversation-list" class="conversation-list"><p class="list-empty">还没有对话</p></nav>
+      <div class="sidebar-bottom"><button id="open-settings" class="model-card"><svg><use href="#i-sliders"/></svg><span><b>模型与 API</b><small id="provider-summary">尚未配置</small></span><i>›</i></button><div class="core-status"><span id="server-dot"></span><span id="server-status">连接本地核心…</span></div></div>
+    </aside><div id="left-splitter" class="splitter" role="separator"></div>
     <main class="chat-pane">
-      <header class="chat-header">
-        <div class="chat-title-wrap"><h1 id="conversation-title">新对话</h1><span id="workspace-path" title="当前工作区">正在读取工作区…</span></div>
-        <div class="chat-actions"><button id="rename-conversation" class="quiet-button" type="button">重命名</button><button id="delete-conversation" class="quiet-button danger-text" type="button">删除</button><span id="run-status" class="run-state idle">空闲</span></div>
-      </header>
-
-      <section id="message-scroll" class="message-scroll" aria-live="polite">
-        <div id="welcome" class="welcome">
-          <span class="welcome-mark">D</span><h2>今天要处理什么代码？</h2>
-          <p>Doppel 会先检查工作区，再调用工具完成任务。后续消息会带上本对话历史。</p>
-          <div class="suggestions">
-            <button type="button" data-prompt="先阅读 README 和项目结构，告诉我这个项目的核心架构。">理解这个项目</button>
-            <button type="button" data-prompt="只读审查当前项目，找出可复现的高优先级缺陷，给出文件位置和依据。">进行代码审查</button>
-            <button type="button" data-prompt="检查当前测试覆盖和失败风险，给出最值得补充的测试。">检查测试质量</button>
-          </div>
-        </div>
-        <div id="message-list" class="message-list"></div>
-      </section>
-
-      <section id="approval-section" class="approval-dock" hidden><div class="approval-dock-title"><strong>需要你的授权</strong><span>120 秒后自动拒绝</span></div><div id="approval-list"></div></section>
-
-      <form id="run-form" class="composer" autocomplete="off">
-        <textarea id="prompt" rows="3" placeholder="给 Doppel 一个任务，Enter 发送，Shift + Enter 换行"></textarea>
-        <div class="composer-toolbar">
-          <details class="permission-menu"><summary>权限 <span id="permission-count">只读</span></summary><div class="permission-popover">
-            <label><input type="checkbox" id="allow-write"><span><b>写入文件</b><small>仍需逐次批准</small></span></label>
-            <label><input type="checkbox" id="allow-command"><span><b>运行命令</b><small>以当前 Windows 用户执行</small></span></label>
-            <label><input type="checkbox" id="allow-mcp"><span><b>MCP 服务</b><small>外部服务不受工作区沙箱保护</small></span></label>
-            <label><input type="checkbox" id="allow-delegate"><span><b>只读子任务</b><small>会产生额外模型调用</small></span></label>
-          </div></details>
-          <span class="composer-note">默认只读 · 对话自动保存</span><button type="submit" id="run-button" class="send-button" aria-label="发送任务">↑</button>
-        </div>
-      </form>
+      <header class="chat-header"><div><h1 id="conversation-title">新对话</h1><span id="workspace-path">正在读取工作区…</span></div><div class="chat-actions"><span id="run-status" class="run-state">空闲</span><button id="manage-conversation" class="quiet-button">管理</button><button id="toggle-inspector" class="icon-button">◧</button></div></header>
+      <section id="message-scroll" class="message-scroll" aria-live="polite"><div id="welcome" class="welcome"><p class="eyebrow">LOCAL CODE AGENT</p><h2>从代码开始，而不是从猜测开始。</h2><p>选择工作方式。Doppel 会绘制项目结构、定位相关行，再执行审查或修改。</p><div class="suggestions"><button data-prompt="先绘制项目结构，再只读审查高风险代码。只报告可复现问题，并给出文件与行号。"><b>审查当前项目</b><span>定向检索，减少无效上下文</span></button><button data-prompt="阅读项目结构和入口文件，用简洁的架构图式说明执行流程。"><b>理解代码库</b><span>入口、模块、数据流</span></button><button data-prompt="检查测试策略和失败风险，列出最值得补充的三个测试。"><b>检查测试</b><span>覆盖缺口与回归风险</span></button></div></div><div id="message-list" class="message-list"></div></section>
+      <section id="approval-section" class="approval-dock" hidden><div class="approval-title"><b>等待授权</b><span>120 秒后自动拒绝</span></div><div id="approval-list"></div></section>
+      <form id="run-form" class="composer" autocomplete="off"><textarea id="prompt" rows="2" placeholder="给 Doppel 一个任务；Enter 发送，Shift + Enter 换行"></textarea><div class="composer-toolbar"><details class="permission-menu"><summary>＋</summary><div class="permission-popover"><b>本次运行权限</b><label><input id="allow-write" type="checkbox">写入文件</label><label><input id="allow-command" type="checkbox">运行命令</label><label><input id="allow-mcp" type="checkbox">MCP 服务</label><label><input id="allow-delegate" type="checkbox">只读子任务</label></div></details><select id="effort-select"><option value="quick">快速审查 · 6 步</option><option value="balanced" selected>均衡 · 8 步</option><option value="deep">深度 · 12 步</option></select><select id="composer-model"></select><button id="run-button" class="send-button" type="submit">↑</button></div></form>
     </main>
-
-    <aside class="activity-pane">
-      <header class="activity-header"><div><span>ACTIVITY</span><h2>执行详情</h2></div><span id="trace-indicator" class="live-indicator">● 空闲</span></header>
-      <section class="activity-section"><div class="section-title"><h3>任务计划</h3><span id="task-count">0 项</span></div><ol id="task-list" class="task-list"><li class="trace-empty">任务创建后显示在这里。</li></ol></section>
-      <section class="activity-section activity-events"><div class="section-title"><h3>工具与模型</h3><span id="event-count">0 条</span></div><ol id="event-list" class="event-list"><li class="trace-empty">等待任务事件…</li></ol></section>
-      <footer><span>记录保存在 .doppel-agent</span><span id="active-run-id"></span></footer>
-    </aside>
+    <div id="right-splitter" class="splitter" role="separator"></div><aside id="inspector" class="inspector"><header><div><span class="eyebrow">RUN INSPECTOR</span><h2>执行详情</h2></div><span id="trace-indicator">● 空闲</span></header><div class="metrics"><div><span>耗时</span><b id="metric-time">—</b></div><div><span>工具调用</span><b id="metric-tools">0</b></div><div><span>Token</span><b id="metric-tokens">0</b></div><div><span>估算费用</span><b id="metric-cost">—</b></div></div><p class="cost-note">费用按模型档案单价估算；“更便宜”必须用同模型、同任务做基线对照。</p><section><div class="section-title"><h3>任务计划</h3><span id="task-count">0</span></div><ol id="task-list"><li class="trace-empty">运行后显示任务。</li></ol></section><section class="event-section"><div class="section-title"><h3>Agent 轨迹</h3><span id="event-count">0</span></div><ol id="event-list"><li class="trace-empty">模型与工具事件会实时出现在这里。</li></ol></section><footer><span>.doppel-agent</span><span id="active-run-id"></span></footer></aside>
   </div>
-
-  <dialog id="settings-dialog" class="settings-dialog">
-    <form method="dialog" class="dialog-card" id="config-form" autocomplete="off">
-      <header><div><span class="dialog-kicker">PROVIDER</span><h2>模型与 API</h2><p>配置保存在当前工作区。API Key 使用 Windows DPAPI 加密，只能由当前 Windows 用户在本机解密。</p></div><button id="close-settings" class="close-button" value="cancel" aria-label="关闭">×</button></header>
-      <div class="form-grid">
-        <label>服务类型<select id="preset" name="preset"><option value="deepseek">DeepSeek API</option><option value="openai">OpenAI-compatible</option><option value="local">本地兼容服务</option><option value="mock">离线 Mock</option></select></label>
-        <label>模型名称<input id="model" name="model" type="text" spellcheck="false" value="deepseek-flash" placeholder="model-id"></label>
-        <label class="full-field">API Base URL <span>自动追加 /chat/completions</span><input id="base-url" name="base-url" type="url" spellcheck="false" value="https://api.deepseek.com"></label>
-        <label class="full-field">API Key <span id="key-state">尚未保存</span><div class="secret-wrap"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="输入新 Key，留空则保留已保存的 Key"><button type="button" id="toggle-key">显示</button></div></label>
-      </div>
-      <div id="probe-result" class="inline-result" role="status">尚未测试</div>
-      <footer class="dialog-actions"><button type="button" id="forget-key" class="text-button danger-text">删除已保存 Key</button><span></span><button type="button" id="probe-button" class="secondary-button">测试连接</button><button type="button" id="save-settings" class="primary-button">保存设置</button></footer>
-    </form>
-  </dialog>
-</body>
-</html>
+  <dialog id="settings-dialog"><form method="dialog" id="config-form" class="dialog-card" autocomplete="off"><header><div><p class="eyebrow">MODEL PROFILES</p><h2>自定义模型与 API</h2><p>密钥由 Windows DPAPI 加密保存。每个对话可以单独选择模型。</p></div><button class="close-button" value="cancel">×</button></header><div class="profile-row"><select id="settings-profile"></select><button id="new-profile" type="button">新建</button><button id="delete-profile" type="button" class="danger-text">删除</button></div><div class="form-grid"><label>档案名称<input id="profile-name" type="text"></label><label>服务预设<select id="preset"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI-compatible</option><option value="local">本地服务</option><option value="mock">离线 Mock</option></select></label><label>模型名称<input id="model" type="text" value="deepseek-flash"></label><label>API Base URL<input id="base-url" type="url" value="https://api.deepseek.com"></label><label>输入单价 / 1M Token<input id="input-price" type="number" min="0" step="0.01" value="0"></label><label>输出单价 / 1M Token<input id="output-price" type="number" min="0" step="0.01" value="0"></label><label class="full-field">API Key <span id="key-state">尚未保存</span><div class="secret-wrap"><input id="api-key" type="password" autocomplete="off"><button id="toggle-key" type="button">显示</button></div></label></div><div id="probe-result" class="inline-result">尚未测试</div><footer class="dialog-actions"><button id="forget-key" type="button" class="danger-text">移除 Key</button><span></span><button id="probe-button" type="button">测试连接</button><button id="save-settings" type="button" class="primary-button">保存</button></footer></form></dialog>
+  <dialog id="manage-dialog"><form method="dialog" class="dialog-card small-card"><header><div><p class="eyebrow">CONVERSATION</p><h2>管理对话</h2></div><button class="close-button" value="cancel">×</button></header><label>标题<input id="manage-title" type="text"></label><label>分组<select id="manage-group"></select></label><footer class="dialog-actions"><button id="delete-conversation" type="button" class="danger-text">永久删除</button><span></span><button id="archive-conversation" type="button">归档</button><button id="save-conversation" type="button" class="primary-button">保存</button></footer></form></dialog>
+  <dialog id="group-dialog"><form method="dialog" class="dialog-card small-card"><header><div><p class="eyebrow">COLLECTION</p><h2>新建分组</h2></div><button class="close-button" value="cancel">×</button></header><label>名称<input id="group-name" type="text" maxlength="60"></label><footer class="dialog-actions"><span></span><span></span><button value="cancel">取消</button><button id="save-group" type="button" class="primary-button">创建</button></footer></form></dialog>
+</body></html>

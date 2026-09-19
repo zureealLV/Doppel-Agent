@@ -7,11 +7,12 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .events import EventBus
-from .loop import AgentLoop
+from .loop import AgentLoop, REVIEW_SYSTEM_PROMPT, SYSTEM_PROMPT
 from .permissions import PermissionManager
 from .provider import Message, MockProvider, Provider
 from .storage import RunStore
-from .tools import ToolRegistry, list_files_tool, read_file_tool, run_command_tool, write_file_tool
+from .tools import (ToolRegistry, list_files_tool, read_file_range_tool, read_file_tool,
+                    run_command_tool, search_text_tool, workspace_map_tool, write_file_tool)
 from .tasks.manager import TaskManager
 from .tasks.tools import task_tools
 from .skills.loader import SkillLoader
@@ -28,20 +29,22 @@ class Core:
         approver: Callable[[str, str, dict[str, Any]], bool] | None = None,
         state_root: Path | None = None,
         max_steps: int = 8,
+        review_mode: bool = False,
     ):
         self.workspace = workspace.resolve(strict=True)
         self.provider = provider or MockProvider()
         self.state_root = (state_root or (self.workspace / ".doppel-agent")).resolve()
         self.store = RunStore(self.state_root)
         self.max_steps = max_steps
-        capabilities = {"workspace_read", "task_manage"}
-        if allow_write:
+        self.review_mode = review_mode
+        capabilities = {"workspace_read"} if review_mode else {"workspace_read", "task_manage"}
+        if allow_write and not review_mode:
             capabilities.add("workspace_write")
-        if allow_command:
+        if allow_command and not review_mode:
             capabilities.add("command_execute")
-        if allow_mcp:
+        if allow_mcp and not review_mode:
             capabilities.add("mcp_execute")
-        if allow_delegate:
+        if allow_delegate and not review_mode:
             capabilities.add("delegate_readonly")
         self.allowed_capabilities = frozenset(capabilities)
         self.approver = approver
@@ -65,24 +68,32 @@ class Core:
             request_approval if self.approver is not None else None,
         )
         tools = ToolRegistry(permissions)
-        tools.register(read_file_tool(self.workspace))
-        tools.register(list_files_tool(self.workspace))
-        tools.register(write_file_tool(self.workspace))
-        tools.register(run_command_tool(self.workspace))
-        manager = TaskManager(self.state_root / "tasks.sqlite3")
-        for tool in task_tools(manager, run_id):
-            tools.register(tool)
-        for tool in skill_tools(SkillLoader(self.workspace)):
-            tools.register(tool)
-        if "delegate_readonly" in self.allowed_capabilities:
-            tools.register(delegate_tool(DelegateManager(self.workspace, self.provider, bus)))
+        tools.register(workspace_map_tool(self.workspace))
+        tools.register(search_text_tool(self.workspace))
+        tools.register(read_file_range_tool(self.workspace))
+        if not self.review_mode:
+            tools.register(read_file_tool(self.workspace))
+            tools.register(list_files_tool(self.workspace))
+            tools.register(write_file_tool(self.workspace))
+            tools.register(run_command_tool(self.workspace))
+        if not self.review_mode:
+            manager = TaskManager(self.state_root / "tasks.sqlite3")
+            for tool in task_tools(manager, run_id):
+                tools.register(tool)
+            for tool in skill_tools(SkillLoader(self.workspace)):
+                tools.register(tool)
+            if "delegate_readonly" in self.allowed_capabilities:
+                tools.register(delegate_tool(DelegateManager(self.workspace, self.provider, bus)))
         status = "completed"
         try:
             if "mcp_execute" in self.allowed_capabilities:
                 mcp_bridge = MCPBridge(self.workspace)
                 for tool in mcp_tools(mcp_bridge):
                     tools.register(tool)
-            answer = AgentLoop(self.provider, tools, bus, max_steps=self.max_steps).run(prompt, history)
+            answer = AgentLoop(
+                self.provider, tools, bus, max_steps=self.max_steps,
+                system_prompt=REVIEW_SYSTEM_PROMPT if self.review_mode else SYSTEM_PROMPT,
+            ).run(prompt, history)
         except Exception as exc:
             status = "failed"
             answer = f"{type(exc).__name__}: {exc}"

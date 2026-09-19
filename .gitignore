@@ -1,8 +1,11 @@
 .venv/
 .uv-cache/
 .dist/
+.dist-debug/
 .build-tmp/
 build/
+.artifacts/
+artifacts/
 .test-tmp/
 .bench-results/
 __pycache__/

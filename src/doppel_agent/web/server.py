@@ -7,7 +7,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from ..conversations import ConversationStore
@@ -34,13 +34,27 @@ class JobManager:
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="doppel-run")
 
     def _provider(self, config: dict):
+        requested = dict(config)
+        profile_id = config.get("profile_id")
+        profile_key = ""
+        allow_saved_key = False
+        if profile_id is not None:
+            if not isinstance(profile_id, str):
+                raise ValueError("profile_id must be a string")
+            stored = self.settings.profile(profile_id)
+            profile_key = stored.pop("api_key", "")
+            requested_base = requested.get("base_url")
+            allow_saved_key = not requested_base or requested_base == stored.get("base_url")
+            config = {**stored, **{key: value for key, value in config.items() if value not in (None, "")}}
         if config.get("provider") == "mock":
             return MockProvider()
         if config.get("provider") != "openai":
             raise ValueError("provider must be 'openai' or 'mock'")
         base_url = config.get("base_url")
         model = config.get("model")
-        key = config.get("api_key", "") or self.settings.api_key()
+        key = config.get("api_key", "")
+        if not key and allow_saved_key:
+            key = profile_key
         if not isinstance(base_url, str) or not isinstance(model, str) or not isinstance(key, str):
             raise ValueError("base_url, model and api_key must be strings")
         return OpenAICompatibleProvider(base_url, model, key)
@@ -60,6 +74,18 @@ class JobManager:
         if not isinstance(config, dict):
             raise ValueError("config must be an object")
         provider = self._provider(config)
+        mode = data.get("mode", "agent")
+        if mode not in {"agent", "review"}:
+            raise ValueError("mode must be agent or review")
+        effort = data.get("effort", "balanced")
+        if effort not in {"quick", "balanced", "deep"}:
+            raise ValueError("effort must be quick, balanced or deep")
+        max_steps = {"quick": 6, "balanced": 8, "deep": 12}[effort]
+        profile_id = config.get("profile_id")
+        model = config.get("model", "mock")
+        if isinstance(profile_id, str):
+            profile = self.settings.profile(profile_id)
+            model = profile.get("model", "mock")
         allow_write = data.get("allow_write", False)
         allow_command = data.get("allow_command", False)
         allow_mcp = data.get("allow_mcp", False)
@@ -78,7 +104,9 @@ class JobManager:
             if conversation_id:
                 self.conversations.set_title_from_prompt(conversation_id, prompt)
                 history = [Message(item["role"], item["content"]) for item in self.conversations.history(conversation_id)]
-                self.conversations.add_message(conversation_id, "user", prompt, run_id)
+                if isinstance(profile_id, str):
+                    self.conversations.set_profile(conversation_id, profile_id)
+                self.conversations.add_message(conversation_id, "user", prompt, run_id, model=model)
             self.jobs[run_id] = {
                 "run_id": run_id, "status": "queued", "answer": "", "prompt": prompt,
                 "conversation_id": conversation_id,
@@ -93,6 +121,8 @@ class JobManager:
                     self.workspace, provider, allow_write=allow_write, allow_command=allow_command,
                     allow_mcp=allow_mcp, allow_delegate=allow_delegate,
                     approver=self.brokers[run_id].request,
+                    max_steps=max_steps,
+                    review_mode=mode == "review",
                 ).run(prompt, run_id=run_id, history=history)
             except Exception as exc:
                 result = {"run_id": run_id, "status": "failed", "answer": f"{type(exc).__name__}: {exc}"}
@@ -100,7 +130,7 @@ class JobManager:
             result["conversation_id"] = conversation_id
             self.store.write_session(run_id, result)
             if conversation_id:
-                self.conversations.add_message(conversation_id, "assistant", result["answer"], run_id)
+                self.conversations.add_message(conversation_id, "assistant", result["answer"], run_id, model=model)
             with self.lock:
                 self.jobs[run_id] = result
 
@@ -134,7 +164,9 @@ class JobManager:
         forget = data.get("forget_key", False)
         if not isinstance(key, str) or not isinstance(forget, bool):
             raise ValueError("invalid key settings")
-        return self.settings.save(config, api_key=key, forget_key=forget)
+        return self.settings.save_profile(
+            config, profile_id=data.get("profile_id"), api_key=key, forget_key=forget,
+        )
 
     def events(self, run_id: str) -> list[dict] | None:
         if self.status(run_id) is None:
@@ -222,7 +254,8 @@ class ConsoleHandler(BaseHTTPRequestHandler):
         if not self._allowed_host():
             self._json(403, {"error": "invalid host"})
             return
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         assets = {"/": ("index.html", "text/html; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8"), "/app.js": ("app.js", "application/javascript; charset=utf-8")}
         if path in assets:
             name, content_type = assets[path]
@@ -233,8 +266,11 @@ class ConsoleHandler(BaseHTTPRequestHandler):
             self._json(200, self.server.manager.recent())
         elif path == "/api/settings":
             self._json(200, self.server.manager.public_settings())
+        elif path == "/api/groups":
+            self._json(200, self.server.manager.conversations.list_groups())
         elif path == "/api/conversations":
-            self._json(200, self.server.manager.conversations.list())
+            archived = parse_qs(parsed.query).get("archived", ["0"])[0] == "1"
+            self._json(200, self.server.manager.conversations.list(archived=archived))
         elif path.startswith("/api/conversations/"):
             parts = path.split("/")
             if len(parts) == 4:
@@ -288,6 +324,24 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 self._json(200, self.server.manager.probe(body.get("config", {})))
             elif path == "/api/settings":
                 self._json(200, self.server.manager.save_settings(body))
+            elif path.startswith("/api/settings/profiles/") and path.endswith("/delete"):
+                profile_id = path.split("/")[4]
+                self._json(200, self.server.manager.settings.delete_profile(profile_id))
+            elif path == "/api/groups":
+                name = body.get("name")
+                if not isinstance(name, str):
+                    raise ValueError("name must be a string")
+                self._json(201, self.server.manager.conversations.create_group(name))
+            elif path.startswith("/api/groups/"):
+                parts = path.split("/")
+                if len(parts) != 5:
+                    self._json(404, {"error": "not found"})
+                elif parts[4] == "rename":
+                    self._json(200, self.server.manager.conversations.rename_group(parts[3], body.get("name", "")))
+                elif parts[4] == "delete":
+                    self._json(200, {"ok": self.server.manager.conversations.delete_group(parts[3])})
+                else:
+                    self._json(404, {"error": "not found"})
             elif path == "/api/conversations":
                 title = body.get("title", "新对话")
                 if not isinstance(title, str):
@@ -307,6 +361,21 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                         self._json(200, {"ok": True})
                     else:
                         self._json(404, {"error": "conversation not found"})
+                elif parts[4] == "archive":
+                    archived = body.get("archived")
+                    if not isinstance(archived, bool):
+                        raise ValueError("archived must be a boolean")
+                    self._json(200, self.server.manager.conversations.archive(parts[3], archived))
+                elif parts[4] == "group":
+                    group_id = body.get("group_id")
+                    if group_id is not None and not isinstance(group_id, str):
+                        raise ValueError("group_id must be a string or null")
+                    self._json(200, self.server.manager.conversations.set_group(parts[3], group_id))
+                elif parts[4] == "profile":
+                    profile_id = body.get("profile_id")
+                    if profile_id is not None and not isinstance(profile_id, str):
+                        raise ValueError("profile_id must be a string or null")
+                    self._json(200, self.server.manager.conversations.set_profile(parts[3], profile_id))
                 else:
                     self._json(404, {"error": "not found"})
             elif path == "/api/runs":
