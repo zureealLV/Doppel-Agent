@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -116,6 +117,19 @@ class WebTests(unittest.TestCase):
             self.assertEqual(replacement.manager.conversations.get(conversation_id)["messages"], saved["messages"])
         finally:
             replacement.server_close()
+
+    def test_review_draft_is_reused_and_does_not_start_a_run(self):
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            drafts = list(pool.map(
+                lambda _: self.post("/api/conversations/review-draft", {})[1],
+                range(12),
+            ))
+
+        self.assertEqual(len({draft["id"] for draft in drafts}), 1)
+        self.assertTrue(all(draft["messages"] == [] for draft in drafts))
+        conversations = json.loads(self.get("/api/conversations")[1])
+        self.assertEqual([item["title"] for item in conversations], ["代码审查"])
+        self.assertEqual(json.loads(self.get("/api/runs")[1]), [])
 
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI test")
     def test_saved_api_key_is_dpapi_encrypted_and_never_returned(self):

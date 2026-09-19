@@ -55,6 +55,8 @@ def launch_desktop(workspace: Path) -> None:
             min_size=(900, 620),
             frameless=True,
             easy_drag=True,
+            transparent=True,
+            background_color="#000000",
             js_api=WindowApi(),
         )
         bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).parents[2]))

@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 
@@ -21,6 +22,7 @@ class ConversationStore:
     def __init__(self, path: Path):
         self.path = path.resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._draft_lock = Lock()
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -88,6 +90,33 @@ class ConversationStore:
                 "INSERT INTO conversations(id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (conversation_id, title, now, now),
             )
+        return self.get(conversation_id)
+
+    def get_or_create_empty(self, title: str) -> dict:
+        """Return one reusable empty draft, creating it atomically when absent."""
+        title = title.strip()[:80]
+        if not title:
+            raise ValueError("conversation title is required")
+        with self._draft_lock:
+            with self._database() as db:
+                row = db.execute(
+                    """SELECT c.id FROM conversations c
+                       WHERE c.title = ? AND c.archived = 0
+                         AND NOT EXISTS (
+                             SELECT 1 FROM messages m WHERE m.conversation_id = c.id
+                         )
+                       ORDER BY c.updated_at DESC LIMIT 1""",
+                    (title,),
+                ).fetchone()
+                if row is None:
+                    conversation_id = uuid4().hex
+                    now = _now()
+                    db.execute(
+                        "INSERT INTO conversations(id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                        (conversation_id, title, now, now),
+                    )
+                else:
+                    conversation_id = row["id"]
         return self.get(conversation_id)
 
     def get(self, conversation_id: str) -> dict | None:

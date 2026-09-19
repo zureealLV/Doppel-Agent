@@ -347,6 +347,8 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 if not isinstance(title, str):
                     raise ValueError("title must be a string")
                 self._json(201, self.server.manager.conversations.create(title))
+            elif path == "/api/conversations/review-draft":
+                self._json(200, self.server.manager.conversations.get_or_create_empty("代码审查"))
             elif path.startswith("/api/conversations/"):
                 parts = path.split("/")
                 if len(parts) != 5:
