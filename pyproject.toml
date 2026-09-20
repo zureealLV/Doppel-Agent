@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doppel-agent"
-version = "0.8.2"
+version = "0.9.0"
 description = "A local coding-agent runtime built as an independent study project"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,10 +13,26 @@ dependencies = []
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]
 desktop = ["pywebview>=5,<7"]
+agent = [
+    "aiosqlite>=0.22,<1",
+    "deepagents>=0.7,<1",
+    "fastapi>=0.141,<1",
+    "httpx>=0.28,<1",
+    "langchain>=1.4,<2",
+    "langgraph>=1.2,<2",
+    "langgraph-checkpoint-sqlite>=3.1,<4",
+    "mcp>=2.2,<3",
+    "uvicorn[standard]>=0.52,<1",
+]
+dev = [
+    "pytest>=8,<9",
+    "ruff>=0.12,<1",
+]
 
 [project.scripts]
 doppel-agent = "doppel_agent.cli:main"
 doppel-desktop = "doppel_agent.desktop:main"
+doppel-api = "doppel_agent.api.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -26,3 +42,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# Start with correctness-oriented rules on the existing codebase. Style-only
+# migrations stay separate from runtime releases so reviews remain focused.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = ["E731"]

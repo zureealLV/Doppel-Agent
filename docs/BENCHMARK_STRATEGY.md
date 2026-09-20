@@ -6,6 +6,12 @@ Doppel Agent 不把“模型返回了一段看起来合理的文字”当作任�
 2. **合成已知答案审查**：`bench/cases/review_001/service.py` 包含可执行测试证实的跨租户读取、SQL 注入和路径穿越。`bench/run_review.py` 只把被审文件交给 Agent，结果保留原文供人工判读。
 3. **真实项目运行链路**：`bench/run_project_reviews.py` 在本机真实项目中执行只读审查，状态写到 Doppel Agent 自己的 `.bench-results/`，不污染目标项目。它只证明 Agent 能导航、读源码并完成回答；发现是否正确仍需人工复核。
 
+## v0.8.2 重构基线
+
+`bench/baselines/v0.8.2.json` 冻结了 LangGraph/Deep Agents 重构前的可复现基线：Git 版本、Python 版本、确定性测试分母、五类离线场景，以及真实模型记录的适用边界。后续 `legacy`、`graph`、`deep` 三种 runtime 必须复用同一任务、模型、权限和判定规则，不得因为实现不同而更换题目或提示词。
+
+该基线只证明当时 checkout 的测试和已记录样本；它不自动证明新版本兼容，也不把历史单样本外推为通用成功率。
+
 ## 2026-09-19 实测快照
 
 - 单元/集成：52 项通过，1 项因未安装可选 MCP SDK 跳过。

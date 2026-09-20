@@ -4,13 +4,18 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.8.2`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.9.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
 
 ## 功能
 
 - **Agent Loop**：模型发起工具调用，Core 校验并执行，再把结果返回模型；单次运行有最大步数限制。
+- **双运行时**：保留 `legacy` ReAct 基线，同时提供 LangGraph `graph` 主链；统一异步 Runtime 契约，SQLite Checkpointer 支持重启恢复。
+- **可恢复审批**：写入和命令在副作用前触发 interrupt；批准、拒绝、编辑均可 resume，工具幂等账本阻止重复执行。
+- **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。
+- **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
+- **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试。
 - **审查工具**：工作区文件图、递归文本检索、按行读取、普通读写与 argv 命令；审查优先窄化范围，减少整文件上下文浪费。
 - **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
 - **模型接入**：支持多个 OpenAI-compatible 模型档案（名称、Base URL、模型、Key 与可选单价），可在每个对话中切换，也提供离线 Mock。
@@ -27,7 +32,7 @@
 
 ## 快速开始
 
-要求：Windows 10、Python 3.11 或更新版本。基础运行时不依赖第三方 Python 包；MCP 扩展需额外安装 `mcp` SDK。
+要求：Windows 10、Python 3.11 或更新版本。旧 `legacy` CLI 仍可使用基础依赖；LangGraph/FastAPI 主链安装 `agent` 依赖组。
 
 ```powershell
 cd '<你的 Doppel-Agent 仓库目录>'
@@ -52,6 +57,15 @@ cd '<你的 Doppel-Agent 仓库目录>'
 重新构建：`./scripts/build-desktop.ps1`。脚本在项目 `.venv` 安装 `pywebview` 和 `PyInstaller`，产出无控制台窗口的 onedir EXE。也可通过 `python -m pip install -e '.[desktop]'` 后执行 `doppel-agent desktop --workspace 'D:\your-project'`。
 
 不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
+
+### v0.9 Runtime API
+
+```powershell
+python -m pip install -e ".[agent]"
+.\doppel.cmd api --workspace 'D:\your-project' --port 8765
+```
+
+打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做同任务基线。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
 
 ### 命令行
 
@@ -83,7 +97,8 @@ Web 勾选“允许只读子任务”，或 CLI 添加 `--allow-delegate`。该�
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
-python -m unittest discover -s tests -v
+python -m pytest -q
+ruff check src tests
 ```
 
 测试包含本地 HTTP 模型替身的完整工具回合、Web 控制台接口、daemon/client 通信、路径越界与权限拒绝。没有配置真实 API Key 时，这些测试**不能**证明某个付费提供商的在线可用性。
@@ -102,7 +117,7 @@ python bench/run_review.py --env-file '<你的本机 .env 路径>'
 
 Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
 
-Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝），但 CLI/daemon 不提供交互审批；其显式授权会直接生效。子任务仅在显式启用后可用，但不会再次弹出审批。上下文水位使用启发式 token 估算，不等同于模型精确 tokenizer。当前尚无强隔离、MCP HTTP 传输、并行子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)。
+旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph 的异步 Provider 可立即传播取消。当前尚无强隔离、Streamable HTTP MCP Gateway、Deep Agents 生产适配、并行子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
 
 ## 版本与来源
 

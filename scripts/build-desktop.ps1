@@ -6,7 +6,7 @@ if (-not (Test-Path '.venv\Scripts\python.exe')) {
     python -m venv .venv
 }
 $python = Join-Path $root '.venv\Scripts\python.exe'
-& $python -m pip install -e '.[desktop]' 'pyinstaller>=6,<7'
+& $python -m pip install -e '.[agent,desktop]' 'pyinstaller>=6,<7'
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 $mode = if ($OneFile) { '--onefile' } else { '--onedir' }
 $icon = Join-Path $root 'assets\doppel-agent.ico'

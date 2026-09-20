@@ -4,11 +4,15 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.8.2
+## Current release: v0.9.0
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
+- A unified async runtime contract with the original loop as the `legacy` baseline and a durable LangGraph `graph` mode.
+- SQLite checkpoints plus approve/reject/edit interrupts and a tool-call idempotency ledger.
+- FastAPI `/api/v1` run lifecycle endpoints, durable resumable SSE, bounded FIFO scheduling, cancellation, workspace read/write locks, and resource limits.
+- A long-lived async HTTP provider with bounded 429/5xx retry, `Retry-After`, deadlines, and a profile circuit breaker.
 - Compact workspace maps, recursive text search, line-range reads, UTF-8 read/write, and argv-only command execution.
 - Read-only by default; writing and command execution require explicit per-run grants.
 - A frameless desktop window without transparent white padding, Ghostty-style traffic-light controls, and a Codex-style two-pane default workspace; the resizable run inspector opens from the top-right menu.
@@ -23,16 +27,18 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 - CLI plus a localhost JSON-RPC/NDJSON daemon.
 - An isolated synthetic code-review case with a reproducible live-provider runner and a manually adjudicated result; no general benchmark claims.
 
-This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, MCP over HTTP, parallel subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/PLAN.md).
+This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, the new MCP SDK gateway, a production Deep Agents adapter, parallel subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
 
 ## Start on Windows
 
-Requires Python 3.11+; runtime dependencies are limited to the standard library.
+Requires Python 3.11+. The legacy CLI remains lightweight; install `.[agent]` for the LangGraph/FastAPI runtime.
 
 ```powershell
 cd '<your Doppel-Agent repository directory>'
 .\doppel.cmd ui
 ```
+
+Start the v0.9 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs` and versioned endpoints are under `/api/v1`.
 
 Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), open **Model & API** in the lower-left corner, enter the endpoint, model and key, test, save, then start a conversation. Conversations and settings live under the selected workspace's `.doppel-agent/`; the key is stored only as a current-user Windows DPAPI ciphertext and is never returned by the settings API.
 

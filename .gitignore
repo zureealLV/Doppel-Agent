@@ -11,6 +11,7 @@ artifacts/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+pytest-cache-files-*/
 .doppel-agent/
 .doppel/mcp.json
 .hermes-agent/

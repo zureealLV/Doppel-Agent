@@ -34,7 +34,7 @@ async def rpc_run(port: int, prompt: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="doppel-agent")
-    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor", "ui", "desktop", "tasks"))
+    parser.add_argument("command", choices=("demo", "ask", "serve", "run", "doctor", "ui", "desktop", "api", "tasks"))
     parser.add_argument("prompt", nargs="?")
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--port", type=int)
@@ -64,6 +64,11 @@ def main() -> None:
     if args.command == "desktop":
         from .desktop import launch_desktop
         launch_desktop(args.workspace)
+        return
+    if args.command == "api":
+        import uvicorn
+        from .api import create_app
+        uvicorn.run(create_app(args.workspace), host="127.0.0.1", port=port)
         return
     if args.command == "tasks":
         if not args.prompt:

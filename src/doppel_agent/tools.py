@@ -49,6 +49,12 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         return [tool.schema() for tool in self.tools.values()]
 
+    def capability(self, name: str) -> str:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        return tool.capability
+
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
         tool = self.tools.get(name)
         if tool is None:

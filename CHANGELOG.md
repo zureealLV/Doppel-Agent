@@ -1,5 +1,15 @@
 # 更新记录
 
+## v0.9.0 — 2026-09-20
+
+- 保留 v0.8.2 自研 ReAct 作为 `legacy` 基线，新增统一 `AgentRuntime` 契约与 `graph` 模式；主链使用 LangGraph 1.2.11 和 SQLite Checkpointer，支持跨 runtime 重建恢复状态。
+- 写文件与命令进入 LangGraph `interrupt/resume` 审批；支持批准、拒绝、编辑参数，并用 `(run_id, tool_call_id)` 幂等账本阻止恢复时重复副作用，过期审批明确进入 `interrupted_expired`。
+- 新增 FastAPI `/api/v1/runs` 生命周期接口和持久化 SSE：事件使用严格递增序号，支持 `after_seq` 断线续传；v0.8 工作台/API 通过同源兼容代理继续可用。
+- 新增有界 FIFO `AsyncRunScheduler`、取消令牌、工作区读写锁、Provider/命令资源信号量；队列满明确返回 HTTP 429，桌面端不再依赖固定两线程池承载新运行时。
+- 新增长生命周期 `httpx.AsyncClient` Provider：拆分连接/读取/写入/连接池超时，429/5xx 有界重试并尊重 `Retry-After`，带 retry budget、run deadline 和 profile 级 circuit breaker。
+- 新增运行/事件 SQLite schema migration、WAL/foreign keys/busy timeout、幂等请求键与结构化状态；CI 增加 Ruff correctness gate，完整离线套件为 86 tests。
+- 冻结 v0.8.2 基线及 LangGraph/Deep Agents/Agent Skills/MCP SDK/受控并发的后续实施计划；Deep Agents、Skill Registry 与新 MCP Gateway 仍属于 v0.10.0，不在本版冒充已完成。
+
 ## v0.8.2 — 2026-09-19
 
 - 去除透明窗口留白造成的白色外框，改用与标题栏同色的实体 WebView 背景，并在支持的 Windows DWM 上请求原生圆角。

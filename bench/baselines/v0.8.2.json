@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "release": "v0.8.2",
+  "git_commit": "b61d5480",
+  "recorded_at": "2026-09-20",
+  "environment": {
+    "os": "Windows 10",
+    "python": "3.11.15",
+    "test_command": "python -m pytest -q"
+  },
+  "deterministic_suite": {
+    "tests_passed": 55,
+    "subtests_passed": 11,
+    "tests_failed": 0
+  },
+  "frozen_scenarios": [
+    "workspace file read through the bounded tool loop",
+    "workspace traversal and sensitive-path denial",
+    "recoverable tool failure returned to the model",
+    "SQLite task DAG dependency and transition validation",
+    "persistent conversation history included in later model context"
+  ],
+  "live_model_evidence": {
+    "synthetic_review_trials": 3,
+    "seeded_defects_per_trial": 3,
+    "project_navigation_runs": 3,
+    "boundary": "Historical acceptance evidence only; this file does not claim a general success rate."
+  }
+}
