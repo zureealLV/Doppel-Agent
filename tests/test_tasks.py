@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from doppel_agent.tasks.manager import TaskManager
 from support import workspace
@@ -35,6 +36,12 @@ class TaskManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different run"):
             self.manager.set_dependencies(first, [outside])
         self.assertEqual(self.manager.list("run-a")[0]["dependencies"], [])
+
+    def test_list_preserves_insertion_order_when_timestamps_match(self):
+        with patch("doppel_agent.tasks.manager._now", return_value="2026-09-21T00:00:00+00:00"):
+            first = self.manager.create("run-a", "first")
+            second = self.manager.create("run-a", "second")
+        self.assertEqual([task["id"] for task in self.manager.list("run-a")], [first, second])
 
     def test_fail_retry_and_invalid_transition(self):
         task_id = self.manager.create("run-a", "build")

@@ -9,6 +9,7 @@
 - 新增 MCP SDK Gateway：stdio 与 Streamable HTTP、session 生命周期、无副作用健康检查/重连、分页 catalog、schema hash cache、每服务器 semaphore、参数验证、幂等账本、审计及多模态/structured content/`is_error` 处理；有副作用的 `call_tool` 遇到模糊断连不会盲目重试。
 - MCP 工具规范化为 `mcp__server__tool`，同时接入 focused LangGraph 和 Deep Agents；两条链路均在执行前进入可恢复 HITL。旧 `mcp_list`/`mcp_call` 保留为网关兼容 facade。
 - HTTP MCP `auth_profile` 只映射环境变量 `DOPPEL_MCP_AUTH_<PROFILE>_TOKEN`，配置文件不保存令牌；旧版省略 `transport` 的 stdio 配置仍可读取。
+- 修复同一微秒内创建任务时 UUID 排序破坏 DAG 创建顺序的问题；任务列表现在使用 SQLite 插入序列稳定排序。
 - 增加离线 Deep Agents spike、专项研究记录和 Deep/Skill/MCP/API 集成测试；正式三运行时 benchmark、diff-first patch、verification pipeline 与异步并行子 Agent 留待后续版本。
 
 ## v0.9.0 — 2026-09-20

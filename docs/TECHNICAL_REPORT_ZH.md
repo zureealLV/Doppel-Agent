@@ -21,7 +21,7 @@ Doppel Agent 是一个面向本地代码审查与编程任务的 Windows Agent�
 | Web 内核 | Microsoft Edge WebView2 | 153.0.4234.48 | 渲染桌面端 HTML/CSS/JavaScript |
 | 凭据保护 | Windows DPAPI | 当前用户作用域 | 加密保存模型 API Key，前端无法取回明文 |
 | 打包 | PyInstaller | 6.22.3 onedir | 生成无控制台窗口的 Windows EXE |
-| 验证 | pytest、Ruff、compileall | 113 passed + 1 Windows symlink skip（发布前本地门禁） | 回归 Deep/Graph/MCP/Skills/API/并发与既有安全边界 |
+| 验证 | pytest、Ruff、compileall | 114 passed + 1 Windows symlink skip（发布前本地门禁） | 回归 Deep/Graph/MCP/Skills/API/并发与既有安全边界 |
 
 ## 3. 核心架构
 
@@ -116,7 +116,7 @@ AgentRuntime
 
 ## 7. 验收证据
 
-- pytest：发布前本地全量门禁为 `113 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
+- pytest：发布前本地全量门禁为 `114 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
 - Ruff correctness gate：`ruff check src tests` 通过。
 - Python：`compileall` 通过。
 - 新增覆盖：真实离线 Deep Agents graph、backend 越界/秘密拒绝、Skill 校验/解析、MCP session/reconnect/pagination/schema invalidation/multimodal/is_error/idempotency/semaphore，以及 Graph/Deep 两条 MCP HITL 链路。

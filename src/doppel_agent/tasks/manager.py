@@ -121,7 +121,9 @@ class TaskManager:
 
     def list(self, run_id: str) -> list[dict]:
         with self._connect() as connection:
-            rows = connection.execute("SELECT * FROM tasks WHERE run_id=? ORDER BY created_at,id", (run_id,)).fetchall()
+            # SQLite can assign identical timestamps to adjacent inserts.  The
+            # table rowid is the durable insertion sequence; UUID order is not.
+            rows = connection.execute("SELECT * FROM tasks WHERE run_id=? ORDER BY rowid", (run_id,)).fetchall()
             tasks = [dict(row) for row in rows]
             for task in tasks:
                 task["dependencies"] = [

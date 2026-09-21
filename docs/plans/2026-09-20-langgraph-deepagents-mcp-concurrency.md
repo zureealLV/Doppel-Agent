@@ -11,7 +11,7 @@
 ## 实施状态（更新于 2026-09-21）
 
 - **v0.9.0 / Milestone A-B：已实现。** 完成 legacy/graph 统一 runtime、SQLite checkpoint、interrupt 三种决定、工具幂等账本、FastAPI v1、durable SSE、有界调度、取消、工作区锁、资源限流及异步 Provider 可靠性治理。
-- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 发布前 Windows 门禁为 `113 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes` 与 compileall 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
+- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 发布前 Windows 门禁为 `114 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes` 与 compileall 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
 - **v0.10.0 / Milestone C-D：已实现。** Task 12-21 已完成：Deep Agents 0.7.15 spike、受控 backend、`mode=deep`、Agent Skills Registry、四个工程 Skill、stdio/Streamable HTTP MCP Gateway、分页 catalog、多模态 executor、LangGraph/Deep adapter 与独立 server semaphore。
 - **未提前宣称：** Task 22-29（diff-first patch、verification pipeline、可取消进程树、异步子 Agent、三运行时正式 benchmark、并发压测与 Vue 可视化）仍按 v0.11-v0.12 实施。
 
