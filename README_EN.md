@@ -4,12 +4,13 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.9.0
+## Current release: v0.10.0
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
 - Bounded agent loop with validated tool calls and tool-result feedback.
-- A unified async runtime contract with the original loop as the `legacy` baseline and a durable LangGraph `graph` mode.
+- A unified async runtime contract with `legacy`, durable LangGraph `graph`, and optional Deep Agents `deep` modes.
+- A provider-backed `BaseChatModel`, policy-constrained `DoppelBackend`, bounded read-only subagents, and recorded fallback to the focused graph.
 - SQLite checkpoints plus approve/reject/edit interrupts and a tool-call idempotency ledger.
 - FastAPI `/api/v1` run lifecycle endpoints, durable resumable SSE, bounded FIFO scheduling, cancellation, workspace read/write locks, and resource limits.
 - A long-lived async HTTP provider with bounded 429/5xx retry, `Retry-After`, deadlines, and a profile circuit breaker.
@@ -20,14 +21,14 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 - Persistent conversations with `Ctrl+K` search across titles, message bodies, and archived items; per-workspace provider settings use Windows DPAPI for API keys.
 - A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
 - Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
-- SQLite task dependency graph, estimated context-watermark compaction, and validated workspace skills.
+- SQLite task dependency graph, estimated context-watermark compaction, and a strict progressive-disclosure Agent Skills registry with four built-in engineering workflows.
 - Per-tool manual approval for writes/commands in the web console; saved runs can be replayed after restarting the console.
-- Optional stdio MCP integration using explicitly configured local executables; web calls require per-call approval.
-- Opt-in read-only subagents, capped at two delegations per run and four model turns each; they cannot write, execute commands, call MCP, or delegate again.
+- A policy-aware MCP SDK gateway for stdio and Streamable HTTP with pooled lifecycle management, health/reconnect, paginated schema caching, per-server semaphores, HITL, idempotency, audit events, and typed multimodal results.
+- The legacy loop retains opt-in read-only subagents capped at two delegations and four model turns per run. Deep mode instead exposes two read-only specialist subagents, each bounded to six model calls and an 8,000-token budget; neither path inherits write, command, MCP, or recursive-delegation capability.
 - CLI plus a localhost JSON-RPC/NDJSON daemon.
 - An isolated synthetic code-review case with a reproducible live-provider runner and a manually adjudicated result; no general benchmark claims.
 
-This release does **not** include a CLI/daemon interactive approval workflow, a precise model tokenizer, strong isolation, the new MCP SDK gateway, a production Deep Agents adapter, parallel subagents, a TUI, or independently measured benchmarks. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
+This release does **not** include a CLI/daemon interactive approval workflow, a precise provider tokenizer, strong OS isolation, diff-first patch verification, asynchronous parallel subagents, a TUI, or independently measured three-runtime benchmarks. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
 
 ## Start on Windows
 
@@ -38,7 +39,7 @@ cd '<your Doppel-Agent repository directory>'
 .\doppel.cmd ui
 ```
 
-Start the v0.9 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs` and versioned endpoints are under `/api/v1`.
+Start the v0.10 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs`, versioned endpoints are under `/api/v1`, and run mode may be `legacy`, `graph`, or `deep`.
 
 Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), open **Model & API** in the lower-left corner, enter the endpoint, model and key, test, save, then start a conversation. Conversations and settings live under the selected workspace's `.doppel-agent/`; the key is stored only as a current-user Windows DPAPI ciphertext and is never returned by the settings API.
 
@@ -58,7 +59,7 @@ The tested onedir build is at `D:\Codex Program files\Agent\Doppel-Agent\.dist\D
 
 The traffic-light buttons close, minimize, and maximize/restore the window. The top-right menu toggles the run inspector. **New Conversation** and **Code Review** each reuse an existing empty draft. Code Review first offers four review templates and only fills the composer after a choice; it never calls the model until the user explicitly sends the prompt. Press `Ctrl+K` to search all active and archived conversations.
 
-For MCP, install `python -m pip install -e ".[mcp]"` and follow the [stdio MCP setup guide](docs/MCP.md). An external MCP server runs as the current user and is not contained by the workspace path checks.
+For MCP, install `python -m pip install -e ".[agent]"` and follow the [MCP Gateway guide](docs/MCP.md). Stdio servers run as the current user and are not an OS sandbox; HTTP auth tokens are resolved from environment profiles rather than stored in JSON.
 
 ## Security
 

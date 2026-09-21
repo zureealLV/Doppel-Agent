@@ -1,5 +1,16 @@
 # 更新记录
 
+## v0.10.0 — 2026-09-21
+
+- 增加 `mode=deep`：Deep Agents 0.7.15 通过自定义 `DoppelChatModel` 复用现有 Provider，使用 SQLite checkpoint、持久 interrupt/resume、事件映射与显式 focused-graph fallback。
+- 增加 `DoppelBackend`：虚拟工作区路径、symlink 二次解析、秘密/`.git`/`.doppel-agent` 拒绝、只读默认值和写入审计；harness 排除 Deep Agents 内置 shell。
+- Deep 子 Agent 最多两个，分别拥有只读权限、6 次模型调用上限和 8000 Token 预算，且不能递归委派。
+- 将旧 Skill Loader 升级为严格 Agent Skills Registry/Resolver；支持 progressive disclosure、唯一名称、行数/大小/链接/疑似密钥检查，并新增 code-review、bugfix、test-repair、mcp-operations 四个内置 Skill。
+- 新增 MCP SDK Gateway：stdio 与 Streamable HTTP、session 生命周期、无副作用健康检查/重连、分页 catalog、schema hash cache、每服务器 semaphore、参数验证、幂等账本、审计及多模态/structured content/`is_error` 处理；有副作用的 `call_tool` 遇到模糊断连不会盲目重试。
+- MCP 工具规范化为 `mcp__server__tool`，同时接入 focused LangGraph 和 Deep Agents；两条链路均在执行前进入可恢复 HITL。旧 `mcp_list`/`mcp_call` 保留为网关兼容 facade。
+- HTTP MCP `auth_profile` 只映射环境变量 `DOPPEL_MCP_AUTH_<PROFILE>_TOKEN`，配置文件不保存令牌；旧版省略 `transport` 的 stdio 配置仍可读取。
+- 增加离线 Deep Agents spike、专项研究记录和 Deep/Skill/MCP/API 集成测试；正式三运行时 benchmark、diff-first patch、verification pipeline 与异步并行子 Agent 留待后续版本。
+
 ## v0.9.0 — 2026-09-20
 
 - 保留 v0.8.2 自研 ReAct 作为 `legacy` 基线，新增统一 `AgentRuntime` 契约与 `graph` 模式；主链使用 LangGraph 1.2.11 和 SQLite Checkpointer，支持跨 runtime 重建恢复状态。

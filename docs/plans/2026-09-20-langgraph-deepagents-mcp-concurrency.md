@@ -4,15 +4,16 @@
 
 **Goal:** 将 Doppel Agent 从同步自研 ReAct Demo 升级为一个可恢复、可审批、可扩展、可量化的本地 Coding Agent Runtime，并形成 LangGraph、Deep Agents、Agent Skills、MCP SDK 与受控高并发的完整面试项目证据链。
 
-**Architecture:** 保留现有 `AgentLoop` 作为可复现实验基线，在其旁边增加统一 `AgentRuntime` 接口；主运行链路由 LangGraph 负责持久化、interrupt/resume、状态路由和流式事件，Deep Agents 作为复杂任务模式嵌入主图，而不是接管权限、存储和 Web 生命周期。Skill 只描述工作流与领域知识，MCP SDK 层负责连接、缓存、调用、限流、重试和审计，二者不得混成一层。
+**Architecture:** 保留现有 `AgentLoop` 作为可复现实验基线，在其旁边增加统一 `AgentRuntime` 接口；Focused LangGraph 与 Deep Agents 分别作为 `graph` / `deep` 实现挂在同一个 RunService 后面，共用持久化、权限、调度、事件和 Provider 边界，而不强行合并两套不兼容的 state schema。Skill 只描述工作流与领域知识，MCP SDK 层负责连接、缓存、调用、限流、重试和审计，二者不得混成一层。
 
 **Tech Stack:** Python 3.11+、FastAPI、Pydantic v2、LangChain 1.x、LangGraph 1.x、Deep Agents 0.x、MCP Python SDK 2.x、SQLite WAL / LangGraph SQLite Checkpointer、Vue 3 + TypeScript + Vite、pytest、Ruff、pywebview、PyInstaller；远期服务端模式可选 PostgreSQL + Redis，不作为本地 v1.0 的强依赖。
 
-## 实施状态（2026-09-20）
+## 实施状态（更新于 2026-09-21）
 
 - **v0.9.0 / Milestone A-B：已实现。** 完成 legacy/graph 统一 runtime、SQLite checkpoint、interrupt 三种决定、工具幂等账本、FastAPI v1、durable SSE、有界调度、取消、工作区锁、资源限流及异步 Provider 可靠性治理。
-- **验证：** Windows 完整离线套件 `86 passed`，`ruff check src tests` 通过；v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
-- **未提前宣称：** Task 12-29（Deep Agents production adapter、Agent Skills Registry、新 MCP Gateway、diff-first patch、异步子 Agent、Vue 与正式 benchmark）仍按后续版本实施。
+- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 发布前 Windows 门禁为 `113 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes` 与 compileall 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
+- **v0.10.0 / Milestone C-D：已实现。** Task 12-21 已完成：Deep Agents 0.7.15 spike、受控 backend、`mode=deep`、Agent Skills Registry、四个工程 Skill、stdio/Streamable HTTP MCP Gateway、分页 catalog、多模态 executor、LangGraph/Deep adapter 与独立 server semaphore。
+- **未提前宣称：** Task 22-29（diff-first patch、verification pipeline、可取消进程树、异步子 Agent、三运行时正式 benchmark、并发压测与 Vue 可视化）仍按 v0.11-v0.12 实施。
 
 ---
 
@@ -29,10 +30,10 @@ FastAPI / Desktop UI
 RunService + AsyncRunScheduler
         │
         ▼
-LangGraph Supervisor Graph
-  ├── Legacy runtime node          # 当前 AgentLoop，作为基线
-  ├── Focused coding graph         # 自己掌控的主链
-  └── Deep Agents subgraph         # deep 模式：规划/子 Agent/Skill
+AgentRuntime selector
+  ├── Legacy runtime               # 当前 AgentLoop，作为基线
+  ├── Focused LangGraph runtime     # 自己掌控的主链
+  └── Deep Agents runtime          # deep 模式：规划/子 Agent/Skill
         │
         ▼
 Policy Gateway
@@ -42,7 +43,7 @@ Policy Gateway
   └── Skill Registry
 ```
 
-- **LangGraph 是主骨架：** 持久化、HITL、中断恢复、事件流、状态迁移、错误路由由项目自己掌握。
+- **应用层是主骨架：** RunService、SQLite、调度、HITL 状态、事件流和错误路由由项目自己掌握；Focused 与 Deep 都不能接管这些产品边界。
 - **Deep Agents 是高阶执行器：** 只在 `mode=deep` 时提供 planning、filesystem、subagent、summarization、skills 等能力。
 - **现有 AgentLoop 保留：** 通过 `mode=legacy` 运行，作为同模型同任务 A/B 基线，避免“为了套框架而套框架”。
 - **不直接使用 deepagents-code：** 那是现成 Coding Agent 产品，会削弱项目 ownership；只使用 `deepagents` SDK。
@@ -531,7 +532,7 @@ Legacy adapter 使用 `asyncio.to_thread()` 包住现有同步 `Core.run()`；�
 
 ## Milestone C — v0.10.0 Deep Agents and Skills
 
-### Task 12: Deep Agents 技术 Spike
+### Task 12: Deep Agents 技术 Spike ✅ v0.10.0
 
 **Objective:** 在不污染主链的情况下确认当前 Deep Agents API、OpenAI-compatible 模型、backend 和 checkpointer 可组合。
 
@@ -551,7 +552,7 @@ Legacy adapter 使用 `asyncio.to_thread()` 包住现有同步 `Core.run()`；�
 
 Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 
-### Task 13: 实现 DoppelBackend
+### Task 13: 实现 DoppelBackend ✅ v0.10.0
 
 **Objective:** 让 Deep Agents 文件能力复用 Doppel 的路径、秘密文件、审计与审批策略。
 
@@ -562,7 +563,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 
 禁止 Deep Agents 绕过项目 Policy Gateway 直接读 `.env`、`.git`、`.doppel-agent`。官方 filesystem permission 只覆盖内置文件工具，不能代替自定义工具与 MCP 权限。
 
-### Task 14: 实现 DeepAgentRuntime
+### Task 14: 实现 DeepAgentRuntime ✅ v0.10.0
 
 **Objective:** 增加 `mode=deep`，提供规划、上下文卸载、同步子 Agent 与 Skill。
 
@@ -581,7 +582,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 - 子 Agent 结果必须带 evidence paths；
 - 深度模式失败可降级回 focused graph，但必须记录降级事件。
 
-### Task 15: 将 Skill Loader 升级为 Agent Skills Registry
+### Task 15: 将 Skill Loader 升级为 Agent Skills Registry ✅ v0.10.0
 
 **Objective:** 兼容现有 `.doppel/skills/`，同时实现 progressive disclosure 和严格验证。
 
@@ -603,7 +604,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 - 禁止 Skill 包含明文 secret；
 - Skill scripts 不自动执行，仍经 command policy/审批。
 
-### Task 16: 添加四个面试价值最高的 Skill
+### Task 16: 添加四个面试价值最高的 Skill ✅ v0.10.0
 
 **Objective:** 展示 Skill 是可复用工作流，不是换皮 prompt。
 
@@ -620,7 +621,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 
 ## Milestone D — v0.10.0 MCP SDK Gateway
 
-### Task 17: 定义 MCP 配置和类型
+### Task 17: 定义 MCP 配置和类型 ✅ v0.10.0
 
 **Objective:** 同时支持 stdio 与 Streamable HTTP，并保持配置中不出现密钥值。
 
@@ -652,7 +653,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 }
 ```
 
-### Task 18: 实现 MCPClientManager
+### Task 18: 实现 MCPClientManager ✅ v0.10.0
 
 **Objective:** 统一 session 生命周期、健康检查、重连和关闭。
 
@@ -669,7 +670,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 - 健康探针不得调用有副作用工具；
 - 服务器 metadata、capabilities、protocol version 写入缓存。
 
-### Task 19: 实现 MCPToolCatalog
+### Task 19: 实现 MCPToolCatalog ✅ v0.10.0
 
 **Objective:** 分页列出工具并缓存 schema，避免每次调用前重复 `list_tools()`。
 
@@ -687,7 +688,7 @@ Spike 完成后才决定生产 adapter，禁止凭文档想象直接重构。
 - 不可信 description 不进入系统 prompt 的高优先级区域；
 - 工具名在多 server 下规范化为 `mcp__{server}__{tool}`。
 
-### Task 20: 实现 MCPToolExecutor
+### Task 20: 实现 MCPToolExecutor ✅ v0.10.0
 
 **Objective:** 正确处理多模态 content、structured content 和 `is_error`。
 
@@ -713,7 +714,7 @@ validate schema
 
 必须先看 `is_error`，不能因为 RPC 返回成功就把工具执行当成功。图片、音频、resource link 和 embedded resource 不得强行读取 `.text`。
 
-### Task 21: 将 MCP Tool 暴露给 LangGraph/Deep Agents
+### Task 21: 将 MCP Tool 暴露给 LangGraph/Deep Agents ✅ v0.10.0
 
 **Objective:** 通过一个 adapter 将 MCP 工具转换为 LangChain tools，同时保留 Doppel policy。
 
@@ -978,7 +979,7 @@ Celery/Redis/Kubernetes 不进入 v1.0；否则项目会从 Agent Runtime 变成
 1. 为什么保留自研 Loop，而不是直接删掉？
 2. LangGraph checkpoint 和业务数据库分别保存什么？
 3. interrupt 恢复时节点重跑，如何防止工具重复执行？
-4. 为什么 Deep Agents 是 subgraph，而不是整个产品直接套 `create_deep_agent`？
+4. 为什么 Deep Agents 被隔离成一个 runtime，而不是让整个产品直接套 `create_deep_agent`？
 5. Skill 与 MCP Tool 有什么区别？
 6. MCP 的 `content`、`structured_content`、`is_error` 如何处理？
 7. 同一工作区多个 Agent 为什么不能同时写？

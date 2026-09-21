@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections.abc import Awaitable
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -85,4 +86,61 @@ class ToolExecutionLedger:
                 "UPDATE tool_executions SET status='completed',result=? WHERE run_id=? AND tool_call_id=?",
                 (result, run_id, tool_call_id),
             )
+        return result, False
+
+    def _begin(self, run_id: str, tool_call_id: str, tool_name: str, arguments: dict) -> tuple[str | None, bool]:
+        arguments_hash = self._hash(arguments)
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM tool_executions WHERE run_id=? AND tool_call_id=?",
+                (run_id, tool_call_id),
+            ).fetchone()
+            if existing:
+                if existing["tool_name"] != tool_name or existing["arguments_hash"] != arguments_hash:
+                    raise ValueError("tool call id was reused with different input")
+                if existing["status"] == "completed":
+                    return existing["result"], True
+                if existing["status"] == "failed":
+                    raise ValueError(f"previous tool execution failed: {existing['error']}")
+                raise RuntimeError("tool execution outcome is indeterminate after interruption")
+            connection.execute(
+                "INSERT INTO tool_executions(run_id,tool_call_id,tool_name,arguments_hash,status) VALUES(?,?,?,?,?)",
+                (run_id, tool_call_id, tool_name, arguments_hash, "running"),
+            )
+        return None, False
+
+    def _finish(self, run_id: str, tool_call_id: str, *, result: str = "", error: str = "") -> None:
+        status = "failed" if error else "completed"
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE tool_executions SET status=?,result=?,error=? WHERE run_id=? AND tool_call_id=?",
+                (status, result, error, run_id, tool_call_id),
+            )
+
+    async def aexecute_once(
+        self,
+        run_id: str,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: dict,
+        operation: Callable[[], Awaitable[str]],
+    ) -> tuple[str, bool]:
+        import asyncio
+
+        existing, replayed = await asyncio.to_thread(
+            self._begin, run_id, tool_call_id, tool_name, arguments
+        )
+        if replayed:
+            return existing or "", True
+        try:
+            result = await operation()
+        except Exception as exc:
+            await asyncio.to_thread(
+                self._finish,
+                run_id,
+                tool_call_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        await asyncio.to_thread(self._finish, run_id, tool_call_id, result=result)
         return result, False

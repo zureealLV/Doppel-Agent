@@ -8,6 +8,7 @@ from typing import Any
 from ..concurrency.limits import ResourceLimits
 from ..provider import Provider
 from .base import AgentRuntime
+from .deep import DeepAgentRuntime
 from .graph import GraphRuntime
 from .legacy import LegacyRuntime
 
@@ -35,6 +36,17 @@ def create_runtime(
             provider,
             checkpoint_path=(state_root or workspace / ".doppel-agent") / "checkpoints.sqlite3",
             max_steps=int(options.get("max_steps", 8)),
+            resource_limits=resource_limits,
+        )
+    if mode == "deep":
+        options = dict(core_options or {})
+        return DeepAgentRuntime(
+            workspace,
+            provider,
+            checkpoint_path=(state_root or workspace / ".doppel-agent") / "deep-checkpoints.sqlite3",
+            max_steps=int(options.get("max_steps", 12)),
+            allow_write=bool(options.get("allow_write", False)),
+            max_subagents=2 if options.get("allow_delegate", False) else 0,
             resource_limits=resource_limits,
         )
     raise ValueError(f"unsupported runtime mode: {mode}")

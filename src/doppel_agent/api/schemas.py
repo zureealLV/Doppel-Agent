@@ -21,7 +21,7 @@ class RunCreate(BaseModel):
 
     conversation_id: str | None = Field(default=None, min_length=1, max_length=128)
     prompt: str = Field(min_length=1, max_length=100_000)
-    mode: Literal["legacy", "graph"] = "graph"
+    mode: Literal["legacy", "graph", "deep"] = "graph"
     profile_id: str | None = Field(default=None, min_length=1, max_length=128)
     effort: Literal["quick", "balanced", "deep"] = "balanced"
     deadline_seconds: int = Field(default=600, ge=1, le=3600)

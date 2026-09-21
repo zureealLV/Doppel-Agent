@@ -6,6 +6,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Awaitable
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -19,6 +20,8 @@ class Tool:
     capability: str
     properties: dict[str, dict[str, Any]]
     handler: Callable[[dict[str, Any]], str]
+    input_schema: dict[str, Any] | None = None
+    async_handler: Callable[[dict[str, Any], str, str], Awaitable[str]] | None = None
 
     def schema(self) -> dict[str, Any]:
         return {
@@ -26,7 +29,7 @@ class Tool:
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": {
+                "parameters": self.input_schema or {
                     "type": "object",
                     "properties": self.properties,
                     "required": list(self.properties),
@@ -55,11 +58,19 @@ class ToolRegistry:
             raise ValueError(f"unknown tool: {name}")
         return tool.capability
 
+    def is_async(self, name: str) -> bool:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        return tool.async_handler is not None
+
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
         tool = self.tools.get(name)
         if tool is None:
             raise ValueError(f"unknown tool: {name}")
-        if not isinstance(arguments, dict) or set(arguments) != set(tool.properties):
+        if not isinstance(arguments, dict):
+            raise ValueError(f"invalid arguments for {name}")
+        if tool.input_schema is None and set(arguments) != set(tool.properties):
             raise ValueError(f"invalid arguments for {name}")
         for key, schema in tool.properties.items():
             value = arguments[key]
@@ -75,6 +86,19 @@ class ToolRegistry:
         if not decision.allowed:
             raise PermissionError(decision.reason)
         return tool.handler(arguments)
+
+    async def aexecute(self, name: str, arguments: dict[str, Any], *, run_id: str, tool_call_id: str) -> str:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        if tool.async_handler is None:
+            import asyncio
+
+            return await asyncio.to_thread(self.execute, name, arguments)
+        decision = self.permissions.check(tool.capability, name, arguments)
+        if not decision.allowed:
+            raise PermissionError(decision.reason)
+        return await tool.async_handler(arguments, run_id, tool_call_id)
 
 
 def _target(workspace: Path, raw_path: str, *, must_exist: bool) -> Path:

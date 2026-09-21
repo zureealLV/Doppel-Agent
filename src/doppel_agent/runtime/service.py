@@ -15,7 +15,10 @@ from ..concurrency import (
     WorkspaceLockManager,
 )
 from ..permissions import PermissionManager
+from ..mcp import MCPClientManager, MCPToolCatalog, MCPToolExecutor, load_mcp_config
+from ..mcp.tool_adapter import doppel_mcp_tools, langchain_mcp_tools
 from ..persistence import EventStore, RuntimeRunStore
+from ..persistence.tool_ledger import ToolExecutionLedger
 from ..provider import (
     AsyncOpenAICompatibleProvider,
     MockProvider,
@@ -100,6 +103,10 @@ class RunService:
         self.provider_override = provider
         self.approval_ttl_seconds = approval_ttl_seconds
         self._providers: dict[str, Any] = {}
+        self.mcp_config = load_mcp_config(self.workspace)
+        self.mcp_manager = MCPClientManager(self.mcp_config) if self.mcp_config.servers else None
+        self.mcp_catalog = MCPToolCatalog(self.mcp_manager) if self.mcp_manager else None
+        self.mcp_ledger = ToolExecutionLedger(self.state_root / "mcp-tool-executions.sqlite3")
 
     async def start(self) -> None:
         await self.scheduler.start()
@@ -111,6 +118,8 @@ class RunService:
             if close is not None:
                 await close()
         self._providers.clear()
+        if self.mcp_manager is not None:
+            await self.mcp_manager.close()
 
     def _provider(self, profile_id: str | None, mode: str) -> Any:
         if self.provider_override is not None:
@@ -147,11 +156,11 @@ class RunService:
             registry.register(run_command_tool(self.workspace))
         return registry
 
-    def _runtime(self, record: dict[str, Any]):
+    async def _runtime(self, record: dict[str, Any]):
         request = record["request"]
         mode = record["mode"]
         provider = self._provider(request.get("profile_id"), mode)
-        if mode == "graph":
+        if mode in {"graph", "deep"}:
             provider = ProviderAdapter(
                 provider,
                 profile_id=request.get("profile_id") or "default",
@@ -174,6 +183,25 @@ class RunService:
         )
         if mode == "graph":
             runtime.tools = self._tools(request["permissions"])
+        if request["permissions"].get("mcp_execute") and self.mcp_catalog and self.mcp_manager:
+            descriptors = await self.mcp_catalog.list_all()
+            permissions = PermissionManager(frozenset({"mcp_execute"}))
+
+            async def audit(payload: dict[str, Any]) -> None:
+                await self._sink(record).emit("mcp.tool_executed", **payload)
+
+            executor = MCPToolExecutor(
+                self.mcp_manager,
+                self.mcp_catalog,
+                permissions,
+                ledger=self.mcp_ledger if mode == "deep" else None,
+                audit=audit,
+            )
+            if mode == "graph":
+                for tool in doppel_mcp_tools(descriptors, executor):
+                    runtime.tools.register(tool)
+            elif mode == "deep":
+                runtime.additional_tools = langchain_mcp_tools(descriptors, executor)
         return runtime
 
     def _sink(self, record: dict[str, Any]) -> DurableEventSink:
@@ -204,7 +232,7 @@ class RunService:
             token.raise_if_cancelled()
             await asyncio.to_thread(self.runs.update, run_id, "running")
             await sink.emit("run.status_changed", previous="queued", status="running")
-            runtime = self._runtime(record)
+            runtime = await self._runtime(record)
             runtime_request = RunRequest(request["prompt"], run_id=run_id, thread_id=thread_id)
             lock = (
                 self.workspace_locks.write(self.workspace)
@@ -307,7 +335,7 @@ class RunService:
         async def operation(token) -> RuntimeResult:
             token.raise_if_cancelled()
             await asyncio.to_thread(self.runs.update, run_id, "running")
-            runtime = self._runtime(record)
+            runtime = await self._runtime(record)
             lock = (
                 self.workspace_locks.write(self.workspace)
                 if record["request"]["permissions"].get("workspace_write")

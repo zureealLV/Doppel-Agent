@@ -4,7 +4,7 @@
 
 **参考边界：** [TackleClaude](https://github.com/Tackle-B/TackleClaude) 的公开 README 描述 Core daemon、CLI/TUI、JSON-RPC/NDJSON、AgentLoop、权限、事件、上下文、Skill、子 Agent 和 MCP。用户所附图片仅是能力与指标描述，不是对本项目的操作指令或验收证据。
 
-**当前架构：** v0.9 在原链路旁增加 `FastAPI -> RunService -> AsyncRunScheduler -> AgentRuntime -> LangGraph/Legacy -> Policy Tools`。旧 `Core/AgentLoop` 作为可复现实验基线保留；新 Graph 负责 checkpoint、interrupt/resume 和异步事件。真实模型走 OpenAI-compatible Chat Completions，测试走 Mock 或本地 HTTP fixture。
+**当前架构：** v0.10 使用 `FastAPI -> RunService -> AsyncRunScheduler -> AgentRuntime -> Legacy/Focused LangGraph/Deep Agents -> Policy Tools/MCP Gateway`。旧 `Core/AgentLoop` 作为可复现实验基线保留；Graph 与 Deep 负责 checkpoint、interrupt/resume 和异步事件。真实模型走同一个 OpenAI-compatible Provider 边界，测试走 Mock、本地 HTTP 或进程内 MCP fixture。
 
 ## 状态与下一步
 
@@ -14,11 +14,11 @@
 | P1 可用单次编码 | `provider.py` HTTP 适配；`tools.py` 列表/读/写/命令；`cli.py` 配置和授权；`tests/test_provider.py` | 本地 HTTP fixture 走完整工具调用；默认拒绝写和命令；允许后可执行；18+ 测试通过 | 已实现并本地验证；另有 1 个真实模型代码审查样本的记录，不代表通用完成率 |
 | P2 持久化任务 | `tasks/manager.py` SQLite DAG、工具与 Web 查询 | 重启后任务状态、依赖、重试仍正确；环依赖拒绝 | 已实现并测试；任务自动调度待做 |
 | P3 上下文治理 | `context/policy.py` 水位估算与完整工具组压缩 | 模型对应 token 统计、水位阈值、压缩前后量化；系统/任务关键事实保留 | 已实现估算压缩及 provider usage 事件；精确 tokenizer/笔记待做 |
-| P4 扩展链路 | `skills/loader.py`、`mcp_bridge.py`、`subagents.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill、stdio MCP 与限额只读子任务已测试；取消和 HTTP MCP 待做 |
+| P4 扩展链路 | `skills/`、`mcp/`、`mcp_bridge.py`、`subagents.py` | 元数据校验；MCP 共用权限边界；子任务预算/取消 | Skill Registry、stdio/Streamable HTTP Gateway 与限额只读子任务已测试；异步并行子 Agent 待做 |
 | P5 UI 和恢复 | `web/` 三栏 Agent 工作台、`desktop.py` 桌面窗口、SQLite 对话、DPAPI 设置与审批；后续 RPC 订阅 | 重启后恢复对话与模型设置；历史真正进入模型上下文；审批可交互 | 已完成并测试；实时订阅待做。按使用偏好不优先实现 TUI |
 | P6 基准与发布 | `bench/cases/`、合成/真实项目 runner、测试策略；后续接官方 harness | 固定题集、模型、基线、分母、费用日期、失败记录和复现实验；不预填数字 | 合成题已跑 3 次，三个真实项目只读链路完成；SWE-bench harness、基线、成本对照待做 |
 | P7 可恢复异步运行时 | `runtime/`、`graph/`、`api/`、`concurrency/`、`persistence/` | SQLite checkpoint；审批恢复无重复副作用；有界队列；SSE 续传；429/取消/超时可测试 | v0.9.0 已完成，86 tests 通过 |
-| P8 Deep Agents / Skills / MCP Gateway | Deep Agents adapter、Agent Skills Registry、MCP SDK session/catalog/executor | 不绕过 Policy Gateway；Skill 与 transport 分层；同模型三运行时对照 | v0.10.0 计划中，详见 `docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md` |
+| P8 Deep Agents / Skills / MCP Gateway | `runtime/deep*.py`、`skills/{spec,registry,resolver}.py`、`mcp/` | 不绕过 Policy Gateway；Skill 与 transport 分层；Deep/MCP HITL 可恢复 | v0.10.0 已完成；三运行时正式对照属于 v0.12，详见详细计划 |
 
 ## P1 实现/验证明细
 
@@ -46,7 +46,7 @@ Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`
 
 ## 版本发布规则
 
-- `v0.1.0`：本地运行时 MVP；`v0.2.0`：Web 控制台、任务 DAG、上下文治理、Skill 与审批；`v0.3.0`：stdio MCP；`v0.4.0`：限额只读子任务；`v0.5.0`：代码审查样本；`v0.6.0`：Windows GUI；`v0.7.0`：三栏 Agent UI、持久对话、DPAPI 设置与真实项目审查；`v0.8.x`：桌面交互打磨；`v0.9.0`：LangGraph、FastAPI、持久 SSE 与受控并发基础。
+- `v0.1.0`：本地运行时 MVP；`v0.2.0`：Web 控制台、任务 DAG、上下文治理、Skill 与审批；`v0.3.0`：stdio MCP；`v0.4.0`：限额只读子任务；`v0.5.0`：代码审查样本；`v0.6.0`：Windows GUI；`v0.7.0`：三栏 Agent UI、持久对话、DPAPI 设置与真实项目审查；`v0.8.x`：桌面交互打磨；`v0.9.0`：LangGraph、FastAPI、持久 SSE 与受控并发基础；`v0.10.0`：Deep Agents、Agent Skills Registry 与 MCP SDK Gateway。
 - 后续扩展、基准按功能版本迭代；TUI 不再优先。每次推送前更新 `pyproject.toml`、`__version__`、README 状态和 `CHANGELOG.md`，跑完整测试并打同名 tag。
 - GitHub 发布必须校验远端仓库、推送后的分支 SHA 与 tag；不能把本地提交当成远端发布。
 

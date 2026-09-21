@@ -198,6 +198,20 @@ class FocusedGraphNodes:
 
     async def _execute_one(self, run_id: str, call: ToolCall) -> str:
         if self.ledger:
+            if self.tools.is_async(call.name):
+                output, _ = await self.ledger.aexecute_once(
+                    run_id,
+                    call.id,
+                    call.name,
+                    call.arguments,
+                    lambda: self.tools.aexecute(
+                        call.name,
+                        call.arguments,
+                        run_id=run_id,
+                        tool_call_id=call.id,
+                    ),
+                )
+                return output
             output, _ = await asyncio.to_thread(
                 self.ledger.execute_once,
                 run_id,
@@ -207,7 +221,12 @@ class FocusedGraphNodes:
                 lambda name=call.name, arguments=call.arguments: self.tools.execute(name, arguments),
             )
             return output
-        return await asyncio.to_thread(self.tools.execute, call.name, call.arguments)
+        return await self.tools.aexecute(
+            call.name,
+            call.arguments,
+            run_id=run_id,
+            tool_call_id=call.id,
+        )
 
 
 def initial_messages(prompt: str, history: tuple[Message, ...]) -> list[SerializedMessage]:

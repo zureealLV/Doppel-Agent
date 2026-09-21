@@ -1,1 +1,1 @@
-"""Cross-component acceptance tests."""
+"""Cross-layer integration tests."""

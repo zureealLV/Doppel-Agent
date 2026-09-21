@@ -19,7 +19,7 @@ class RunsApiTests(unittest.TestCase):
 
     @staticmethod
     def wait(client, run_id, statuses=("completed", "failed", "interrupted")):
-        for _ in range(200):
+        for _ in range(500):
             record = client.get(f"/api/v1/runs/{run_id}").json()
             if record["status"] in statuses:
                 return record
@@ -46,6 +46,18 @@ class RunsApiTests(unittest.TestCase):
     def test_unknown_run_is_404(self):
         with TestClient(create_app(self.root, provider=MockProvider())) as client:
             self.assertEqual(client.get("/api/v1/runs/missing").status_code, 404)
+
+    def test_deep_mode_runs_through_versioned_api(self):
+        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+            response = client.post(
+                "/api/v1/runs",
+                json={"prompt": "inspect", "mode": "deep", "permissions": {"delegate": True}},
+            )
+            self.assertEqual(response.status_code, 202, response.text)
+            record = self.wait(client, response.json()["run_id"])
+            self.assertEqual(record["status"], "completed", record)
+            self.assertNotIn("fallback_runtime", record["metadata"])
+            self.assertEqual(record["metadata"]["subagent_limit"], 2)
 
     def test_write_interrupt_resume_and_durable_events(self):
         class WriteProvider:

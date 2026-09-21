@@ -4,14 +4,15 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.9.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.10.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
 
 ## 功能
 
 - **Agent Loop**：模型发起工具调用，Core 校验并执行，再把结果返回模型；单次运行有最大步数限制。
-- **双运行时**：保留 `legacy` ReAct 基线，同时提供 LangGraph `graph` 主链；统一异步 Runtime 契约，SQLite Checkpointer 支持重启恢复。
+- **三运行时**：保留 `legacy` ReAct 基线、LangGraph `graph` 主链，并增加可选 Deep Agents `deep` 模式；三者共用异步 Runtime 契约，Graph/Deep 使用 SQLite Checkpointer。
+- **Deep Agents 适配**：自定义 `BaseChatModel` 复用现有 OpenAI-compatible Provider；`DoppelBackend` 拒绝秘密文件、状态目录、路径逃逸和内置 shell；深度模式最多两个只读子 Agent，分别限制模型调用与 Token 预算，异常会记录后降级到 focused graph。
 - **可恢复审批**：写入和命令在副作用前触发 interrupt；批准、拒绝、编辑均可 resume，工具幂等账本阻止重复执行。
 - **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。
 - **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
@@ -26,7 +27,8 @@
 - **Windows GUI**：独立桌面窗口复用同一套本机工作台；无需使用 TUI，关闭窗口即停止该实例的本地服务。
 - **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
 - **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
-- **扩展**：工作区 `.doppel/skills/` 中的 Skill 可经校验后读取；可选 stdio MCP 服务通过显式配置接入。Web 中的写入、命令和 MCP 操作需要逐次人工批准。
+- **Agent Skills Registry**：兼容 `.doppel/skills/`，并支持 `skills/`；校验 frontmatter、唯一名称、大小、链接路径和疑似明文密钥，通过 progressive disclosure 先暴露摘要、命中后再加载正文。仓库内置 code-review、bugfix、test-repair、mcp-operations 四个工作流 Skill。
+- **MCP SDK Gateway**：支持 stdio 与 Streamable HTTP；统一 session 生命周期、健康探针、重连、分页 catalog、schema 缓存、每服务器 semaphore、参数校验、HITL、幂等、审计以及文本/图片/音频/resource/structured content。模型只看到规范化的 `mcp__server__tool`，不能绕过网关直连。
 - **只读子任务**：按次启用委派，子任务最多两次、每次最多四轮，只能读取工作区，不能继续委派；会产生额外模型调用与费用。
 - **常驻 Core**：CLI 与 daemon 使用 localhost JSON-RPC/NDJSON 通信。
 
@@ -58,14 +60,14 @@ cd '<你的 Doppel-Agent 仓库目录>'
 
 不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
 
-### v0.9 Runtime API
+### v0.10 Runtime API
 
 ```powershell
 python -m pip install -e ".[agent]"
 .\doppel.cmd api --workspace 'D:\your-project' --port 8765
 ```
 
-打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做同任务基线。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
+打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做基线，或传 `mode: "deep"` 启用 Deep Agents。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
 
 ### 命令行
 
@@ -87,7 +89,7 @@ Base URL 后会自动追加 `/chat/completions`。服务需要兼容 Chat Comple
 
 ### MCP 扩展
 
-先安装 `python -m pip install -e ".[mcp]"`，再按 [MCP 配置说明](docs/MCP.md) 创建本机配置。Web 提交任务时勾选“允许 MCP 服务”，每次启动服务/调用工具都需检查实际命令并审批；CLI 则使用 `--allow-mcp`。**外部 MCP 服务作为当前用户运行，不受工作区文件边界约束。**
+安装 `python -m pip install -e ".[agent]"`，再按 [MCP Gateway 配置说明](docs/MCP.md) 创建配置。Graph/Deep 只在本次运行授予 `mcp_execute` 后加载规范化工具，并在真实调用前持久化审批。HTTP 认证仅在环境变量中按 auth profile 提供；配置文件不保存令牌。**stdio 服务仍以当前用户运行，不是操作系统沙箱。**
 
 ### 只读子任务
 
@@ -117,7 +119,7 @@ python bench/run_review.py --env-file '<你的本机 .env 路径>'
 
 Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
 
-旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph 的异步 Provider 可立即传播取消。当前尚无强隔离、Streamable HTTP MCP Gateway、Deep Agents 生产适配、并行子 Agent、TUI 或独立基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
+旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph/Deep 的异步 Provider 可立即传播取消。当前仍没有强隔离、diff-first patch/verification pipeline、异步并行子 Agent、TUI 或独立三运行时基准成绩。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
 
 ## 版本与来源
 
