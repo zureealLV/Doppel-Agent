@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,14 @@ from ..persistence import sqlite_checkpointer
 from ..provider import Provider
 from ..skills.registry import SkillRegistry
 from ..mcp.tool_adapter import reset_mcp_run_id, set_mcp_run_id
+from ..workspace.process_supervisor import ProcessSupervisor
+from ..workspace.tool_adapter import (
+    WorkspacePatchTool,
+    langchain_patch_tool,
+    reset_patch_run_id,
+    set_patch_run_id,
+)
+from ..workspace.verification import VerificationPipeline
 from .base import EventSink, NullEventSink, ResumeCommand, RunRequest, RuntimeResult
 from .deep_backend import DoppelBackend
 from .deep_model import DoppelChatModel
@@ -32,7 +41,7 @@ from .graph import GraphRuntime
 register_harness_profile(
     "doppel",
     HarnessProfile(
-        excluded_tools=frozenset({"execute"}),
+        excluded_tools=frozenset({"execute", "write_file", "edit_file"}),
         general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
     ),
 )
@@ -61,9 +70,13 @@ class _DeepEventBridge(AsyncCallbackHandler):
         name = self._tool_names.pop(str(kwargs.get("run_id", "")), "unknown")
         kind = "deep.subagent_finished" if name == "task" else "deep.tool_finished"
         await self.sink.emit(kind, tool=name, output_preview=str(output)[:500])
+        if name == "propose_patch":
+            await self.sink.emit("patch.applied", result=str(output)[:2000])
 
     async def on_tool_error(self, error: BaseException, **kwargs: Any) -> None:
         await self.sink.emit("deep.tool_failed", error=f"{type(error).__name__}: {error}")
+        if type(error).__name__ == "PatchConflictError":
+            await self.sink.emit("patch.conflict", error=str(error))
 
     async def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         usage = (getattr(response, "llm_output", None) or {}).get("token_usage", {})
@@ -83,6 +96,7 @@ class DeepAgentRuntime:
         checkpoint_path: Path | None = None,
         max_steps: int = 12,
         allow_write: bool = False,
+        allow_command: bool = False,
         max_subagents: int = 2,
         resource_limits: ResourceLimits | None = None,
     ) -> None:
@@ -96,6 +110,16 @@ class DeepAgentRuntime:
         self.checkpoint_path = root
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self.additional_tools: list[Any] = []
+        self.process_supervisor = ProcessSupervisor()
+        verification = (
+            VerificationPipeline(self.workspace, supervisor=self.process_supervisor)
+            if allow_write and allow_command
+            else None
+        )
+        self.patch_tool: WorkspacePatchTool | None = (
+            langchain_patch_tool(self.workspace, verification=verification) if allow_write else None
+        )
+        self._pending_interrupts: dict[str, list[Any]] = {}
         self._fallback = GraphRuntime(
             self.workspace,
             provider,
@@ -167,16 +191,15 @@ class DeepAgentRuntime:
             allow_write=self.allow_write,
             audit=lambda operation, payload: None,
         )
-        interrupt_on: dict[str, bool] = {}
-        if self.allow_write:
-            interrupt_on.update(write_file=True, edit_file=True)
-        interrupt_on.update({tool.name: True for tool in self.additional_tools})
+        tools = ([self.patch_tool] if self.patch_tool is not None else []) + self.additional_tools
+        interrupt_on = {tool.name: True for tool in tools}
         return create_deep_agent(
             model=model,
-            tools=self.additional_tools,
+            tools=tools,
             system_prompt=(
                 "You are Doppel deep mode. Use progressive disclosure, keep work inside the workspace, "
-                "delegate at most two read-only investigations, and ground the final answer in evidence paths."
+                "delegate at most two read-only investigations, and ground the final answer in evidence paths. "
+                "For workspace changes, use propose_patch and provide only its changes field."
             ),
             subagents=self._subagents(),
             skills=self._skill_sources() or None,
@@ -197,6 +220,19 @@ class DeepAgentRuntime:
                 return str(message.content)
         return ""
 
+    def _prepare_interrupt_value(self, value: Any) -> Any:
+        if not isinstance(value, dict) or self.patch_tool is None:
+            return value
+        prepared = deepcopy(value)
+        for request in prepared.get("action_requests") or []:
+            if request.get("name") != self.patch_tool.name:
+                continue
+            arguments = request.get("args")
+            if not isinstance(arguments, dict):
+                raise ValueError("propose_patch approval arguments must be an object")
+            request["args"] = self.patch_tool.doppel_tool.approval_preparer(arguments)
+        return prepared
+
     def _result(self, run_id: str, thread_id: str, result: dict[str, Any]) -> RuntimeResult:
         interrupts = result.get("__interrupt__") or ()
         metadata: dict[str, Any] = {
@@ -204,10 +240,14 @@ class DeepAgentRuntime:
             "subagent_limit": self.max_subagents,
         }
         if interrupts:
+            values = [self._prepare_interrupt_value(getattr(item, "value", None)) for item in interrupts]
+            self._pending_interrupts[thread_id] = values
             metadata["interrupts"] = [
-                {"id": getattr(item, "id", ""), "value": getattr(item, "value", None)}
-                for item in interrupts
+                {"id": getattr(item, "id", ""), "value": value}
+                for item, value in zip(interrupts, values, strict=True)
             ]
+        else:
+            self._pending_interrupts.pop(thread_id, None)
         return RuntimeResult(
             run_id=run_id,
             thread_id=thread_id,
@@ -221,6 +261,7 @@ class DeepAgentRuntime:
         async with sqlite_checkpointer(self.checkpoint_path) as checkpointer:
             graph = self._build_graph(checkpointer, sink)
             token = set_mcp_run_id(request.run_id)
+            patch_token = set_patch_run_id(request.run_id)
             try:
                 result = await graph.ainvoke(
                     {"messages": [{"role": "user", "content": request.prompt}]},
@@ -231,6 +272,7 @@ class DeepAgentRuntime:
                     },
                 )
             finally:
+                reset_patch_run_id(patch_token)
                 reset_mcp_run_id(token)
         return self._result(request.run_id, request.thread_id, result)
 
@@ -257,6 +299,19 @@ class DeepAgentRuntime:
             )
         finally:
             self._tasks.pop(request.run_id, None)
+        for item in result.metadata.get("interrupts", []):
+            value = item.get("value")
+            if not isinstance(value, dict):
+                continue
+            for action in value.get("action_requests") or []:
+                if action.get("name") == "propose_patch" and "_doppel_patch" in action.get("args", {}):
+                    proposal = action["args"]["_doppel_patch"]
+                    await sink.emit(
+                        "patch.proposed",
+                        patch_id=proposal["patch_id"],
+                        paths=[change["path"] for change in proposal["changes"]],
+                        unified_diff=proposal["unified_diff"],
+                    )
         await sink.emit(
             "runtime.finished",
             runtime=self.name,
@@ -266,33 +321,60 @@ class DeepAgentRuntime:
         )
         return result
 
-    @staticmethod
-    def _resume_value(value: Any, interrupt_values: list[Any]) -> Any:
+    def _resume_value(
+        self,
+        value: Any,
+        interrupt_values: list[Any],
+        prepared_interrupt_values: list[Any] | None = None,
+    ) -> Any:
         if not isinstance(value, dict) or "action" not in value:
             return value
-        requests = []
+        raw_requests = []
         for interrupt_value in interrupt_values:
             if isinstance(interrupt_value, dict):
-                requests.extend(interrupt_value.get("action_requests") or [])
+                raw_requests.extend(interrupt_value.get("action_requests") or [])
+        prepared_requests = []
+        for interrupt_value in prepared_interrupt_values or []:
+            if isinstance(interrupt_value, dict):
+                prepared_requests.extend(interrupt_value.get("action_requests") or [])
+        requests = prepared_requests or raw_requests
+        if len(requests) != len(raw_requests):
+            raise ValueError("stored approval does not match the pending Deep Agent actions")
         action = value["action"]
         if action == "approve":
-            decisions = [{"type": "approve"} for _ in requests]
+            decisions = []
+            for request in requests:
+                if request.get("name") == "propose_patch":
+                    decisions.append(
+                        {
+                            "type": "edit",
+                            "edited_action": {"name": "propose_patch", "args": request["args"]},
+                        }
+                    )
+                else:
+                    decisions.append({"type": "approve"})
         elif action == "reject":
             decisions = [{"type": "reject", "message": "Rejected by user"} for _ in requests]
         elif action == "edit":
             edited = value.get("tool_calls") or []
             if len(edited) != len(requests):
                 raise ValueError("edited approval must include every pending action")
-            decisions = [
-                {
-                    "type": "edit",
-                    "edited_action": {
-                        "name": item.get("name", request.get("name")),
-                        "args": item.get("arguments", request.get("args", {})),
-                    },
-                }
-                for item, request in zip(edited, requests, strict=True)
-            ]
+            decisions = []
+            for item, request in zip(edited, requests, strict=True):
+                name = item.get("name", request.get("name"))
+                arguments = item.get("arguments", request.get("args", {}))
+                if request.get("name") == "propose_patch":
+                    if name != "propose_patch" or self.patch_tool is None:
+                        raise ValueError("an edited patch cannot change tool")
+                    arguments = self.patch_tool.doppel_tool.approval_editor(
+                        arguments, request["args"]
+                    )
+                decisions.append(
+                    {
+                        "type": "edit",
+                        "edited_action": {"name": name, "args": arguments},
+                    }
+                )
         else:
             raise ValueError("unknown approval action")
         return {"decisions": decisions}
@@ -315,13 +397,26 @@ class DeepAgentRuntime:
             interrupt_values = [
                 item.value for task in snapshot.tasks for item in getattr(task, "interrupts", ())
             ]
+            prepared_interrupt_values = None
+            if isinstance(command.value, dict):
+                prepared_interrupt_values = command.value.get("_prepared_interrupts")
+            if prepared_interrupt_values is None:
+                prepared_interrupt_values = self._pending_interrupts.get(command.thread_id)
             token = set_mcp_run_id(command.run_id)
+            patch_token = set_patch_run_id(command.run_id)
             try:
                 result = await graph.ainvoke(
-                    Command(resume=self._resume_value(command.value, interrupt_values)),
+                    Command(
+                        resume=self._resume_value(
+                            command.value,
+                            interrupt_values,
+                            prepared_interrupt_values,
+                        )
+                    ),
                     config=config,
                 )
             finally:
+                reset_patch_run_id(patch_token)
                 reset_mcp_run_id(token)
         runtime_result = self._result(command.run_id, command.thread_id, result)
         await sink.emit(
@@ -337,3 +432,4 @@ class DeepAgentRuntime:
         task = self._tasks.get(run_id)
         if task is not None:
             task.cancel()
+        await self.process_supervisor.cancel_run(run_id)

@@ -1,5 +1,14 @@
 # 更新记录
 
+## v0.11.0 — 2026-09-21
+
+- 将 Graph/Deep 的文件修改统一为 `propose_patch` diff-first 链路：审批前只生成含 base SHA-256 的 unified diff，批准或编辑后才原子替换；旧 base 变化会产生明确 conflict，多文件中途失败会回滚已经替换的文件。
+- Deep Agents harness 移除内置 `write_file`/`edit_file`，自定义 LangChain patch adapter 将审核元数据跨 runtime 重建持久化，防止 Deep 模式或服务重启绕过具体补丁审批。
+- 新增 `.doppel/verification.json` allowlist pipeline；批准的补丁在本次 run 同时授予命令能力时自动执行固定 argv，返回 exit code、stdout/stderr、耗时、监督模式和整体结果，模型不能临时拼 shell 字符串。
+- 命令执行改为 `ProcessSupervisor`：Windows 优先 Job Object，并记录 `job_object` 或 `taskkill_fallback`；POSIX 使用独立 process group。取消、超时和服务关闭都会终止整个进程树。
+- 新增同进程 `AsyncSubagentManager`：有界 FIFO 并发、SQLite 生命周期、查询、追问、取消和重启时未完成任务收敛；子请求固定只读且禁止递归委派。
+- 新增 `patch.proposed`、`patch.applied`、`patch.conflict` 持久事件，以及补丁、Deep 恢复、验证、进程树取消和异步子 Agent 集成测试。
+
 ## v0.10.0 — 2026-09-21
 
 - 增加 `mode=deep`：Deep Agents 0.7.15 通过自定义 `DoppelChatModel` 复用现有 Provider，使用 SQLite checkpoint、持久 interrupt/resume、事件映射与显式 focused-graph fallback。

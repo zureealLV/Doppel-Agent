@@ -13,6 +13,8 @@ from ..loop import SYSTEM_PROMPT
 from ..persistence.tool_ledger import ToolExecutionLedger
 from ..provider import Message, ModelTurn, Provider, ToolCall, next_model_turn
 from ..tools import ToolRegistry
+from ..workspace.patching import PatchConflictError
+from ..runtime.base import EventSink, NullEventSink
 from .state import DoppelState, SerializedMessage
 
 FINAL_TURN_PROMPT = (
@@ -55,12 +57,14 @@ class FocusedGraphNodes:
         context_limit_tokens: int = 32_000,
         ledger: ToolExecutionLedger | None = None,
         resource_limits: ResourceLimits | None = None,
+        sink: EventSink | None = None,
     ):
         self.provider = provider
         self.tools = tools
         self.context = ContextPolicy(context_limit_tokens)
         self.ledger = ledger
         self.resource_limits = resource_limits
+        self.sink = sink or NullEventSink()
 
     async def reason(self, state: DoppelState) -> dict[str, Any]:
         messages = [deserialize_message(item) for item in state["messages"]]
@@ -96,6 +100,33 @@ class FocusedGraphNodes:
             if capability in SENSITIVE_CAPABILITIES:
                 return True
         return False
+
+    async def prepare_approval(self, state: DoppelState) -> dict[str, Any]:
+        messages = [deserialize_message(item) for item in state["messages"]]
+        assistant = messages[-1]
+        prepared: list[ToolCall] = []
+        for call in assistant.tool_calls:
+            try:
+                capability = self.tools.capability(call.name)
+            except ValueError:
+                prepared.append(call)
+                continue
+            arguments = (
+                self.tools.prepare_approval(call.name, call.arguments)
+                if capability in SENSITIVE_CAPABILITIES
+                else call.arguments
+            )
+            prepared.append(ToolCall(call.id, call.name, arguments))
+            if call.name == "propose_patch" and "_doppel_patch" in arguments:
+                proposal = arguments["_doppel_patch"]
+                await self.sink.emit(
+                    "patch.proposed",
+                    patch_id=proposal["patch_id"],
+                    paths=[item["path"] for item in proposal["changes"]],
+                    unified_diff=proposal["unified_diff"],
+                )
+        messages[-1] = Message("assistant", assistant.content, tool_calls=tuple(prepared))
+        return {"messages": [serialize_message(item) for item in messages]}
 
     async def request_approval(self, state: DoppelState) -> dict[str, Any]:
         messages = [deserialize_message(item) for item in state["messages"]]
@@ -154,7 +185,12 @@ class FocusedGraphNodes:
                     item.get("arguments"), dict
                 ):
                     raise ValueError("edited tool call name or arguments are invalid")
-                replacement.append(ToolCall(source.id, source.name, item["arguments"]))
+                arguments = self.tools.prepare_approval_edit(
+                    source.name,
+                    item["arguments"],
+                    source.arguments,
+                )
+                replacement.append(ToolCall(source.id, source.name, arguments))
             if {call.id for call in replacement} != set(original):
                 raise ValueError("edited approval must include every tool call")
             messages[-1] = Message("assistant", assistant.content, tool_calls=tuple(replacement))
@@ -182,6 +218,11 @@ class FocusedGraphNodes:
                         output = await self._execute_one(state["run_id"], call)
                 else:
                     output = await self._execute_one(state["run_id"], call)
+            except PatchConflictError as exc:
+                await self.sink.emit(
+                    "patch.conflict", tool_call_id=call.id, error=str(exc)
+                )
+                output = f"Tool error ({type(exc).__name__}): {exc}"
             except (
                 OSError,
                 ValueError,
@@ -190,6 +231,11 @@ class FocusedGraphNodes:
                 TimeoutError,
             ) as exc:
                 output = f"Tool error ({type(exc).__name__}): {exc}"
+            else:
+                if call.name == "propose_patch":
+                    await self.sink.emit(
+                        "patch.applied", tool_call_id=call.id, result=output
+                    )
             messages.append(Message("tool", output, tool_call_id=call.id))
         return {
             "messages": [serialize_message(item) for item in messages],

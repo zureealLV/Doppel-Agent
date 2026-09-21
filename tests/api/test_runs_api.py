@@ -70,8 +70,12 @@ class RunsApiTests(unittest.TestCase):
                         tool_calls=(
                             ToolCall(
                                 "write-1",
-                                "write_file",
-                                {"path": "approved.txt", "content": "approved"},
+                                "propose_patch",
+                                {
+                                    "changes": [
+                                        {"path": "approved.txt", "content": "approved"}
+                                    ]
+                                },
                             ),
                         )
                     )
@@ -89,6 +93,8 @@ class RunsApiTests(unittest.TestCase):
             paused = self.wait(client, run_id)
             self.assertEqual(paused["status"], "interrupted")
             self.assertFalse((self.root / "approved.txt").exists())
+            preview = paused["metadata"]["interrupts"][0]["value"]["tool_calls"][0]
+            self.assertIn("approved", preview["arguments"]["_doppel_patch"]["unified_diff"])
             interrupt_id = paused["metadata"]["interrupts"][0]["id"]
             resumed = client.post(
                 f"/api/v1/runs/{run_id}/interrupts/{interrupt_id}/resume",
@@ -105,10 +111,66 @@ class RunsApiTests(unittest.TestCase):
             event_types = [event["type"] for event in events]
             self.assertIn("approval.requested", event_types)
             self.assertIn("approval.decided", event_types)
+            self.assertIn("patch.proposed", event_types)
+            self.assertIn("patch.applied", event_types)
             self.assertEqual(
                 [event["seq"] for event in events],
                 sorted(event["seq"] for event in events),
             )
+
+    def test_deep_write_resume_reuses_the_persisted_reviewed_patch(self):
+        class WriteProvider:
+            calls = 0
+
+            def next_turn(self, messages, tools):
+                self.calls += 1
+                if self.calls == 1:
+                    return ModelTurn(
+                        tool_calls=(
+                            ToolCall(
+                                "deep-write-1",
+                                "propose_patch",
+                                {
+                                    "changes": [
+                                        {"path": "deep-approved.txt", "content": "approved"}
+                                    ]
+                                },
+                            ),
+                        )
+                    )
+                return ModelTurn(content="finished")
+
+        with TestClient(create_app(self.root, provider=WriteProvider())) as client:
+            response = client.post(
+                "/api/v1/runs",
+                json={
+                    "prompt": "write",
+                    "mode": "deep",
+                    "permissions": {"workspace_write": True},
+                },
+            )
+            run_id = response.json()["run_id"]
+            paused = self.wait(client, run_id)
+            self.assertEqual(paused["status"], "interrupted", paused)
+            interrupt = paused["metadata"]["interrupts"][0]
+            action = interrupt["value"]["action_requests"][0]
+            reviewed_patch_id = action["args"]["_doppel_patch"]["patch_id"]
+
+            resumed = client.post(
+                f"/api/v1/runs/{run_id}/interrupts/{interrupt['id']}/resume",
+                json={"action": "approve"},
+            )
+            self.assertEqual(resumed.status_code, 202, resumed.text)
+            completed = self.wait(client, run_id, statuses=("completed", "failed"))
+            self.assertEqual(completed["status"], "completed", completed)
+            self.assertEqual(
+                (self.root / "deep-approved.txt").read_text(encoding="utf-8"),
+                "approved",
+            )
+            events = client.get(f"/api/v1/runs/{run_id}/events").json()
+            decided = next(event for event in events if event["type"] == "approval.decided")
+            self.assertNotIn("_prepared_interrupts", decided["payload"]["decision"])
+            self.assertEqual(action["args"]["_doppel_patch"]["patch_id"], reviewed_patch_id)
 
     def test_queue_full_returns_429(self):
         class SlowProvider:
@@ -133,8 +195,8 @@ class RunsApiTests(unittest.TestCase):
                     tool_calls=(
                         ToolCall(
                             "write-expired",
-                            "write_file",
-                            {"path": "never.txt", "content": "no"},
+                            "propose_patch",
+                            {"changes": [{"path": "never.txt", "content": "no"}]},
                         ),
                     )
                 )

@@ -46,6 +46,7 @@ def create_runtime(
             checkpoint_path=(state_root or workspace / ".doppel-agent") / "deep-checkpoints.sqlite3",
             max_steps=int(options.get("max_steps", 12)),
             allow_write=bool(options.get("allow_write", False)),
+            allow_command=bool(options.get("allow_command", False)),
             max_subagents=2 if options.get("allow_delegate", False) else 0,
             resource_limits=resource_limits,
         )

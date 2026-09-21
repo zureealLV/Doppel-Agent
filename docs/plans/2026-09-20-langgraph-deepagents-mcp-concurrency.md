@@ -11,9 +11,10 @@
 ## 实施状态（更新于 2026-09-21）
 
 - **v0.9.0 / Milestone A-B：已实现。** 完成 legacy/graph 统一 runtime、SQLite checkpoint、interrupt 三种决定、工具幂等账本、FastAPI v1、durable SSE、有界调度、取消、工作区锁、资源限流及异步 Provider 可靠性治理。
-- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 发布前 Windows 门禁为 `114 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes` 与 compileall 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
+- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 为 `114 passed, 1 skipped`；v0.11.0 发布前 Windows 门禁为 `133 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes`、compileall 与 JavaScript syntax check 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
 - **v0.10.0 / Milestone C-D：已实现。** Task 12-21 已完成：Deep Agents 0.7.15 spike、受控 backend、`mode=deep`、Agent Skills Registry、四个工程 Skill、stdio/Streamable HTTP MCP Gateway、分页 catalog、多模态 executor、LangGraph/Deep adapter 与独立 server semaphore。
-- **未提前宣称：** Task 22-29（diff-first patch、verification pipeline、可取消进程树、异步子 Agent、三运行时正式 benchmark、并发压测与 Vue 可视化）仍按 v0.11-v0.12 实施。
+- **v0.11.0 / Milestone E：已实现。** Task 22-25 完成 diff-first patch、base hash 冲突/原子回滚、项目 argv allowlist verification、Windows Job Object 优先进程树监督，以及可查询/追问/取消的 SQLite 异步子 Agent 运行层；异步子 Agent 的 UI/API 接入留到 v0.12。
+- **未提前宣称：** Task 26-29（三运行时正式 benchmark、并发压测、Vue 可视化和最终发布门禁）仍按 v0.12-v1.0 实施。
 
 ---
 
@@ -730,7 +731,7 @@ validate schema
 
 ## Milestone E — v0.11.0 Patch, Verification and Async Subagents
 
-### Task 22: Diff-first 修改链路
+### Task 22: Diff-first 修改链路 ✅ v0.11.0
 
 **Objective:** 将“批准写权限”升级为“审查具体补丁”。
 
@@ -744,7 +745,7 @@ validate schema
 
 拒绝后工作区必须零变化；base hash 变化后禁止直接应用旧补丁。
 
-### Task 23: Verification pipeline
+### Task 23: Verification pipeline ✅ v0.11.0
 
 **Objective:** 修改完成后自动执行项目允许的验证命令并输出结构化结果。
 
@@ -755,7 +756,7 @@ validate schema
 
 验证命令必须来自用户/项目配置 allowlist，不能让模型任意生成 shell 字符串。
 
-### Task 24: 可取消进程树
+### Task 24: 可取消进程树 ✅ v0.11.0
 
 **Objective:** 任务取消或超时时终止命令及其子进程。
 
@@ -766,7 +767,7 @@ validate schema
 
 Windows 优先 Job Object；无法启用时明确降级并记录，不得只取消 Python await 而留下后台进程。
 
-### Task 25: 异步子 Agent
+### Task 25: 异步子 Agent ✅ v0.11.0
 
 **Objective:** 在同步子 Agent 已稳定后，引入可查询、可追问、可取消的后台子任务。
 

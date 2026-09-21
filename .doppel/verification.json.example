@@ -1,0 +1,16 @@
+{
+  "commands": [
+    {
+      "name": "tests",
+      "argv": ["uv", "run", "--extra", "agent", "python", "-m", "pytest", "-q"],
+      "timeout_seconds": 300
+    },
+    {
+      "name": "lint",
+      "argv": ["uv", "run", "ruff", "check", "src", "tests"],
+      "timeout_seconds": 120
+    }
+  ],
+  "max_output_bytes": 65536,
+  "stop_on_failure": true
+}

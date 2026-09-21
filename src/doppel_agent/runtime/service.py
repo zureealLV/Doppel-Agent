@@ -19,6 +19,8 @@ from ..mcp import MCPClientManager, MCPToolCatalog, MCPToolExecutor, load_mcp_co
 from ..mcp.tool_adapter import doppel_mcp_tools, langchain_mcp_tools
 from ..persistence import EventStore, RuntimeRunStore
 from ..persistence.tool_ledger import ToolExecutionLedger
+from ..workspace.process_supervisor import ProcessSupervisor
+from ..workspace.verification import VerificationPipeline
 from ..provider import (
     AsyncOpenAICompatibleProvider,
     MockProvider,
@@ -28,12 +30,12 @@ from ..settings import SettingsStore
 from ..tools import (
     ToolRegistry,
     list_files_tool,
+    patch_tool,
     read_file_range_tool,
     read_file_tool,
     run_command_tool,
     search_text_tool,
     workspace_map_tool,
-    write_file_tool,
 )
 from .base import EventSink, ResumeCommand, RunRequest, RuntimeResult
 from .factory import create_runtime
@@ -107,12 +109,14 @@ class RunService:
         self.mcp_manager = MCPClientManager(self.mcp_config) if self.mcp_config.servers else None
         self.mcp_catalog = MCPToolCatalog(self.mcp_manager) if self.mcp_manager else None
         self.mcp_ledger = ToolExecutionLedger(self.state_root / "mcp-tool-executions.sqlite3")
+        self.process_supervisor = ProcessSupervisor()
 
     async def start(self) -> None:
         await self.scheduler.start()
 
     async def close(self) -> None:
         await self.scheduler.shutdown()
+        await self.process_supervisor.close()
         for provider in self._providers.values():
             close = getattr(provider, "aclose", None)
             if close is not None:
@@ -151,9 +155,14 @@ class RunService:
         ):
             registry.register(tool)
         if permissions.get("workspace_write"):
-            registry.register(write_file_tool(self.workspace))
+            verification = (
+                VerificationPipeline(self.workspace, supervisor=self.process_supervisor)
+                if permissions.get("command_execute")
+                else None
+            )
+            registry.register(patch_tool(self.workspace, verification=verification))
         if permissions.get("command_execute"):
-            registry.register(run_command_tool(self.workspace))
+            registry.register(run_command_tool(self.workspace, supervisor=self.process_supervisor))
         return registry
 
     async def _runtime(self, record: dict[str, Any]):
@@ -304,6 +313,7 @@ class RunService:
         await asyncio.to_thread(self.runs.request_cancel, run_id)
         previous_scheduler_status = self.scheduler.status(run_id)
         cancelled = await self.scheduler.cancel(run_id)
+        await self.process_supervisor.cancel_run(run_id)
         if cancelled:
             sink = self._sink(record)
             await sink.emit("run.cancel_requested")
@@ -328,6 +338,13 @@ class RunService:
             raise ValueError("interrupt id does not match the pending approval")
         sink = self._sink(record)
         await sink.emit("approval.decided", interrupt_id=interrupt_id, decision=value)
+        if record["mode"] == "deep":
+            value = {
+                **value,
+                "_prepared_interrupts": [
+                    item.get("value") for item in record["metadata"].get("interrupts", [])
+                ],
+            }
 
         if self.scheduler.status(run_id) in {"queued", "running"}:
             await self.scheduler.wait(run_id)

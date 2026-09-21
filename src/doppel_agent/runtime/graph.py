@@ -60,7 +60,7 @@ class GraphRuntime:
         self.checkpoint_path = checkpoint_path or self.workspace / ".doppel-agent" / "checkpoints.sqlite3"
         self.ledger = ToolExecutionLedger(self.checkpoint_path.with_name("tool-executions.sqlite3"))
 
-    def _build_graph(self, checkpointer: Any):
+    def _build_graph(self, checkpointer: Any, sink: EventSink | None = None):
         return build_focused_graph(
             self.provider,
             self.tools,
@@ -68,6 +68,7 @@ class GraphRuntime:
             context_limit_tokens=self.context_limit_tokens,
             ledger=self.ledger,
             resource_limits=self.resource_limits,
+            sink=sink,
         )
 
     @staticmethod
@@ -111,7 +112,7 @@ class GraphRuntime:
             "approval": None,
         }
         async with sqlite_checkpointer(self.checkpoint_path) as checkpointer:
-            graph = self._build_graph(checkpointer)
+            graph = self._build_graph(checkpointer, sink)
             result = await graph.ainvoke(
                 state,
                 config={"configurable": {"thread_id": request.thread_id}},
@@ -142,7 +143,7 @@ class GraphRuntime:
             thread_id=command.thread_id,
         )
         async with sqlite_checkpointer(self.checkpoint_path) as checkpointer:
-            graph = self._build_graph(checkpointer)
+            graph = self._build_graph(checkpointer, sink)
             result = await graph.ainvoke(
                 Command(resume=command.value),
                 config={"configurable": {"thread_id": command.thread_id}},

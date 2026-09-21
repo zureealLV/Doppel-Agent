@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable
@@ -11,6 +12,9 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .permissions import PermissionManager
+from .workspace.patching import PatchProposal, PatchService
+from .workspace.process_supervisor import ProcessSupervisor
+from .workspace.verification import VerificationPipeline
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,8 @@ class Tool:
     handler: Callable[[dict[str, Any]], str]
     input_schema: dict[str, Any] | None = None
     async_handler: Callable[[dict[str, Any], str, str], Awaitable[str]] | None = None
+    approval_preparer: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    approval_editor: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None
 
     def schema(self) -> dict[str, Any]:
         return {
@@ -63,6 +69,27 @@ class ToolRegistry:
         if tool is None:
             raise ValueError(f"unknown tool: {name}")
         return tool.async_handler is not None
+
+    def prepare_approval(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        if tool.approval_preparer is None:
+            return arguments
+        return tool.approval_preparer(arguments)
+
+    def prepare_approval_edit(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        previous_arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        if tool.approval_editor is not None:
+            return tool.approval_editor(arguments, previous_arguments)
+        return self.prepare_approval(name, arguments)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
         tool = self.tools.get(name)
@@ -260,25 +287,124 @@ def write_file_tool(workspace: Path, max_bytes: int = 256 * 1024) -> Tool:
     )
 
 
-def run_command_tool(workspace: Path, timeout_seconds: int = 30) -> Tool:
+def patch_tool(
+    workspace: Path,
+    *,
+    verification: VerificationPipeline | None = None,
+) -> Tool:
+    """Create one reviewable multi-file patch and apply only its prepared snapshot."""
+
+    service = PatchService(workspace)
+
+    def prepare(arguments: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(arguments, dict) or set(arguments) != {"changes"}:
+            raise ValueError("a new patch proposal must contain only changes")
+        proposal = service.prepare(arguments.get("changes"))
+        return {"changes": arguments["changes"], "_doppel_patch": proposal.as_dict()}
+
+    def apply(arguments: dict[str, Any]) -> str:
+        if set(arguments) != {"changes", "_doppel_patch"}:
+            raise ValueError("propose_patch must be prepared before execution")
+        proposal = PatchProposal.from_dict(arguments["_doppel_patch"])
+        visible = [(item.get("path"), item.get("content")) for item in arguments["changes"]]
+        prepared = [(change.path, change.content) for change in proposal.changes]
+        if visible != prepared:
+            raise ValueError("reviewed patch differs from execution arguments")
+        result = service.apply(proposal)
+        return json.dumps(
+            {"patch_id": result.patch_id, "changed_paths": result.changed_paths},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    async def apply_and_verify(arguments: dict[str, Any], run_id: str, tool_call_id: str) -> str:
+        applied = json.loads(apply(arguments))
+        if verification is not None and verification.available:
+            report = await verification.run(run_id=run_id)
+            applied["verification"] = report.as_dict()
+        return json.dumps(applied, ensure_ascii=False, separators=(",", ":"))
+
+    def edit(arguments: dict[str, Any], previous: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(arguments, dict) or set(arguments) != {"changes"}:
+            raise ValueError("an edited patch proposal must contain only changes")
+        if "_doppel_patch" not in previous:
+            raise ValueError("edited patch is missing its reviewed base")
+        original = PatchProposal.from_dict(previous["_doppel_patch"])
+        refreshed = service.prepare(arguments.get("changes"))
+        original_bases = {change.path: change.base_hash for change in original.changes}
+        refreshed_bases = {change.path: change.base_hash for change in refreshed.changes}
+        if original_bases != refreshed_bases:
+            raise ValueError("edited patch paths or workspace base changed; request a new proposal")
+        return {"changes": arguments["changes"], "_doppel_patch": refreshed.as_dict()}
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "changes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["changes"],
+        "additionalProperties": False,
+    }
+    return Tool(
+        "propose_patch",
+        "Propose complete UTF-8 contents for one or more files; Doppel shows a diff before applying",
+        "workspace_write",
+        {},
+        apply,
+        input_schema=schema,
+        async_handler=(
+            apply_and_verify if verification is not None and verification.available else None
+        ),
+        approval_preparer=prepare,
+        approval_editor=edit,
+    )
+
+
+def run_command_tool(
+    workspace: Path,
+    timeout_seconds: int = 30,
+    *,
+    supervisor: ProcessSupervisor | None = None,
+) -> Tool:
+    process_supervisor = supervisor or ProcessSupervisor()
+
     def run(arguments: dict[str, Any]) -> str:
+        return asyncio.run(arun(arguments, "standalone", uuid4().hex))
+
+    async def arun(arguments: dict[str, Any], run_id: str, tool_call_id: str) -> str:
         argv = arguments["argv"]
         if not argv:
             raise ValueError("argv must not be empty")
         if any("\x00" in arg for arg in argv):
             raise ValueError("NUL in command argument")
-        try:
-            completed = subprocess.run(
-                argv, cwd=workspace, shell=False, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=timeout_seconds,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise TimeoutError(f"command timed out after {timeout_seconds}s") from exc
-        output = (completed.stdout + completed.stderr)[:64 * 1024]
-        return f"exit_code={completed.returncode}\n{output}"
+        result = await process_supervisor.run(
+            argv,
+            cwd=workspace,
+            run_id=run_id,
+            timeout_seconds=timeout_seconds,
+        )
+        output = (result.stdout + result.stderr)[:64 * 1024]
+        return (
+            f"exit_code={result.exit_code}\n"
+            f"supervision={result.supervision}\n"
+            f"{output}"
+        )
 
     return Tool(
         "run_command", "Run an argv command in the workspace without a shell; requires explicit command grant",
         "command_execute", {"argv": {"type": "array", "items": {"type": "string"}}}, run,
+        async_handler=arun,
     )
