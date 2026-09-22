@@ -17,3 +17,4 @@ pytest-cache-files-*/
 .hermes-agent/
 .env
 *.egg-info/
+frontend/node_modules/

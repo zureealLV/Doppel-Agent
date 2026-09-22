@@ -49,6 +49,24 @@ class WebTests(unittest.TestCase):
         self.assertIn("default-src 'self'", headers["Content-Security-Policy"])
         self.assertEqual(json.loads(self.get("/api/health")[1])["status"], "ok")
 
+    def test_serves_runtime_workbench_and_blocks_asset_traversal(self):
+        status, html, headers = self.get("/runtime/")
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="app"', html)
+        self.assertIn(b"Doppel Runtime Workbench", html)
+        self.assertIn("default-src 'self'", headers["Content-Security-Policy"])
+
+        page = html.decode("utf-8")
+        asset_path = page.split('src="', 1)[1].split('"', 1)[0]
+        asset_status, javascript, asset_headers = self.get(asset_path)
+        self.assertEqual(asset_status, 200)
+        self.assertTrue(javascript)
+        self.assertIn("javascript", asset_headers["Content-Type"])
+
+        with self.assertRaises(HTTPError) as caught:
+            self.get("/runtime/assets/%2e%2e/index.html")
+        self.assertEqual(caught.exception.code, 404)
+
     def test_probe_mock_and_run(self):
         self.assertTrue(self.post("/api/probe", {"config": {"provider": "mock"}})[1]["ok"])
         status, result = self.post("/api/runs", {
@@ -157,6 +175,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn('id="server-status"', html)
         self.assertIn('id="open-search"', html)
         self.assertIn('id="review-options"', html)
+        self.assertIn('href="/runtime/"', html)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI test")
     def test_saved_api_key_is_dpapi_encrypted_and_never_returned(self):

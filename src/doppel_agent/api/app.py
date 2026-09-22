@@ -43,7 +43,7 @@ def create_app(
 
     app = FastAPI(
         title="Doppel Agent Runtime API",
-        version="0.12.0",
+        version="0.13.0",
         lifespan=lifespan,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",

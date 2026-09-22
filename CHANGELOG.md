@@ -1,5 +1,15 @@
 # 更新记录
 
+## v0.13.0 — 2026-09-22
+
+- 新增 Vue 3.5 + TypeScript 5.9 + Vite 7 Runtime Workbench，并以 `/runtime/` 与旧对话工作台并行提供；在功能完全对齐前不冒险替换已稳定的旧界面。
+- 三栏可观测工作台支持 legacy/graph/deep 创建、运行状态与精确排队/执行时间、持久事件回放、SSE 增量流、统一 diff、取消及错误恢复提示。
+- 将 LangGraph checkpoint、Skill、MCP、Patch/Verification 与异步子 Agent 事件按类别呈现；子 Agent 可创建、查询、追问和取消，父运行未授予 delegate 时界面明确禁用。
+- HITL interrupt 可在界面批准、拒绝或编辑工具调用 JSON；审批对象和真实 unified diff 均来自持久运行记录，不伪造测试结果。
+- 新增安全的哈希静态资源路由、路径穿越回归测试、Vitest 单元测试、Vue 类型检查与可复现前端构建；Python 包同时携带生产 bundle。
+- GitHub Actions 更新到 Node 24 系列 actions，新增独立 frontend job，并把 `bench/` 纳入 Ruff 与 compileall 门禁。
+- 完成 1440 桌面、375 移动、812×375 横屏、键盘可访问性和 reduced-motion 实际浏览器检查；发布门禁为 140 passed、1 skipped，前端 5 tests 通过。
+
 ## v0.12.0 — 2026-09-22
 
 - 将 v0.11 的持久异步子 Agent 运行层接入 FastAPI：父 run 必须显式授予 `delegate`，随后可通过嵌套路由创建、列出、查询、追问和取消后台子任务；子任务仍固定只读、禁止 MCP/命令/写入和递归委派。

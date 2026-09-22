@@ -1,4 +1,4 @@
-# Doppel Agent v0.12.0 技术汇报
+# Doppel Agent v0.13.0 技术汇报
 
 ## 1. 项目定位
 
@@ -16,17 +16,20 @@ Doppel Agent 是一个面向本地代码审查与编程任务的 Windows Agent�
 | 本地服务 | FastAPI + Uvicorn；旧 `http.server` 兼容层 | FastAPI 0.141.1 | `/api/v1` 异步 API、OpenAPI、SSE 与旧 UI 同源迁移 |
 | 数据持久化 | SQLite WAL + LangGraph Checkpointer | checkpoint-sqlite 3.1.1 | 对话、运行、事件、审批恢复、幂等账本与 schema migration |
 | 并发治理 | asyncio bounded queue / semaphore / RW lock | 默认 4 active、100 queued | 背压、取消、工作区写互斥、Provider 与命令限流 |
-| 前端 | 原生 HTML/CSS/JavaScript | 无前端框架 | 双栏默认工作台、全局搜索、审查模板、运行轨迹和对话管理 |
+| 前端 | Vue 3.5.43 + TypeScript 5.9.3 + Vite 7.3.6；原生 JS 兼容页 | 渐进迁移 | `/runtime/` 可观测工作台；旧页保留持久对话、设置、搜索与审查模板 |
 | 桌面容器 | pywebview | 6.2.1 | 将同一套 Web 工作台装入 Windows 原生窗口 |
 | Web 内核 | Microsoft Edge WebView2 | 153.0.4234.48 | 渲染桌面端 HTML/CSS/JavaScript |
 | 凭据保护 | Windows DPAPI | 当前用户作用域 | 加密保存模型 API Key，前端无法取回明文 |
 | 打包 | PyInstaller | 6.22.3 onedir | 生成无控制台窗口的 Windows EXE |
-| 验证 | pytest、Ruff、compileall | 139 passed + 1 Windows symlink skip（发布前本地门禁） | 回归子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
+| 验证 | pytest、Vitest、vue-tsc、Vite、Ruff、compileall | 140 passed + 1 Windows symlink skip；前端 5 tests | 回归 Workbench、子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
 
 ## 3. 核心架构
 
 ```text
 Desktop EXE / Browser
+        │
+        ▼
+Vue Runtime Workbench / Legacy Conversation UI
         │
         ▼
 FastAPI /api/v1 ───── Durable SSE + RuntimeRunStore
@@ -50,7 +53,24 @@ AgentRuntime
 
 运行记录按任务 ID 写入 `.doppel-agent/runs/`，包含事件流、工具轨迹和会话结果。对话历史存入 SQLite，并会作为后续消息的真实模型上下文，而不是只在界面中展示。
 
-## 4. v0.12.0 本轮交付
+## 4. v0.13.0 本轮交付
+
+### Vue Runtime Workbench
+
+- 在 `frontend/` 新建 Vue 3 Composition API + strict TypeScript + Vite 工程，以 `/runtime/` 并行提供，不在持久对话、模型设置、搜索完成 parity 前替换旧页面。
+- 左栏创建 legacy/graph/deep run、选择 effort/profile，并逐项授予 write/command/MCP/delegate；中栏显示状态、排队/执行时间、结果、真实 unified diff、HITL 与子 Agent；右栏按 lifecycle/graph/skill/MCP/subagent/patch 分类持久事件。
+- SSE 使用 `fetch` + ReadableStream 解析带自定义 `event:` 名称的帧，不错误依赖只接收默认 message 的 `EventSource.onmessage`；`after_seq` 与轮询共同完成断线补偿和 durable replay。
+- interrupt 支持 approve/reject/edit，编辑路径校验工具调用 JSON 数组；子 Agent 支持创建、状态查询、追问和取消，delegate 未授权时相关输入使用原生 disabled 语义。
+- 统一 diff 从 `patch.proposed` 事件或持久 interrupt 的 `_doppel_patch.unified_diff` 递归提取；Verification 只展示真实事件 payload，不虚构独立测试结果。
+
+### 静态资产、安全与前端门禁
+
+- Vite 使用固定 `/runtime/` base，生产产物进入 `src/doppel_agent/web/frontend_dist/` 并纳入 Python package data；旧页增加 Runtime Lab 链接。
+- `ConsoleServer` 只提供 `/runtime/` 与 `/runtime/assets/*`，URL decode 后 resolve 并验证仍位于 assets 根目录；编码路径穿越返回 404。
+- Vitest 覆盖事件分类、重放去重排序、嵌套 diff 提取、耗时格式和命名 SSE 帧解析；CI 增加 npm ci/test/typecheck/build 和 committed bundle 一致性检查。
+- 实际浏览器检查覆盖 1440 桌面、375 移动、812×375 横屏，无横向溢出；可见 focus、44px 控件、ARIA live/label、非颜色单一状态以及 `prefers-reduced-motion` 均落地。
+
+## 5. v0.12.0 历史交付
 
 ### 异步子 Agent REST 产品入口
 
@@ -72,7 +92,7 @@ AgentRuntime
 - 同一工作区 20 个读操作和 5 个写操作中，读峰值为 20、writer 峰值为 1、读写重叠违规为 0。
 - 运行中取消被接受并进入 terminal `cancelled`；报告保留本机环境、原始计数和耗时。Provider 429、MCP 断连、慢 SSE 和 lease 回收没有从这些数据外推。
 
-## 5. v0.11.0 历史交付
+## 6. v0.11.0 历史交付
 
 ### Diff-first 修改链路
 
@@ -96,7 +116,7 @@ AgentRuntime
 - Runner 收到的请求固定只有 `workspace_read`，并且 `allow_delegate=False`；首版保持同进程 transport，不冒充跨机器分布式系统。
 - v0.11 首次只交付运行层；v0.12 已接 REST，桌面工作台可视化仍留到后续 Vue 迁移。
 
-## 6. v0.10.0 历史交付
+## 7. v0.10.0 历史交付
 
 ### Deep Agents 可选深度运行时
 
@@ -120,7 +140,7 @@ AgentRuntime
 - 同一个 adapter 将工具暴露给 focused Graph 与 Deep Agents；两条链路均有真实 interrupt/resume 集成测试，Deep Agents 不直接持有 MCP session。
 - stdio 与 Streamable HTTP 均已实现；HTTP auth profile 从环境变量解析 Bearer token，配置文件只保存 profile 名称。
 
-## 7. v0.9.0 基础交付
+## 8. v0.9.0 基础交付
 
 ### 可恢复 LangGraph 主链
 
@@ -143,7 +163,7 @@ AgentRuntime
 - 只重试网络错误、429 与 5xx，尊重 `Retry-After`，并受 max attempts、retry budget 与 run deadline 共同约束。
 - 连续失败触发 profile 级 circuit breaker；`CancelledError` 单独传播，不被普通错误处理吞掉。
 
-## 8. v0.8.2 历史交付
+## 9. v0.8.2 历史交付
 
 ### 桌面与交互
 
@@ -162,19 +182,20 @@ AgentRuntime
 - 前端增加提交锁，API 返回前再次发送不会产生重复运行。
 - 运行记录绑定发起时的对话 ID；用户切换到其他对话后，任务完成不会把界面强制跳回错误页面。
 
-## 9. 验收证据
+## 10. 验收证据
 
-- pytest：发布前本地全量门禁为 `139 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
-- Ruff correctness gate：`ruff check src tests bench` 通过。
+- pytest：发布前本地全量门禁为 `140 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
+- Ruff correctness gate：`ruff check src tests bench spikes` 通过。
 - Python：`compileall` 通过。
+- Frontend：Vitest、`vue-tsc --noEmit`、Vite production build 与 committed bundle diff gate 通过。
 - 新增覆盖：异步子 Agent REST 权限/生命周期、20-case matrix 静态协议、100-task scheduler 上限与 queue full 计数；v0.11 的 Patch/Verification/进程树/Deep/Graph/MCP 测试继续全量回归。
 - JavaScript：`node --check src/doppel_agent/web/app.js` 通过。
 - HTML 标签栈检查通过。
 - 隔离工作区中连续点击“新对话”与“代码审查”：每类空草稿仅 1 个、消息数 0、运行数 0。
-- Edge 实际渲染检查通过：默认双栏、右侧详情切换、全局搜索、审查模板、标题栏和输入区均可见，无白色外框或左上溢出。
-- PyInstaller 6.22.3 已重新生成 v0.12.0 onedir EXE；隔离工作区冷启动验证见发布记录。
+- Chromium 实际渲染检查通过：Runtime Workbench 在桌面/手机/横屏断点无横向溢出，真实 Graph run 完成后答案、六个 durable events 与精确耗时可见；旧页入口保持可用。
+- PyInstaller 6.22.3 onedir EXE 已重新生成并在隔离工作区冷启动；随机 loopback v1 health 与 `/runtime/` 返回 200，详见 `docs/releases/v0.13.0.md`。
 
-## 10. 安全与成本边界
+## 11. 安全与成本边界
 
 - Web 服务仅绑定 `127.0.0.1`，并校验 Host、Origin、Content-Type 和 UI 自定义请求头。
 - API Key 使用 DPAPI 当前用户密文保存；临时更换 Base URL 时不会复用已保存 Key，避免将密钥发送到非档案地址。
@@ -182,6 +203,6 @@ AgentRuntime
 - 写文件、命令和 MCP 在 Web 端需要运行级授权与逐工具审批。
 - UI 展示真实 Token 与按用户配置单价估算的费用，但不在缺少同模型、同任务基线时宣称固定节省比例。
 
-## 11. 当前边界与后续建议
+## 12. 当前边界与后续建议
 
-当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已接 REST，但尚未进入桌面工作台，也不是跨机器 worker 系统；Token 预算基于 Provider usage，缺少 usage 时使用保守字符估算。v0.13 继续做 Vue 3/TypeScript 时间线、外部故障压测和真实模型矩阵执行器；v1.0 再收紧 CI 与发布证据。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。
+当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已进入 Runtime Workbench，但仍是同进程有界任务而不是跨机器 worker 系统；Token 预算基于 Provider usage，缺少 usage 时使用保守字符估算。v0.14 应集中完成外部故障注入、慢 SSE/重连、Provider 429/MCP 断连/进程重启 lease 和真实模型矩阵执行器；v1.0 再做全链发布审计与旧 UI parity 决策。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。

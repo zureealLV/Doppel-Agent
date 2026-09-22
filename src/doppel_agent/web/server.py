@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from ..conversations import ConversationStore
@@ -20,6 +21,7 @@ from .approvals import ApprovalBroker
 
 
 ASSET_ROOT = Path(__file__).parent
+RUNTIME_ASSET_ROOT = ASSET_ROOT / "frontend_dist"
 
 
 class JobManager:
@@ -260,6 +262,23 @@ class ConsoleHandler(BaseHTTPRequestHandler):
         if path in assets:
             name, content_type = assets[path]
             self._send(200, (ASSET_ROOT / name).read_bytes(), content_type)
+        elif path in {"/runtime", "/runtime/"}:
+            index = RUNTIME_ASSET_ROOT / "index.html"
+            if index.is_file():
+                self._send(200, index.read_bytes(), "text/html; charset=utf-8")
+            else:
+                self._json(404, {"error": "runtime workbench has not been built"})
+        elif path.startswith("/runtime/assets/"):
+            relative = unquote(path.removeprefix("/runtime/assets/"))
+            root = (RUNTIME_ASSET_ROOT / "assets").resolve()
+            candidate = (root / relative).resolve()
+            if candidate.is_relative_to(root) and candidate.is_file():
+                content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+                if content_type in {"text/javascript", "application/javascript"}:
+                    content_type = "application/javascript"
+                self._send(200, candidate.read_bytes(), f"{content_type}; charset=utf-8")
+            else:
+                self._json(404, {"error": "not found"})
         elif path == "/api/health":
             self._json(200, {"status": "ok", "workspace": str(self.server.manager.workspace)})
         elif path == "/api/runs":

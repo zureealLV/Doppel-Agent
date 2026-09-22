@@ -11,11 +11,12 @@
 ## 实施状态（更新于 2026-09-22）
 
 - **v0.9.0 / Milestone A-B：已实现。** 完成 legacy/graph 统一 runtime、SQLite checkpoint、interrupt 三种决定、工具幂等账本、FastAPI v1、durable SSE、有界调度、取消、工作区锁、资源限流及异步 Provider 可靠性治理。
-- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 为 `114 passed, 1 skipped`；v0.11.0 为 `133 passed, 1 skipped`；v0.12.0 发布前 Windows 门禁为 `139 passed, 1 skipped`（未授予 symlink 创建权限）。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
+- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 为 `114 passed, 1 skipped`；v0.11.0 为 `133 passed, 1 skipped`；v0.12.0 为 `139 passed, 1 skipped`；v0.13.0 为 `140 passed, 1 skipped`，并增加 5 个 frontend Vitest、typecheck/build 与静态资产路由门禁。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
 - **v0.10.0 / Milestone C-D：已实现。** Task 12-21 已完成：Deep Agents 0.7.15 spike、受控 backend、`mode=deep`、Agent Skills Registry、四个工程 Skill、stdio/Streamable HTTP MCP Gateway、分页 catalog、多模态 executor、LangGraph/Deep adapter 与独立 server semaphore。
 - **v0.11.0 / Milestone E：已实现。** Task 22-25 完成 diff-first patch、base hash 冲突/原子回滚、项目 argv allowlist verification、Windows Job Object 优先进程树监督，以及可查询/追问/取消的 SQLite 异步子 Agent 运行层。
 - **v0.12.0 / Milestone F 基础：已实现。** 异步子 Agent 已接 parent-scoped REST；Task 26 固定 20×3×3 协议并实际跑完 180/180 Mock runtime paths；Task 27 已实测 100-task 有界调度、queue full、20 读 + 5 写互斥与运行中取消。
-- **未提前宣称：** Mock smoke 不等于真实模型质量 benchmark；Provider 429、MCP 断连、慢 SSE、重启 lease，Task 28 Vue 可视化和 Task 29 最终发布门禁仍按 v0.13-v1.0 实施。
+- **v0.13.0 / Task 28：已实现。** Vue 3 + TypeScript + Vite Runtime Workbench 以 `/runtime/` 并行上线，展示运行指标、Graph/Skill/MCP/Patch/子 Agent 事件、HITL 三种决定和 unified diff；旧对话/设置 UI 在 parity 前保留。
+- **未提前宣称：** Mock smoke 不等于真实模型质量 benchmark；Provider 429、MCP 断连、慢 SSE、重启 lease 与 Task 29 最终发布门禁仍按 v0.14-v1.0 实施。
 
 ---
 
@@ -852,7 +853,7 @@ Windows 优先 Job Object；无法启用时明确降级并记录，不得只取�
 
 不要预设吞吐数字；先测，再将硬件、模型、配置、分母和日期写进报告。
 
-### Task 28: 前端升级
+### Task 28: 前端升级（✅ v0.13.0）
 
 **Objective:** 在后端契约稳定后再迁移 Vue 3 + TypeScript，避免两边同时重写。
 
@@ -863,6 +864,8 @@ Windows 优先 Job Object；无法启用时明确降级并记录，不得只取�
 - Replace after parity: `src/doppel_agent/web/app.css`
 
 页面必须展示：Graph 节点、子 Agent、Skill 命中、MCP 工具来源、队列时间、运行时间、interrupt 审批、Diff 与测试结果。
+
+**v0.13 结果：** `frontend/` 已建立 Vue/TypeScript 工程，生产 bundle 写入 `web/frontend_dist/` 并由安全路径路由提供；Runtime Workbench 已覆盖上述运行时可观测对象。旧 `index.html/app.js/app.css` 暂不替换，因为持久对话、模型设置和全局搜索尚未达到 Vue parity；旧页新增 Runtime Lab 入口。这是有意的渐进迁移，不是未完成的静态 mock。
 
 ### Task 29: 发布门禁
 
