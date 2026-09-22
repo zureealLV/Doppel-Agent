@@ -86,6 +86,15 @@ class AsyncSubagentStore:
             "updated_at": row["updated_at"],
         }
 
+    def list_for_parent(self, parent_run_id: str) -> list[dict[str, Any]]:
+        with sqlite_connection(self.database) as connection:
+            rows = connection.execute(
+                "SELECT subagent_id FROM async_subagents WHERE parent_run_id=? "
+                "ORDER BY created_at,subagent_id",
+                (parent_run_id,),
+            ).fetchall()
+        return [record for row in rows if (record := self.get(row["subagent_id"])) is not None]
+
     def update(self, subagent_id: str, status: str, *, answer: str = "", error: str = "") -> None:
         with sqlite_connection(self.database) as connection:
             connection.execute(
@@ -183,17 +192,29 @@ class AsyncSubagentManager:
                 answer = await self.runner(request)
             except asyncio.CancelledError:
                 await asyncio.to_thread(self.store.update, subagent_id, "cancelled")
-                await self.sink.emit("subagent.cancelled", subagent_id=subagent_id)
+                await self.sink.emit(
+                    "subagent.cancelled",
+                    subagent_id=subagent_id,
+                    parent_run_id=record["parent_run_id"],
+                )
                 raise
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 await asyncio.to_thread(self.store.update, subagent_id, "failed", error=error)
-                await self.sink.emit("subagent.failed", subagent_id=subagent_id, error=error)
+                await self.sink.emit(
+                    "subagent.failed",
+                    subagent_id=subagent_id,
+                    parent_run_id=record["parent_run_id"],
+                    error=error,
+                )
                 raise
             answer = answer[:8000]
             await asyncio.to_thread(self.store.update, subagent_id, "completed", answer=answer)
             await self.sink.emit(
-                "subagent.completed", subagent_id=subagent_id, answer_chars=len(answer)
+                "subagent.completed",
+                subagent_id=subagent_id,
+                parent_run_id=record["parent_run_id"],
+                answer_chars=len(answer),
             )
             return answer
 
@@ -231,6 +252,9 @@ class AsyncSubagentManager:
     async def get(self, subagent_id: str) -> dict[str, Any] | None:
         return await asyncio.to_thread(self.store.get, subagent_id)
 
+    async def list_for_parent(self, parent_run_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self.store.list_for_parent, parent_run_id)
+
     async def wait(self, subagent_id: str) -> dict[str, Any]:
         try:
             await self.scheduler.wait(subagent_id)
@@ -252,14 +276,24 @@ class AsyncSubagentManager:
         await self.sink.emit(
             "subagent.followed_up",
             subagent_id=subagent_id,
+            parent_run_id=record["parent_run_id"],
             generation=record["generation"],
         )
         return record
 
     async def cancel(self, subagent_id: str) -> bool:
+        record = await self.get(subagent_id)
+        if record is None:
+            return False
         cancelled = await self.scheduler.cancel(subagent_id)
         if cancelled:
             await asyncio.to_thread(self.store.update, subagent_id, "cancelled")
+            if record["status"] == "queued":
+                await self.sink.emit(
+                    "subagent.cancelled",
+                    subagent_id=subagent_id,
+                    parent_run_id=record["parent_run_id"],
+                )
         return cancelled
 
     async def close(self) -> None:

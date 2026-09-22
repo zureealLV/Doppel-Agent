@@ -8,13 +8,14 @@
 
 **Tech Stack:** Python 3.11+、FastAPI、Pydantic v2、LangChain 1.x、LangGraph 1.x、Deep Agents 0.x、MCP Python SDK 2.x、SQLite WAL / LangGraph SQLite Checkpointer、Vue 3 + TypeScript + Vite、pytest、Ruff、pywebview、PyInstaller；远期服务端模式可选 PostgreSQL + Redis，不作为本地 v1.0 的强依赖。
 
-## 实施状态（更新于 2026-09-21）
+## 实施状态（更新于 2026-09-22）
 
 - **v0.9.0 / Milestone A-B：已实现。** 完成 legacy/graph 统一 runtime、SQLite checkpoint、interrupt 三种决定、工具幂等账本、FastAPI v1、durable SSE、有界调度、取消、工作区锁、资源限流及异步 Provider 可靠性治理。
-- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 为 `114 passed, 1 skipped`；v0.11.0 发布前 Windows 门禁为 `133 passed, 1 skipped`（未授予 symlink 创建权限），`ruff check src tests spikes`、compileall 与 JavaScript syntax check 通过。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
+- **验证：** v0.9.0 门禁为 `86 passed`；v0.10.0 为 `114 passed, 1 skipped`；v0.11.0 为 `133 passed, 1 skipped`；v0.12.0 发布前 Windows 门禁为 `139 passed, 1 skipped`（未授予 symlink 创建权限）。v0.8.2 基线记录在 `bench/baselines/v0.8.2.json`。
 - **v0.10.0 / Milestone C-D：已实现。** Task 12-21 已完成：Deep Agents 0.7.15 spike、受控 backend、`mode=deep`、Agent Skills Registry、四个工程 Skill、stdio/Streamable HTTP MCP Gateway、分页 catalog、多模态 executor、LangGraph/Deep adapter 与独立 server semaphore。
-- **v0.11.0 / Milestone E：已实现。** Task 22-25 完成 diff-first patch、base hash 冲突/原子回滚、项目 argv allowlist verification、Windows Job Object 优先进程树监督，以及可查询/追问/取消的 SQLite 异步子 Agent 运行层；异步子 Agent 的 UI/API 接入留到 v0.12。
-- **未提前宣称：** Task 26-29（三运行时正式 benchmark、并发压测、Vue 可视化和最终发布门禁）仍按 v0.12-v1.0 实施。
+- **v0.11.0 / Milestone E：已实现。** Task 22-25 完成 diff-first patch、base hash 冲突/原子回滚、项目 argv allowlist verification、Windows Job Object 优先进程树监督，以及可查询/追问/取消的 SQLite 异步子 Agent 运行层。
+- **v0.12.0 / Milestone F 基础：已实现。** 异步子 Agent 已接 parent-scoped REST；Task 26 固定 20×3×3 协议并实际跑完 180/180 Mock runtime paths；Task 27 已实测 100-task 有界调度、queue full、20 读 + 5 写互斥与运行中取消。
+- **未提前宣称：** Mock smoke 不等于真实模型质量 benchmark；Provider 429、MCP 断连、慢 SSE、重启 lease，Task 28 Vue 可视化和 Task 29 最终发布门禁仍按 v0.13-v1.0 实施。
 
 ---
 
@@ -782,7 +783,7 @@ Windows 优先 Job Object；无法启用时明确降级并记录，不得只取�
 
 ## Milestone F — v1.0.0 Evaluation and Release Evidence
 
-### Task 26: 固定三运行时对照
+### Task 26: 固定三运行时对照（协议与 Mock smoke ✅ v0.12.0；真实模型裁判待做）
 
 **Objective:** 比较 legacy、focused LangGraph、Deep Agents，而不是只展示框架名。
 
@@ -821,7 +822,7 @@ Windows 优先 Job Object；无法启用时明确降级并记录，不得只取�
 - interrupt resume success；
 - cancellation latency。
 
-### Task 27: 并发压测
+### Task 27: 并发压测（本地 scheduler/lock 子集 ✅ v0.12.0；外部故障场景待做）
 
 **Objective:** 用可复现负载证明背压和资源治理，而不是宣称模糊“高并发”。
 

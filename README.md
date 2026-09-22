@@ -4,7 +4,7 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.11.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.12.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
 
@@ -16,7 +16,7 @@
 - **Diff-first 可恢复审批**：Graph/Deep 只能先提交带 base hash 的多文件 unified diff；批准、拒绝、编辑均可 resume，旧 base 变化拒绝覆盖，多文件失败原子回滚，工具幂等账本阻止重复执行。
 - **项目验证流水线**：`.doppel/verification.json` 只允许项目预先配置的 argv；补丁批准后可自动运行测试/静态检查并返回结构化结果，不接受模型生成的 shell 字符串。
 - **可取消进程树**：Windows 优先 Job Object，无法绑定时显式记录 `taskkill /T` 降级；取消、超时和关闭服务都会清理命令及其后代进程。
-- **异步子 Agent 运行层**：同进程后台子任务使用有界调度与 SQLite 生命周期，支持查询、追问和取消；请求固定只读并禁止递归委派。当前 UI/API 端点仍待 v0.12 接入。
+- **异步子 Agent API**：同进程后台子任务使用有界调度与 SQLite 生命周期；父 run 显式授予 `delegate` 后，可经 FastAPI 创建、列出、查询、追问和取消。请求固定只读并禁止递归委派，生命周期事件进入父 run 的持久时间线。
 - **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。
 - **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
 - **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试。
@@ -63,7 +63,7 @@ cd '<你的 Doppel-Agent 仓库目录>'
 
 不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
 
-### v0.11 Runtime API
+### v0.12 Runtime API
 
 ```powershell
 python -m pip install -e ".[agent]"
@@ -71,6 +71,18 @@ python -m pip install -e ".[agent]"
 ```
 
 打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做基线，或传 `mode: "deep"` 启用 Deep Agents。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
+
+父 run 在 `permissions.delegate=true` 时，可使用 `/api/v1/runs/{run_id}/subagents` 创建或列出后台只读子任务，并通过 `/{subagent_id}`、`/follow-ups` 与 `/cancel` 查询、追问和取消。OpenAPI 给出完整请求 schema；不具备 delegate grant 的父 run 返回 403。
+
+### 固定矩阵与本地负载证据
+
+```powershell
+uv run --extra agent python bench/runtime_matrix.py --output .bench-results/runtime-protocol.json
+uv run --extra agent python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
+uv run --extra agent python bench/run_load.py --output .bench-results/load.json
+```
+
+v0.12 固定了 20 个 case、三种 runtime、每题三次的 180-run 协议，并完成 180/180 次离线 Mock runtime-path smoke。该结果只证明三条执行链能跑通，`task_score` 明确保留为 `null`，不代表真实模型编程成功率。提交的本地负载报告记录 100 个任务下 active 峰值、队列拒绝、工作区读写互斥和取消结果；Provider 429、MCP 断连、慢 SSE 与重启 lease 仍需单独实测。
 
 ### 命令行
 
@@ -122,7 +134,7 @@ python bench/run_review.py --env-file '<你的本机 .env 路径>'
 
 Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
 
-旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph/Deep 的异步 Provider 可立即传播取消。当前仍没有强 OS 隔离、异步子 Agent 的 UI/API 产品接入、TUI、Vue 迁移或独立三运行时基准成绩。Windows Job Object 负责进程树生命周期，但命令仍以当前用户权限运行。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
+旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph/Deep 的异步 Provider 可立即传播取消。当前仍没有强 OS 隔离、异步子 Agent 的桌面 UI、TUI、Vue 迁移或经真实模型裁判的三运行时质量成绩。Windows Job Object 负责进程树生命周期，但命令仍以当前用户权限运行。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
 
 ## 版本与来源
 

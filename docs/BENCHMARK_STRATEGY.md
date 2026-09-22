@@ -20,6 +20,14 @@ Doppel Agent 不把“模型返回了一段看起来合理的文字”当作任�
 
 报告默认放在 `.bench-results/` 并被 Git 忽略；API Key 不写入报告。`read_file` 和 `write_file` 均阻止 `.env`、常见凭据/私钥文件、`.git`、`.doppel-agent` 等路径，避免审查时把本机秘密送给模型或篡改审计记录。
 
+## v0.12 三运行时协议与负载证据
+
+`bench/cases/runtime/manifest.json` 固定 20 个 case，`bench/runtime_matrix.py` 将其展开为 legacy/graph/deep 三种 runtime、每题三次，共 180 个唯一 run key。协议校验只负责冻结题目分类、权限和确定性 validator，不在执行前写入结果或成功率。
+
+`bench/reports/2026-09-22-v0.12.0-runtime-smoke.json` 是使用离线 `MockProvider` 执行的 plumbing smoke：180/180 条 runtime path 完成，三种 runtime 各 60 次；所有 `task_score` 都是 `null`。这个分母只能证明统一接口和三条运行路径能完成调用，不能证明真实模型会完成题目，也不能用于成本或 Token 对比。
+
+`bench/reports/2026-09-22-v0.12.0-load.json` 是本机确定性 scheduler/lock probe：100 个短任务在 `max_active=4` 下峰值为 4；queue overflow 明确拒绝；20 读 + 5 写保持 writer 单实例且无读写重叠；运行中取消进入 `cancelled`。它不覆盖 Provider 429、MCP 断连、慢 SSE、进程树或重启 lease，这些场景必须单独记录，不能从当前报告外推。
+
 ## 为什么当前不发布 SWE-bench 分数
 
 [SWE-bench Verified](https://github.com/SWE-bench/SWE-bench/blob/main/docs/guides/datasets.md) 是从 SWE-bench 中经人工验证的 500 个任务。合格评测需要为每题检出指定仓库和基础提交，让 Agent 生成补丁，再在隔离环境中运行该题的 `FAIL_TO_PASS` 与 `PASS_TO_PASS` 测试。当前 Doppel Agent 还没有完整的仓库检出、补丁收集、容器隔离和官方 harness 接口，因此现在写一个“SWE-bench 成功率”会是伪数据。
@@ -38,6 +46,8 @@ Doppel Agent 不把“模型返回了一段看起来合理的文字”当作任�
 python -m unittest discover -s tests -p "test_*.py" -v
 python bench/run_review.py --env-file .env
 python bench/run_project_reviews.py --env-file .env
+python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
+python bench/run_load.py --output .bench-results/load.json
 ```
 
 不要提交 `.env`、`.bench-results/` 或目标项目中的私密文件。

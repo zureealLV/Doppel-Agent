@@ -46,6 +46,9 @@ class AsyncRunScheduler:
         self._statuses: dict[str, str] = {}
         self._accepting = False
         self._lock = asyncio.Lock()
+        self._peak_active_count = 0
+        self._accepted_count = 0
+        self._rejected_count = 0
 
     async def start(self) -> None:
         async with self._lock:
@@ -78,9 +81,11 @@ class AsyncRunScheduler:
             try:
                 self._queue.put_nowait(job)
             except asyncio.QueueFull as exc:
+                self._rejected_count += 1
                 raise QueueCapacityError("run queue is full") from exc
             self._jobs[run_id] = job
             self._statuses[run_id] = "queued"
+            self._accepted_count += 1
         return RunHandle(run_id, future, token)
 
     async def _worker(self) -> None:
@@ -98,6 +103,7 @@ class AsyncRunScheduler:
                     continue
                 task = asyncio.create_task(job.operation(job.token), name=f"doppel-run-{job.run_id}")
                 self._running[job.run_id] = task
+                self._peak_active_count = max(self._peak_active_count, len(self._running))
                 self._statuses[job.run_id] = "running"
                 try:
                     result = await task
@@ -153,6 +159,18 @@ class AsyncRunScheduler:
     @property
     def active_count(self) -> int:
         return len(self._running)
+
+    @property
+    def peak_active_count(self) -> int:
+        return self._peak_active_count
+
+    @property
+    def accepted_count(self) -> int:
+        return self._accepted_count
+
+    @property
+    def rejected_count(self) -> int:
+        return self._rejected_count
 
     async def shutdown(self, *, cancel_pending: bool = True, cancel_running: bool = True) -> None:
         async with self._lock:

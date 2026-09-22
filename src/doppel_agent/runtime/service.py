@@ -23,6 +23,7 @@ from ..workspace.process_supervisor import ProcessSupervisor
 from ..workspace.verification import VerificationPipeline
 from ..provider import (
     AsyncOpenAICompatibleProvider,
+    Message,
     MockProvider,
     OpenAICompatibleProvider,
 )
@@ -38,6 +39,7 @@ from ..tools import (
     workspace_map_tool,
 )
 from .base import EventSink, ResumeCommand, RunRequest, RuntimeResult
+from .async_subagents import AsyncSubagentManager, AsyncSubagentRequest
 from .factory import create_runtime
 from .provider_adapter import ProviderAdapter
 
@@ -81,6 +83,31 @@ class DurableEventSink(EventSink):
         await self.notifier.notify(self.run_id)
 
 
+class SubagentLifecycleSink(EventSink):
+    """Route child lifecycle events into the durable parent-run timeline."""
+
+    def __init__(self, runs: RuntimeRunStore, events: EventStore, notifier: EventNotifier):
+        self.runs = runs
+        self.events = events
+        self.notifier = notifier
+
+    async def emit(self, kind: str, **payload: Any) -> None:
+        parent_run_id = payload.get("parent_run_id")
+        if not isinstance(parent_run_id, str):
+            return
+        record = await asyncio.to_thread(self.runs.get, parent_run_id)
+        if record is None:
+            return
+        await asyncio.to_thread(
+            self.events.append,
+            parent_run_id,
+            record["thread_id"],
+            kind,
+            payload,
+        )
+        await self.notifier.notify(parent_run_id)
+
+
 class RunService:
     def __init__(
         self,
@@ -110,11 +137,21 @@ class RunService:
         self.mcp_catalog = MCPToolCatalog(self.mcp_manager) if self.mcp_manager else None
         self.mcp_ledger = ToolExecutionLedger(self.state_root / "mcp-tool-executions.sqlite3")
         self.process_supervisor = ProcessSupervisor()
+        self.subagents = AsyncSubagentManager(
+            database,
+            self._run_async_subagent,
+            max_active=2,
+            queue_capacity=16,
+            max_per_parent=4,
+            sink=SubagentLifecycleSink(self.runs, self.events, self.notifier),
+        )
 
     async def start(self) -> None:
         await self.scheduler.start()
+        await self.subagents.start()
 
     async def close(self) -> None:
+        await self.subagents.close()
         await self.scheduler.shutdown()
         await self.process_supervisor.close()
         for provider in self._providers.values():
@@ -124,6 +161,83 @@ class RunService:
         self._providers.clear()
         if self.mcp_manager is not None:
             await self.mcp_manager.close()
+
+    async def _run_async_subagent(self, request: AsyncSubagentRequest) -> str:
+        parent = await self.get(request.parent_run_id)
+        if parent is None:
+            raise KeyError(request.parent_run_id)
+        parent_request = parent["request"]
+        child_record = {
+            "run_id": request.subagent_id,
+            "thread_id": request.subagent_id,
+            "mode": "graph",
+            "request": {
+                "prompt": request.prompt,
+                "mode": "graph",
+                "profile_id": parent_request.get("profile_id"),
+                "effort": parent_request.get("effort", "balanced"),
+                "permissions": {
+                    "workspace_write": False,
+                    "command_execute": False,
+                    "mcp_execute": False,
+                    "delegate": False,
+                },
+            },
+        }
+        history: list[Message] = []
+        for item in request.history:
+            history.extend(
+                (
+                    Message("user", item["prompt"]),
+                    Message("assistant", item["answer"]),
+                )
+            )
+        runtime = await self._runtime(child_record)
+        result = await runtime.run(
+            RunRequest(
+                request.prompt,
+                run_id=request.subagent_id,
+                thread_id=request.subagent_id,
+                history=tuple(history),
+            ),
+            self._sink(parent),
+        )
+        if result.status != "completed":
+            raise RuntimeError(f"subagent ended with status {result.status}")
+        return result.answer
+
+    async def _require_parent_for_subagent(self, parent_run_id: str) -> dict[str, Any]:
+        parent = await self.get(parent_run_id)
+        if parent is None:
+            raise KeyError(parent_run_id)
+        if not parent["request"]["permissions"].get("delegate"):
+            raise PermissionError("parent run did not grant delegate permission")
+        return parent
+
+    async def spawn_subagent(self, parent_run_id: str, prompt: str) -> dict[str, Any]:
+        await self._require_parent_for_subagent(parent_run_id)
+        return await self.subagents.spawn(parent_run_id, prompt)
+
+    async def list_subagents(self, parent_run_id: str) -> list[dict[str, Any]]:
+        await self._require_parent_for_subagent(parent_run_id)
+        return await self.subagents.list_for_parent(parent_run_id)
+
+    async def get_subagent(self, parent_run_id: str, subagent_id: str) -> dict[str, Any]:
+        await self._require_parent_for_subagent(parent_run_id)
+        record = await self.subagents.get(subagent_id)
+        if record is None or record["parent_run_id"] != parent_run_id:
+            raise KeyError(subagent_id)
+        return record
+
+    async def follow_up_subagent(
+        self, parent_run_id: str, subagent_id: str, prompt: str
+    ) -> dict[str, Any]:
+        await self.get_subagent(parent_run_id, subagent_id)
+        return await self.subagents.follow_up(subagent_id, prompt)
+
+    async def cancel_subagent(self, parent_run_id: str, subagent_id: str) -> bool:
+        await self.get_subagent(parent_run_id, subagent_id)
+        return await self.subagents.cancel(subagent_id)
 
     def _provider(self, profile_id: str | None, mode: str) -> Any:
         if self.provider_override is not None:

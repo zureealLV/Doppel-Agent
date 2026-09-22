@@ -59,6 +59,73 @@ class RunsApiTests(unittest.TestCase):
             self.assertNotIn("fallback_runtime", record["metadata"])
             self.assertEqual(record["metadata"]["subagent_limit"], 2)
 
+    def test_async_subagent_lifecycle_is_exposed_by_parent_run(self):
+        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+            parent_response = client.post(
+                "/api/v1/runs",
+                json={
+                    "prompt": "parent task",
+                    "mode": "graph",
+                    "permissions": {"delegate": True},
+                },
+            )
+            self.assertEqual(parent_response.status_code, 202, parent_response.text)
+            parent_id = parent_response.json()["run_id"]
+            self.wait(client, parent_id)
+
+            spawned = client.post(
+                f"/api/v1/runs/{parent_id}/subagents",
+                json={"prompt": "inspect README.md"},
+            )
+            self.assertEqual(spawned.status_code, 202, spawned.text)
+            subagent_id = spawned.json()["subagent_id"]
+
+            for _ in range(500):
+                child = client.get(
+                    f"/api/v1/runs/{parent_id}/subagents/{subagent_id}"
+                ).json()
+                if child["status"] in {"completed", "failed", "cancelled"}:
+                    break
+                time.sleep(0.01)
+            self.assertEqual(child["status"], "completed", child)
+            self.assertIn("Offline mock", child["answer"])
+
+            listing = client.get(f"/api/v1/runs/{parent_id}/subagents")
+            self.assertEqual(listing.status_code, 200, listing.text)
+            self.assertEqual([item["subagent_id"] for item in listing.json()], [subagent_id])
+
+            followed = client.post(
+                f"/api/v1/runs/{parent_id}/subagents/{subagent_id}/follow-ups",
+                json={"prompt": "summarize the previous answer"},
+            )
+            self.assertEqual(followed.status_code, 202, followed.text)
+            self.assertEqual(followed.json()["generation"], 2)
+            for _ in range(500):
+                child = client.get(
+                    f"/api/v1/runs/{parent_id}/subagents/{subagent_id}"
+                ).json()
+                if child["status"] in {"completed", "failed", "cancelled"}:
+                    break
+                time.sleep(0.01)
+            self.assertEqual(child["status"], "completed", child)
+            self.assertEqual(child["generation"], 2)
+            self.assertEqual(len(child["history"]), 1)
+
+            events = client.get(f"/api/v1/runs/{parent_id}/events").json()
+            event_types = [event["type"] for event in events]
+            self.assertIn("subagent.queued", event_types)
+            self.assertIn("subagent.completed", event_types)
+
+    def test_subagent_api_requires_parent_delegate_permission(self):
+        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+            parent = client.post("/api/v1/runs", json={"prompt": "parent"}).json()
+            self.wait(client, parent["run_id"])
+            response = client.post(
+                f"/api/v1/runs/{parent['run_id']}/subagents",
+                json={"prompt": "should be denied"},
+            )
+            self.assertEqual(response.status_code, 403, response.text)
+
     def test_write_interrupt_resume_and_durable_events(self):
         class WriteProvider:
             calls = 0

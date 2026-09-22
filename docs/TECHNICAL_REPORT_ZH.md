@@ -1,4 +1,4 @@
-# Doppel Agent v0.11.0 技术汇报
+# Doppel Agent v0.12.0 技术汇报
 
 ## 1. 项目定位
 
@@ -21,7 +21,7 @@ Doppel Agent 是一个面向本地代码审查与编程任务的 Windows Agent�
 | Web 内核 | Microsoft Edge WebView2 | 153.0.4234.48 | 渲染桌面端 HTML/CSS/JavaScript |
 | 凭据保护 | Windows DPAPI | 当前用户作用域 | 加密保存模型 API Key，前端无法取回明文 |
 | 打包 | PyInstaller | 6.22.3 onedir | 生成无控制台窗口的 Windows EXE |
-| 验证 | pytest、Ruff、compileall | 133 passed + 1 Windows symlink skip（发布前本地门禁） | 回归 Patch/Verification/进程树/异步子 Agent/Deep/Graph/MCP 与既有安全边界 |
+| 验证 | pytest、Ruff、compileall | 139 passed + 1 Windows symlink skip（发布前本地门禁） | 回归子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
 
 ## 3. 核心架构
 
@@ -50,7 +50,29 @@ AgentRuntime
 
 运行记录按任务 ID 写入 `.doppel-agent/runs/`，包含事件流、工具轨迹和会话结果。对话历史存入 SQLite，并会作为后续消息的真实模型上下文，而不是只在界面中展示。
 
-## 4. v0.11.0 本轮交付
+## 4. v0.12.0 本轮交付
+
+### 异步子 Agent REST 产品入口
+
+- 父 run 只有在创建时设置 `permissions.delegate=true`，才能通过 `/api/v1/runs/{run_id}/subagents` 创建和列出后台子任务；未授权返回 403，不存在或不属于该父 run 的 child 返回 404。
+- `GET /{subagent_id}` 查询持久状态，`POST /follow-ups` 在完成后复用同一 child ID、附带历史并递增 generation，`POST /cancel` 传播到有界 scheduler。
+- 服务端 runner 强制使用 focused Graph、只读工具、`workspace_write/command_execute/mcp_execute/delegate=false`；父任务的 grant 不会被 child 继承。
+- queued/started/completed/failed/cancelled/followed-up 生命周期进入父 run 的 durable event timeline；关闭 RunService 时先关闭 child manager，再清理主 scheduler 与进程树。
+
+### 固定三运行时协议
+
+- `bench/cases/runtime/manifest.json` 固定 20 个 case：4 导航、4 已知答案审查、4 TDD 修复、3 多文件 patch、2 审批恢复、2 MCP、1 并发取消。
+- `bench/runtime_matrix.py` 严格校验 manifest 并展开 `3 runtimes × 20 cases × 3 repeats = 180 runs`；run key 和 run ID 可确定性复现，manifest 禁止预填 results 或成功率。
+- v0.12 实际执行 180/180 次离线 Mock runtime-path smoke，legacy/graph/deep 各 60 次，失败 0；每项 `task_score=null`，只证明三条运行路径可执行，不代表编程质量、Token、成本或真实模型成功率。
+
+### 本地并发证据
+
+- `bench/run_load.py` 实测 100 个任务、queue capacity 100、max active 4：完成 100，观测峰值和 scheduler 记录峰值均为 4。
+- queue capacity=1 场景接受 running/queued 各 1 个并明确拒绝第 3 个，`rejected_count=1`。
+- 同一工作区 20 个读操作和 5 个写操作中，读峰值为 20、writer 峰值为 1、读写重叠违规为 0。
+- 运行中取消被接受并进入 terminal `cancelled`；报告保留本机环境、原始计数和耗时。Provider 429、MCP 断连、慢 SSE 和 lease 回收没有从这些数据外推。
+
+## 5. v0.11.0 历史交付
 
 ### Diff-first 修改链路
 
@@ -72,9 +94,9 @@ AgentRuntime
 - `AsyncSubagentManager` 复用有界 FIFO scheduler，默认最多两个 active child；SQLite 保存 queued/running/completed/failed/cancelled、generation、history、answer 与 error。
 - 后台子任务可查询、等待、追问和取消；追问复用同一 subagent ID 并递增 generation，重启时残留 queued/running 状态收敛为明确失败。
 - Runner 收到的请求固定只有 `workspace_read`，并且 `allow_delegate=False`；首版保持同进程 transport，不冒充跨机器分布式系统。
-- 当前已完成运行层和集成测试，REST/UI 产品入口留到 v0.12，README 明确标注这一边界。
+- v0.11 首次只交付运行层；v0.12 已接 REST，桌面工作台可视化仍留到后续 Vue 迁移。
 
-## 5. v0.10.0 历史交付
+## 6. v0.10.0 历史交付
 
 ### Deep Agents 可选深度运行时
 
@@ -98,7 +120,7 @@ AgentRuntime
 - 同一个 adapter 将工具暴露给 focused Graph 与 Deep Agents；两条链路均有真实 interrupt/resume 集成测试，Deep Agents 不直接持有 MCP session。
 - stdio 与 Streamable HTTP 均已实现；HTTP auth profile 从环境变量解析 Bearer token，配置文件只保存 profile 名称。
 
-## 6. v0.9.0 基础交付
+## 7. v0.9.0 基础交付
 
 ### 可恢复 LangGraph 主链
 
@@ -121,7 +143,7 @@ AgentRuntime
 - 只重试网络错误、429 与 5xx，尊重 `Retry-After`，并受 max attempts、retry budget 与 run deadline 共同约束。
 - 连续失败触发 profile 级 circuit breaker；`CancelledError` 单独传播，不被普通错误处理吞掉。
 
-## 7. v0.8.2 历史交付
+## 8. v0.8.2 历史交付
 
 ### 桌面与交互
 
@@ -140,19 +162,19 @@ AgentRuntime
 - 前端增加提交锁，API 返回前再次发送不会产生重复运行。
 - 运行记录绑定发起时的对话 ID；用户切换到其他对话后，任务完成不会把界面强制跳回错误页面。
 
-## 8. 验收证据
+## 9. 验收证据
 
-- pytest：发布前本地全量门禁为 `133 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
-- Ruff correctness gate：`ruff check src tests` 通过。
+- pytest：发布前本地全量门禁为 `139 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
+- Ruff correctness gate：`ruff check src tests bench` 通过。
 - Python：`compileall` 通过。
-- 新增覆盖：Graph/Deep diff-first 恢复、base conflict、多文件 rollback、项目 verification allowlist/失败/超时、Windows 进程树取消，以及异步子 Agent 并发上限/查询/追问/取消；v0.10 的 Deep/Skill/MCP 测试继续全量回归。
+- 新增覆盖：异步子 Agent REST 权限/生命周期、20-case matrix 静态协议、100-task scheduler 上限与 queue full 计数；v0.11 的 Patch/Verification/进程树/Deep/Graph/MCP 测试继续全量回归。
 - JavaScript：`node --check src/doppel_agent/web/app.js` 通过。
 - HTML 标签栈检查通过。
 - 隔离工作区中连续点击“新对话”与“代码审查”：每类空草稿仅 1 个、消息数 0、运行数 0。
 - Edge 实际渲染检查通过：默认双栏、右侧详情切换、全局搜索、审查模板、标题栏和输入区均可见，无白色外框或左上溢出。
-- PyInstaller 6.22.3 已重新生成 v0.11.0 onedir EXE；隔离工作区冷启动 10 秒后进程仍存活，主窗口标题为 `Doppel Agent`，随后关闭测试进程。
+- PyInstaller 6.22.3 已重新生成 v0.12.0 onedir EXE；隔离工作区冷启动验证见发布记录。
 
-## 9. 安全与成本边界
+## 10. 安全与成本边界
 
 - Web 服务仅绑定 `127.0.0.1`，并校验 Host、Origin、Content-Type 和 UI 自定义请求头。
 - API Key 使用 DPAPI 当前用户密文保存；临时更换 Base URL 时不会复用已保存 Key，避免将密钥发送到非档案地址。
@@ -160,6 +182,6 @@ AgentRuntime
 - 写文件、命令和 MCP 在 Web 端需要运行级授权与逐工具审批。
 - UI 展示真实 Token 与按用户配置单价估算的费用，但不在缺少同模型、同任务基线时宣称固定节省比例。
 
-## 10. 当前边界与后续建议
+## 11. 当前边界与后续建议
 
-当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已有持久运行层，但 REST/UI 尚未接入，也不是跨机器 worker 系统；Token 预算基于 Provider usage，缺少 usage 时使用保守字符估算。v0.12 继续做子 Agent 产品入口、固定三运行时 benchmark、并发压测与 Vue 可视化。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。
+当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已接 REST，但尚未进入桌面工作台，也不是跨机器 worker 系统；Token 预算基于 Provider usage，缺少 usage 时使用保守字符估算。v0.13 继续做 Vue 3/TypeScript 时间线、外部故障压测和真实模型矩阵执行器；v1.0 再收紧 CI 与发布证据。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。

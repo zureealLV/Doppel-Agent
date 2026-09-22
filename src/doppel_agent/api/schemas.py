@@ -46,3 +46,27 @@ class RunAccepted(BaseModel):
 class CancelResponse(BaseModel):
     run_id: str
     cancel_requested: bool
+
+
+class SubagentPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = Field(min_length=1, max_length=4000)
+
+
+class SubagentRecord(BaseModel):
+    subagent_id: str
+    parent_run_id: str
+    status: str
+    prompt: str
+    history: list[dict[str, str]]
+    answer: str
+    error: str
+    generation: int
+    created_at: str
+    updated_at: str
+
+
+class SubagentCancelResponse(BaseModel):
+    subagent_id: str
+    cancel_requested: bool

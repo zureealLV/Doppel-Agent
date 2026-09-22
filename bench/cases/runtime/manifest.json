@@ -1,0 +1,25 @@
+{
+  "protocol_version": "1.0",
+  "cases": [
+    {"id":"nav-01","category":"navigation","prompt":"Locate the runtime factory and explain how execution modes are selected.","permissions":{},"validator":{"type":"answer_contains","value":"runtime"}},
+    {"id":"nav-02","category":"navigation","prompt":"Locate the workspace path boundary checks and summarize their purpose.","permissions":{},"validator":{"type":"answer_contains","value":"workspace"}},
+    {"id":"nav-03","category":"navigation","prompt":"Find the persistent event store and explain event sequence ordering.","permissions":{},"validator":{"type":"answer_contains","value":"event"}},
+    {"id":"nav-04","category":"navigation","prompt":"Find the MCP tool adapter and explain the policy boundary.","permissions":{"mcp_execute":true},"validator":{"type":"answer_contains","value":"MCP"}},
+    {"id":"review-01","category":"known_answer_review","prompt":"Review a seeded authorization bypass and report the affected check.","permissions":{},"validator":{"type":"answer_contains","value":"authorization"}},
+    {"id":"review-02","category":"known_answer_review","prompt":"Review a seeded SQL injection and explain a parameterized fix.","permissions":{},"validator":{"type":"answer_contains","value":"SQL"}},
+    {"id":"review-03","category":"known_answer_review","prompt":"Review a seeded path traversal and identify the missing boundary validation.","permissions":{},"validator":{"type":"answer_contains","value":"path"}},
+    {"id":"review-04","category":"known_answer_review","prompt":"Review a seeded cancellation leak and identify the surviving child process.","permissions":{},"validator":{"type":"answer_contains","value":"process"}},
+    {"id":"tdd-01","category":"tdd_fix","prompt":"Add a failing test and fix duplicate idempotency-key handling.","permissions":{"workspace_write":true,"command_execute":true},"validator":{"type":"event_present","value":"verification.completed"}},
+    {"id":"tdd-02","category":"tdd_fix","prompt":"Add a failing test and fix queue-capacity rejection accounting.","permissions":{"workspace_write":true,"command_execute":true},"validator":{"type":"event_present","value":"verification.completed"}},
+    {"id":"tdd-03","category":"tdd_fix","prompt":"Add a failing test and fix stale patch conflict detection.","permissions":{"workspace_write":true,"command_execute":true},"validator":{"type":"event_present","value":"verification.completed"}},
+    {"id":"tdd-04","category":"tdd_fix","prompt":"Add a failing test and fix cancellation of a queued task.","permissions":{"workspace_write":true,"command_execute":true},"validator":{"type":"event_present","value":"verification.completed"}},
+    {"id":"patch-01","category":"multi_file_patch","prompt":"Prepare a reviewed patch that updates implementation, tests, and documentation.","permissions":{"workspace_write":true},"validator":{"type":"event_present","value":"patch.proposed"}},
+    {"id":"patch-02","category":"multi_file_patch","prompt":"Prepare a two-file refactor without changing public behavior.","permissions":{"workspace_write":true},"validator":{"type":"event_present","value":"patch.proposed"}},
+    {"id":"patch-03","category":"multi_file_patch","prompt":"Prepare a configuration and implementation patch with rollback safety.","permissions":{"workspace_write":true},"validator":{"type":"event_present","value":"patch.proposed"}},
+    {"id":"approval-01","category":"approval_resume","prompt":"Propose a file patch, pause for approval, then resume exactly once.","permissions":{"workspace_write":true},"validator":{"type":"event_present","value":"approval.requested"}},
+    {"id":"approval-02","category":"approval_resume","prompt":"Propose a command, pause for approval, reject it, and preserve the workspace.","permissions":{"command_execute":true},"validator":{"type":"event_present","value":"approval.requested"}},
+    {"id":"mcp-01","category":"mcp_workflow","prompt":"List an MCP server tool and call it through the policy gateway.","permissions":{"mcp_execute":true},"validator":{"type":"event_present","value":"mcp.tool_executed"}},
+    {"id":"mcp-02","category":"mcp_workflow","prompt":"Handle structured MCP content and preserve the server error flag.","permissions":{"mcp_execute":true},"validator":{"type":"event_present","value":"mcp.tool_executed"}},
+    {"id":"cancel-01","category":"concurrent_cancel","prompt":"Start a bounded background operation and cancel it without leaving a child process.","permissions":{"command_execute":true},"validator":{"type":"event_present","value":"run.cancelled"}}
+  ]
+}

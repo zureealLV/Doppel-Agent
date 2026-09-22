@@ -12,6 +12,7 @@ from fastapi.responses import Response
 
 from ..runtime.service import RunService
 from .routes.runs import router as runs_router
+from .routes.subagents import router as subagents_router
 
 
 def create_app(
@@ -42,13 +43,14 @@ def create_app(
 
     app = FastAPI(
         title="Doppel Agent Runtime API",
-        version="0.11.0",
+        version="0.12.0",
         lifespan=lifespan,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
     app.state.run_service = service
     app.include_router(runs_router, prefix="/api/v1")
+    app.include_router(subagents_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, str]:

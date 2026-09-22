@@ -1,5 +1,14 @@
 # 更新记录
 
+## v0.12.0 — 2026-09-22
+
+- 将 v0.11 的持久异步子 Agent 运行层接入 FastAPI：父 run 必须显式授予 `delegate`，随后可通过嵌套路由创建、列出、查询、追问和取消后台子任务；子任务仍固定只读、禁止 MCP/命令/写入和递归委派。
+- 子 Agent 生命周期事件写入父 run 的 durable event timeline；追问复用同一 ID 和历史，服务关闭会先收敛后台子任务再关闭主 scheduler。
+- 固定 `3 runtimes × 20 cases × 3 repeats = 180 runs` 协议，覆盖导航、已知答案审查、TDD 修复、多文件补丁、审批恢复、MCP 与并发取消；manifest 校验拒绝重复 ID、分类漂移、无验证器和预填成绩。
+- 实际完成 180/180 次 Mock runtime-path smoke（legacy/graph/deep 各 60）；报告明确将 `task_score` 留空，不把离线 Mock 冒充模型质量、成本或 Token 基准。
+- 新增确定性本地并发探针：100 任务、`max_active=4` 的峰值为 4；队列溢出明确拒绝 1 次；同工作区 20 读 + 5 写中 writer 峰值为 1 且读写重叠为 0；运行中取消进入 terminal cancelled。
+- scheduler 暴露 accepted/rejected/peak-active 观测计数；新增 API、矩阵协议和负载回归测试，发布前本地门禁为 139 passed、1 skipped。
+
 ## v0.11.0 — 2026-09-21
 
 - 将 Graph/Deep 的文件修改统一为 `propose_patch` diff-first 链路：审批前只生成含 base SHA-256 的 unified diff，批准或编辑后才原子替换；旧 base 变化会产生明确 conflict，多文件中途失败会回滚已经替换的文件。

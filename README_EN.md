@@ -4,7 +4,7 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.11.0
+## Current release: v0.12.0
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
@@ -14,7 +14,7 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 - SQLite checkpoints plus approve/reject/edit interrupts and a tool-call idempotency ledger.
 - Diff-first multi-file patches with reviewed base hashes, stale-base rejection, atomic rollback, and durable proposed/applied/conflict events in both Graph and Deep modes.
 - A project-owned `.doppel/verification.json` argv allowlist with structured results; approved patches can automatically run configured checks when command capability is granted.
-- Cancellable command trees using a Windows Job Object first and an explicit `taskkill /T` fallback, plus a persistent bounded async-subagent manager with query, follow-up, and cancellation methods at the runtime layer.
+- Cancellable command trees using a Windows Job Object first and an explicit `taskkill /T` fallback, plus persistent bounded async subagents exposed through parent-scoped create/list/get/follow-up/cancel REST endpoints. Children remain read-only and non-recursive.
 - FastAPI `/api/v1` run lifecycle endpoints, durable resumable SSE, bounded FIFO scheduling, cancellation, workspace read/write locks, and resource limits.
 - A long-lived async HTTP provider with bounded 429/5xx retry, `Retry-After`, deadlines, and a profile circuit breaker.
 - Compact workspace maps, recursive text search, line-range reads, UTF-8 read/write, and argv-only command execution.
@@ -30,8 +30,9 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 - The legacy loop retains opt-in read-only subagents capped at two delegations and four model turns per run. Deep mode instead exposes two read-only specialist subagents, each bounded to six model calls and an 8,000-token budget; neither path inherits write, command, MCP, or recursive-delegation capability.
 - CLI plus a localhost JSON-RPC/NDJSON daemon.
 - An isolated synthetic code-review case with a reproducible live-provider runner and a manually adjudicated result; no general benchmark claims.
+- A fixed 20-case × 3-runtime × 3-repeat protocol, a 180/180 offline Mock runtime-path smoke report with null task scores, and deterministic local scheduler/lock load evidence.
 
-This release does **not** include a CLI/daemon interactive approval workflow, a precise provider tokenizer, strong OS isolation, UI/REST integration for background subagents, a TUI, the Vue migration, or independently measured three-runtime benchmarks. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
+This release does **not** include a CLI/daemon interactive approval workflow, a precise provider tokenizer, strong OS isolation, desktop UI integration for background subagents, a TUI, the Vue migration, or a real-model adjudicated three-runtime quality benchmark. The Mock matrix validates plumbing only. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
 
 ## Start on Windows
 
@@ -42,7 +43,7 @@ cd '<your Doppel-Agent repository directory>'
 .\doppel.cmd ui
 ```
 
-Start the v0.11 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs`, versioned endpoints are under `/api/v1`, and run mode may be `legacy`, `graph`, or `deep`.
+Start the v0.12 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs`, versioned endpoints are under `/api/v1`, and run mode may be `legacy`, `graph`, or `deep`. A parent run created with `permissions.delegate=true` owns the nested `/runs/{run_id}/subagents` lifecycle endpoints.
 
 Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), open **Model & API** in the lower-left corner, enter the endpoint, model and key, test, save, then start a conversation. Conversations and settings live under the selected workspace's `.doppel-agent/`; the key is stored only as a current-user Windows DPAPI ciphertext and is never returned by the settings API.
 
