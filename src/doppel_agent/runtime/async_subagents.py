@@ -271,6 +271,19 @@ class AsyncSubagentManager:
 
     async def follow_up(self, subagent_id: str, prompt: str) -> dict[str, Any]:
         prompt = self._validate_prompt(prompt)
+        # The runner persists ``completed`` before emitting the completion event.
+        # A client can therefore observe the durable terminal state while the
+        # scheduler still owns the previous generation. Wait for that generation
+        # to be released before reusing the stable subagent id. Completed records
+        # restored after a process restart have no in-memory scheduler job.
+        try:
+            await self.scheduler.wait(subagent_id)
+        except KeyError:
+            pass
+        except Exception:
+            # A post-persistence event-sink failure must not make a durable,
+            # completed child impossible to continue.
+            pass
         record = await asyncio.to_thread(self.store.follow_up, subagent_id, prompt)
         await self._submit(record)
         await self.sink.emit(

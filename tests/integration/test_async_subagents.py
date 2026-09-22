@@ -69,6 +69,52 @@ class AsyncSubagentIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(seen[1].history[0]["answer"], "answer-1")
             await manager.close()
 
+    async def test_follow_up_waits_until_completed_generation_is_released_by_scheduler(self):
+        class BlockingCompletedSink:
+            def __init__(self):
+                self.completed_persisted = asyncio.Event()
+                self.release = asyncio.Event()
+
+            async def emit(self, event_type, **payload):
+                if event_type == "subagent.completed":
+                    self.completed_persisted.set()
+                    await self.release.wait()
+
+        async def runner(request):
+            return f"answer-{request.generation if hasattr(request, 'generation') else 'ok'}"
+
+        with tempfile.TemporaryDirectory() as directory:
+            sink = BlockingCompletedSink()
+            manager = AsyncSubagentManager(
+                Path(directory) / "subagents.sqlite3",
+                runner,
+                sink=sink,
+            )
+            record = await manager.spawn("parent", "first")
+            await sink.completed_persisted.wait()
+            persisted = await manager.get(record["subagent_id"])
+            self.assertEqual(persisted["status"], "completed")
+
+            follow_task = asyncio.create_task(
+                manager.follow_up(record["subagent_id"], "clarify")
+            )
+            try:
+                await asyncio.sleep(0.1)
+                self.assertFalse(
+                    follow_task.done(),
+                    "follow-up must wait for scheduler cleanup after persisted completion",
+                )
+                sink.release.set()
+                followed = await follow_task
+                self.assertEqual(followed["generation"], 2)
+                await manager.wait(record["subagent_id"])
+            finally:
+                sink.release.set()
+                if not follow_task.done():
+                    follow_task.cancel()
+                await asyncio.gather(follow_task, return_exceptions=True)
+                await manager.close()
+
     async def test_running_subagent_can_be_cancelled(self):
         started = asyncio.Event()
 

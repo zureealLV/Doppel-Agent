@@ -4,6 +4,7 @@
 
 - 新增 `.gitattributes`，强制 `frontend/**` 与生产 bundle 使用 LF；修复 Windows Runner checkout 为 CRLF、Vite 重建为 LF 时产生的伪差异。
 - 可复现性门禁继续使用严格的 `git diff --exit-code`，不忽略行尾差异；发布前额外从干净 worktree 重建验证。
+- 修复子 Agent 已持久化 `completed`、但 scheduler 尚未释放同一 ID 时立即 follow-up 偶发返回 409 的竞态；现在追问会等待上一代任务完成清理再复用稳定 ID。
 
 ## v0.13.1 — 2026-09-22
 

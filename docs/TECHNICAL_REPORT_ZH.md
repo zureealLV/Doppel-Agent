@@ -21,7 +21,7 @@ Doppel Agent 是一个面向本地代码审查与编程任务的 Windows Agent�
 | Web 内核 | Microsoft Edge WebView2 | 153.0.4234.48 | 渲染桌面端 HTML/CSS/JavaScript |
 | 凭据保护 | Windows DPAPI | 当前用户作用域 | 加密保存模型 API Key，前端无法取回明文 |
 | 打包 | PyInstaller | 6.22.3 onedir | 生成无控制台窗口的 Windows EXE |
-| 验证 | pytest、Vitest、vue-tsc、Vite、Ruff、compileall | 140 passed + 1 Windows symlink skip；前端 5 tests | 回归 Workbench、子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
+| 验证 | pytest、Vitest、vue-tsc、Vite、Ruff、compileall | 141 passed + 1 Windows symlink skip；前端 5 tests | 回归 Workbench、子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
 
 ## 3. 核心架构
 
@@ -184,7 +184,7 @@ AgentRuntime
 
 ## 10. 验收证据
 
-- pytest：发布前本地全量门禁为 `140 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
+- pytest：发布前本地全量门禁为 `141 passed, 1 skipped`；skip 仅为当前 Windows 未授予 symlink 创建权限，CI 环境继续执行该用例。
 - Ruff correctness gate：`ruff check src tests bench spikes` 通过。
 - Python：`compileall` 通过。
 - Frontend：Vitest、`vue-tsc --noEmit`、Vite production build 与 committed bundle diff gate 通过。
