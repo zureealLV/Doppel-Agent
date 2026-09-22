@@ -10,6 +10,9 @@ export default defineConfig({
   build: {
     outDir: "../src/doppel_agent/web/frontend_dist",
     emptyOutDir: true,
-    sourcemap: true,
+    // Do not ship source maps in the release bundle. Vite embeds sourcesContent,
+    // whose checkout line endings made the committed artifact differ across
+    // Windows machines even though the executable JavaScript was identical.
+    sourcemap: false,
   },
 });

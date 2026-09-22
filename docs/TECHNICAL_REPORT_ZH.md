@@ -1,4 +1,4 @@
-# Doppel Agent v0.13.0 技术汇报
+# Doppel Agent v0.13.1 技术汇报
 
 ## 1. 项目定位
 
@@ -53,7 +53,7 @@ AgentRuntime
 
 运行记录按任务 ID 写入 `.doppel-agent/runs/`，包含事件流、工具轨迹和会话结果。对话历史存入 SQLite，并会作为后续消息的真实模型上下文，而不是只在界面中展示。
 
-## 4. v0.13.0 本轮交付
+## 4. v0.13.0-v0.13.1 本轮交付
 
 ### Vue Runtime Workbench
 
@@ -193,7 +193,7 @@ AgentRuntime
 - HTML 标签栈检查通过。
 - 隔离工作区中连续点击“新对话”与“代码审查”：每类空草稿仅 1 个、消息数 0、运行数 0。
 - Chromium 实际渲染检查通过：Runtime Workbench 在桌面/手机/横屏断点无横向溢出，真实 Graph run 完成后答案、六个 durable events 与精确耗时可见；旧页入口保持可用。
-- PyInstaller 6.22.3 onedir EXE 已重新生成并在隔离工作区冷启动；随机 loopback v1 health 与 `/runtime/` 返回 200，详见 `docs/releases/v0.13.0.md`。
+- PyInstaller 6.22.3 onedir EXE 已重新生成并在隔离工作区冷启动；随机 loopback v1 health 与 `/runtime/` 返回 200，详见 `docs/releases/v0.13.1.md`。
 
 ## 11. 安全与成本边界
 

@@ -1,5 +1,10 @@
 # 更新记录
 
+## v0.13.1 — 2026-09-22
+
+- 修复 Windows GitHub Actions 重建前端 bundle 时 source map 因 checkout 换行差异产生非确定内容的问题；生产构建不再发布 `.js.map`，浏览器执行的 JS/CSS 不变。
+- 保留 `v0.13.0` 历史标签与失败 CI 作为可审计记录，不移动已发布标签；以补丁版本重新执行分支与标签双流水线门禁。
+
 ## v0.13.0 — 2026-09-22
 
 - 新增 Vue 3.5 + TypeScript 5.9 + Vite 7 Runtime Workbench，并以 `/runtime/` 与旧对话工作台并行提供；在功能完全对齐前不冒险替换已稳定的旧界面。
