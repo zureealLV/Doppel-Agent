@@ -1,5 +1,10 @@
 # 更新记录
 
+## v0.13.2 — 2026-09-22
+
+- 新增 `.gitattributes`，强制 `frontend/**` 与生产 bundle 使用 LF；修复 Windows Runner checkout 为 CRLF、Vite 重建为 LF 时产生的伪差异。
+- 可复现性门禁继续使用严格的 `git diff --exit-code`，不忽略行尾差异；发布前额外从干净 worktree 重建验证。
+
 ## v0.13.1 — 2026-09-22
 
 - 修复 Windows GitHub Actions 重建前端 bundle 时 source map 因 checkout 换行差异产生非确定内容的问题；生产构建不再发布 `.js.map`，浏览器执行的 JS/CSS 不变。

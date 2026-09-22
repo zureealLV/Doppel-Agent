@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doppel-agent"
-version = "0.13.1"
+version = "0.13.2"
 description = "A local coding-agent runtime built as an independent study project"
 readme = "README.md"
 requires-python = ">=3.11"

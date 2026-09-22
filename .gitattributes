@@ -1,0 +1,4 @@
+# Frontend sources and generated release assets must be byte-stable on Windows
+# and POSIX runners. Vite emits LF, so checkout must not rewrite them to CRLF.
+frontend/** text eol=lf
+src/doppel_agent/web/frontend_dist/** text eol=lf

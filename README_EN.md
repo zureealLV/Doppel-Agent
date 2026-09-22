@@ -4,7 +4,7 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README.md) · English**
 
-## Current release: v0.13.1
+## Current release: v0.13.2
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
@@ -74,4 +74,4 @@ The web console binds to `127.0.0.1` and rejects cross-origin requests. Web writ
 
 Releases use version increments and a [changelog](CHANGELOG.md). The architecture was informed by the public description of [TackleClaude](https://github.com/Tackle-B/TackleClaude), but this repository is an independent implementation and does not claim its published benchmarks.
 
-See the [v0.13.1 release evidence and next-stage plan](docs/releases/v0.13.1.md) for exact gates, limitations, and the v0.14/v1.0 roadmap.
+See the [v0.13.2 release evidence and next-stage plan](docs/releases/v0.13.2.md) for exact gates, limitations, and the v0.14/v1.0 roadmap.
