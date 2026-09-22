@@ -95,6 +95,44 @@ class RuntimeRunStore:
             )
         return cursor.rowcount == 1
 
+    def recover_incomplete(
+        self, error: str = "service restarted before completion"
+    ) -> list[dict[str, Any]]:
+        """Atomically terminalize durable runs whose in-memory lease was lost."""
+        now = datetime.now(UTC).isoformat()
+        recovered: list[dict[str, Any]] = []
+        with sqlite_connection(self.database) as connection:
+            rows = connection.execute(
+                "SELECT * FROM runtime_runs WHERE status IN ('queued','running') ORDER BY created_at"
+            ).fetchall()
+            for row in rows:
+                previous = row["status"]
+                connection.execute(
+                    "UPDATE runtime_runs SET status='failed',error=?,updated_at=?,finished_at=? "
+                    "WHERE run_id=? AND status=?",
+                    (error, now, now, row["run_id"], previous),
+                )
+                payload = json.dumps(
+                    {"previous": previous, "status": "failed", "error": error},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                connection.execute(
+                    "INSERT INTO runtime_events(run_id,thread_id,type,timestamp,payload_json) "
+                    "VALUES(?,?,?,?,?)",
+                    (row["run_id"], row["thread_id"], "run.recovered_after_restart", now, payload),
+                )
+                recovered.append(
+                    {
+                        "run_id": row["run_id"],
+                        "thread_id": row["thread_id"],
+                        "previous": previous,
+                        "status": "failed",
+                        "error": error,
+                    }
+                )
+        return recovered
+
     @staticmethod
     def _decode(row: sqlite3.Row) -> dict[str, Any]:
         return {

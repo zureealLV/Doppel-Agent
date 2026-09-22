@@ -21,6 +21,7 @@
 | P8 Deep Agents / Skills / MCP Gateway | `runtime/deep*.py`、`skills/{spec,registry,resolver}.py`、`mcp/` | 不绕过 Policy Gateway；Skill 与 transport 分层；Deep/MCP HITL 可恢复 | v0.10.0 已完成；三运行时正式对照属于 v0.12，详见详细计划 |
 | P9 Patch / Verification / Process / Async Subagents | `workspace/{patching,verification,process_supervisor}.py`、`runtime/async_subagents.py` | 具体 diff 审批；旧 base 冲突；allowlist 验证；取消进程树；后台子任务查询/追问/取消 | v0.11 完成运行层；v0.12 完成 REST/本地压测；v0.13 完成 diff、审批、事件与子 Agent UI。外部故障场景待做 |
 | P10 Runtime Observability UI | `frontend/`、`web/frontend_dist/`、静态资产安全路由与 frontend CI | 375/768/1024/1440；SSE 回放；Graph/Skill/MCP/Patch/子 Agent 分类；HITL 三种决定；无路径穿越 | v0.13.2 已完成；完整替换旧对话/设置页需先达到功能 parity |
+| P11 Fault Injection & Recovery | `bench/fault_matrix.py`、Provider half-open、MCP generation cache、restart reconciliation | 固定 10 场景；原始结果/分母/失败原因；副作用不重复；重启后明确终态 | v0.14.0 已完成；真实外部服务 chaos 不在本地 fixture 结论内 |
 
 ## P1 实现/验证明细
 
@@ -48,7 +49,7 @@ Web 控制台验收：运行 `.\doppel.cmd ui`，访问 `http://127.0.0.1:8766/`
 
 ## 版本发布规则
 
-- `v0.1.0`：本地运行时 MVP；`v0.2.0`：Web 控制台、任务 DAG、上下文治理、Skill 与审批；`v0.3.0`：stdio MCP；`v0.4.0`：限额只读子任务；`v0.5.0`：代码审查样本；`v0.6.0`：Windows GUI；`v0.7.0`：三栏 Agent UI、持久对话、DPAPI 设置与真实项目审查；`v0.8.x`：桌面交互打磨；`v0.9.0`：LangGraph、FastAPI、持久 SSE 与受控并发基础；`v0.10.0`：Deep Agents、Agent Skills Registry 与 MCP SDK Gateway；`v0.11.0`：diff-first patch、allowlist verification、Windows 进程树监督与异步子 Agent 运行层；`v0.12.0`：异步子 Agent REST、固定三运行时协议、180-run Mock smoke 与本地并发证据；`v0.13.0`：Vue/TypeScript Runtime Workbench、SSE 可观测时间线、HITL/Diff/子 Agent UI 与 frontend CI；`v0.13.1`：移除生产 source map；`v0.13.2`：以 `.gitattributes` 固定 frontend 与 bundle 为 LF，恢复跨 checkout 的字节级可复现门禁。
+- `v0.1.0`：本地运行时 MVP；`v0.2.0`：Web 控制台、任务 DAG、上下文治理、Skill 与审批；`v0.3.0`：stdio MCP；`v0.4.0`：限额只读子任务；`v0.5.0`：代码审查样本；`v0.6.0`：Windows GUI；`v0.7.0`：三栏 Agent UI、持久对话、DPAPI 设置与真实项目审查；`v0.8.x`：桌面交互打磨；`v0.9.0`：LangGraph、FastAPI、持久 SSE 与受控并发基础；`v0.10.0`：Deep Agents、Agent Skills Registry 与 MCP SDK Gateway；`v0.11.0`：diff-first patch、allowlist verification、Windows 进程树监督与异步子 Agent 运行层；`v0.12.0`：异步子 Agent REST、固定三运行时协议、180-run Mock smoke 与本地并发证据；`v0.13.0`：Vue/TypeScript Runtime Workbench、SSE 可观测时间线、HITL/Diff/子 Agent UI 与 frontend CI；`v0.13.1`：移除生产 source map；`v0.13.2`：以 `.gitattributes` 固定 frontend 与 bundle 为 LF，恢复跨 checkout 的字节级可复现门禁；`v0.14.0`：10 场景故障注入、单探针 half-open、MCP schema 重连失效与重启 lease 原子收敛。
 - 后续扩展、基准按功能版本迭代；TUI 不再优先。每次推送前更新 `pyproject.toml`、`__version__`、README 状态和 `CHANGELOG.md`，跑完整测试并打同名 tag。
 - GitHub 发布必须校验远端仓库、推送后的分支 SHA 与 tag；不能把本地提交当成远端发布。
 

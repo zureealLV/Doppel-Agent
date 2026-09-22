@@ -163,6 +163,23 @@ class ProviderCircuitOpen(RuntimeError):
     """The provider profile is temporarily blocked after repeated failures."""
 
 
+class ProviderRequestError(RuntimeError):
+    """Terminal provider failure with a stable machine-readable class."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: str,
+        attempts: int,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.attempts = attempts
+        self.status_code = status_code
+
+
 class AsyncOpenAICompatibleProvider:
     """Long-lived async provider with bounded retry and a small circuit breaker."""
 
@@ -179,6 +196,7 @@ class AsyncOpenAICompatibleProvider:
         circuit_reset_seconds: float = 30,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         random_source: Callable[[], float] = random.random,
+        clock: Callable[[], float] = time.monotonic,
     ):
         import httpx
 
@@ -204,8 +222,11 @@ class AsyncOpenAICompatibleProvider:
         self.circuit_reset_seconds = circuit_reset_seconds
         self._sleep = sleep
         self._random = random_source
+        self._clock = clock
         self._failures = 0
         self._open_until = 0.0
+        self._half_open_probe = False
+        self._circuit_lock = asyncio.Lock()
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(connect=10, read=60, write=30, pool=10),
@@ -230,12 +251,37 @@ class AsyncOpenAICompatibleProvider:
             return requested
         return min(4.0, 0.25 * (2**attempt)) * (0.75 + self._random() * 0.5)
 
+    async def _enter_circuit(self) -> bool:
+        """Return whether this request owns the single half-open probe slot."""
+        async with self._circuit_lock:
+            if self._failures < self.circuit_failure_threshold:
+                return False
+            if self._clock() < self._open_until or self._half_open_probe:
+                raise ProviderCircuitOpen("provider circuit is open")
+            self._half_open_probe = True
+            return True
+
+    async def _record_success(self) -> None:
+        async with self._circuit_lock:
+            self._failures = 0
+            self._open_until = 0.0
+            self._half_open_probe = False
+
+    async def _record_failure(self) -> None:
+        async with self._circuit_lock:
+            self._failures += 1
+            if self._failures >= self.circuit_failure_threshold:
+                self._open_until = self._clock() + self.circuit_reset_seconds
+            self._half_open_probe = False
+
+    async def _release_probe(self) -> None:
+        async with self._circuit_lock:
+            self._half_open_probe = False
+
     async def anext_turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> ModelTurn:
         import httpx
 
-        now = time.monotonic()
-        if now < self._open_until:
-            raise ProviderCircuitOpen("provider circuit is open")
+        is_half_open_probe = await self._enter_circuit()
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [message.to_api() for message in messages],
@@ -246,7 +292,7 @@ class AsyncOpenAICompatibleProvider:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        deadline = time.monotonic() + self.retry_budget_seconds
+        deadline = self._clock() + self.retry_budget_seconds
         last_error: Exception | None = None
         for attempt in range(self.max_attempts):
             try:
@@ -278,7 +324,7 @@ class AsyncOpenAICompatibleProvider:
                     else None
                 )
                 delay = self._backoff(attempt, retry_after)
-                if time.monotonic() + delay > deadline:
+                if self._clock() + delay > deadline:
                     break
                 if self._sleep is None:
                     await asyncio.sleep(delay)
@@ -286,17 +332,33 @@ class AsyncOpenAICompatibleProvider:
                     await self._sleep(delay)
                 continue
             except asyncio.CancelledError:
+                if is_half_open_probe:
+                    await self._release_probe()
                 raise
             else:
-                self._failures = 0
-                self._open_until = 0.0
+                await self._record_success()
                 return result
-        self._failures += 1
-        if self._failures >= self.circuit_failure_threshold:
-            self._open_until = time.monotonic() + self.circuit_reset_seconds
+        await self._record_failure()
+        attempts = attempt + 1
         if isinstance(last_error, httpx.HTTPStatusError):
-            raise RuntimeError(f"provider HTTP {last_error.response.status_code}") from last_error
-        raise RuntimeError("provider request failed") from last_error
+            status_code = last_error.response.status_code
+            raise ProviderRequestError(
+                f"provider HTTP {status_code}",
+                kind="rate_limited" if status_code == 429 else "http_status",
+                attempts=attempts,
+                status_code=status_code,
+            ) from last_error
+        if isinstance(last_error, httpx.TimeoutException):
+            raise ProviderRequestError(
+                "provider timeout", kind="timeout", attempts=attempts
+            ) from last_error
+        if isinstance(last_error, httpx.NetworkError):
+            raise ProviderRequestError(
+                "provider connection failed", kind="connection", attempts=attempts
+            ) from last_error
+        raise ProviderRequestError(
+            "provider request failed", kind="unknown", attempts=attempts
+        ) from last_error
 
     async def aclose(self) -> None:
         if self._owns_client:

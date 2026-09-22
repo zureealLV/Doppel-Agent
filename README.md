@@ -4,7 +4,7 @@
 
 **语言：简体中文 · [English introduction](README_EN.md)**
 
-> 当前版本：`v0.13.2`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+> 当前版本：`v0.14.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
 
@@ -17,10 +17,10 @@
 - **项目验证流水线**：`.doppel/verification.json` 只允许项目预先配置的 argv；补丁批准后可自动运行测试/静态检查并返回结构化结果，不接受模型生成的 shell 字符串。
 - **可取消进程树**：Windows 优先 Job Object，无法绑定时显式记录 `taskkill /T` 降级；取消、超时和关闭服务都会清理命令及其后代进程。
 - **异步子 Agent API**：同进程后台子任务使用有界调度与 SQLite 生命周期；父 run 显式授予 `delegate` 后，可经 FastAPI 创建、列出、查询、追问和取消。请求固定只读并禁止递归委派，生命周期事件进入父 run 的持久时间线。
-- **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。
+- **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。服务重启会把失去内存 lease 的 queued/running 记录原子收敛为失败终态并追加恢复事件。
 - **Vue Runtime Workbench**：Vue 3 + TypeScript + Vite 三栏运行时界面位于 `/runtime/`，可选择 legacy/graph/deep，实时展示队列与执行耗时、Graph/Skill/MCP/子 Agent/补丁事件、HITL 审批、真实 unified diff 和子 Agent 生命周期。
 - **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
-- **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试。
+- **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试；reset window 只允许一个 half-open probe。
 - **审查工具**：工作区文件图、递归文本检索、按行读取、普通读写与 argv 命令；审查优先窄化范围，减少整文件上下文浪费。
 - **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
 - **模型接入**：支持多个 OpenAI-compatible 模型档案（名称、Base URL、模型、Key 与可选单价），可在每个对话中切换，也提供离线 Mock。
@@ -32,7 +32,7 @@
 - **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
 - **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
 - **Agent Skills Registry**：兼容 `.doppel/skills/`，并支持 `skills/`；校验 frontmatter、唯一名称、大小、链接路径和疑似明文密钥，通过 progressive disclosure 先暴露摘要、命中后再加载正文。仓库内置 code-review、bugfix、test-repair、mcp-operations 四个工作流 Skill。
-- **MCP SDK Gateway**：支持 stdio 与 Streamable HTTP；统一 session 生命周期、健康探针、重连、分页 catalog、schema 缓存、每服务器 semaphore、参数校验、HITL、幂等、审计以及文本/图片/音频/resource/structured content。模型只看到规范化的 `mcp__server__tool`，不能绕过网关直连。
+- **MCP SDK Gateway**：支持 stdio 与 Streamable HTTP；统一 session 生命周期、健康探针、重连、分页 catalog、按连接 generation 失效的 schema 缓存、每服务器 semaphore、参数校验、HITL、幂等、审计以及文本/图片/音频/resource/structured content。模型只看到规范化的 `mcp__server__tool`，不能绕过网关直连。
 - **只读子任务**：按次启用委派，子任务最多两次、每次最多四轮，只能读取工作区，不能继续委派；会产生额外模型调用与费用。
 - **常驻 Core**：CLI 与 daemon 使用 localhost JSON-RPC/NDJSON 通信。
 
@@ -64,7 +64,7 @@ cd '<你的 Doppel-Agent 仓库目录>'
 
 不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
 
-### v0.13 Runtime API 与 Workbench
+### v0.14 Runtime API 与 Workbench
 
 ```powershell
 python -m pip install -e ".[agent]"
@@ -83,9 +83,10 @@ python -m pip install -e ".[agent]"
 uv run --extra agent python bench/runtime_matrix.py --output .bench-results/runtime-protocol.json
 uv run --extra agent python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
 uv run --extra agent python bench/run_load.py --output .bench-results/load.json
+uv run --extra agent python -m bench.fault_matrix --output .bench-results/fault-matrix.json
 ```
 
-v0.12 固定了 20 个 case、三种 runtime、每题三次的 180-run 协议，并完成 180/180 次离线 Mock runtime-path smoke。该结果只证明三条执行链能跑通，`task_score` 明确保留为 `null`，不代表真实模型编程成功率。提交的本地负载报告记录 100 个任务下 active 峰值、队列拒绝、工作区读写互斥和取消结果；Provider 429、MCP 断连、慢 SSE 与重启 lease 仍需单独实测。
+v0.12 固定了 20 个 case、三种 runtime、每题三次的 180-run 协议，并完成 180/180 次离线 Mock runtime-path smoke。该结果只证明三条执行链能跑通，`task_score` 明确保留为 `null`，不代表真实模型编程成功率。v0.14 又提交了 10/10 确定性故障场景，覆盖 Provider、MCP、SSE、重启 lease 与进程超时；它同样使用固定本地替身，只证明故障策略，不代表外部服务可用性或模型质量。
 
 ### 命令行
 
@@ -143,4 +144,4 @@ Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Wind
 
 版本按功能迭代发布；每次推送应更新版本号、[更新记录](CHANGELOG.md)并通过测试。项目独立开发，设计上参考了 [TackleClaude](https://github.com/Tackle-B/TackleClaude) 对本地 Agent 运行时的公开介绍；没有复制其源码，也不沿用其成本、成功率等数据。
 
-v0.13.2 的逐项发布证据、技术版本与 v0.14/v1.0 路线见 [v0.13.2 发布证据与下一阶段](docs/releases/v0.13.2.md)。
+v0.14.0 的逐项发布证据、原始故障矩阵与 v0.15/v1.0 路线见 [v0.14.0 发布证据与下一阶段](docs/releases/v0.14.0.md)。

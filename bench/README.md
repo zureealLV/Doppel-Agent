@@ -35,3 +35,17 @@ The script itself does **not** assign a success percentage.
 This is one small acceptance case, **not** a general coding-agent benchmark.
 A broader claim needs multiple repositories/tasks, a fixed model and prompt,
 repeat runs, a baseline, denominators, false positives, and real token pricing.
+
+## Deterministic fault matrix
+
+Run the v0.14 offline reliability gate with:
+
+```powershell
+uv run --extra agent python -m bench.fault_matrix --output .bench-results/fault-matrix.json
+```
+
+The ten fixed scenarios cover Provider retry/circuit behavior, MCP ambiguous
+disconnect and schema reconnect behavior, slow resumable SSE, restart lease
+reconciliation, and process timeout cleanup. Every result stores the injected
+fault, expected policy, raw observation, pass bit, and failure reason. These
+fixed transports are systems evidence, not live-provider or model-quality data.

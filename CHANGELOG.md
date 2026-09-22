@@ -1,5 +1,13 @@
 # 更新记录
 
+## v0.14.0 — 2026-09-22
+
+- 新增 10 场景确定性故障注入矩阵，覆盖 Provider 429/连接拒绝/读取超时/5xx/半开熔断、MCP 模糊断连与 schema 重连、慢 SSE 回放、服务重启 lease 收敛和命令超时清理；提交原始观察值、固定分母及失败原因字段，不冒充真实模型质量成绩。
+- Provider circuit breaker 在 reset window 只允许一个 half-open probe；并发请求不会同时穿透刚恢复的上游，probe 成功后才关闭熔断。
+- MCP client 为每次成功建连维护单调 session generation；即使 server name/version 未变，重连也会使 catalog schema cache 失效，避免沿用旧参数 schema。
+- Runtime service 启动时以单个 SQLite 事务把遗留 `queued`/`running` 运行收敛为 `failed`，同时追加 `run.recovered_after_restart` 持久事件，SSE 可继续按序回放明确终态。
+- 发布门禁扩展为 146 passed、1 skipped，并保留 Windows 进程树后代清理、MCP 副作用不重复、前端构建、Python 包与桌面冷启动验证。
+
 ## v0.13.2 — 2026-09-22
 
 - 新增 `.gitattributes`，强制 `frontend/**` 与生产 bundle 使用 LF；修复 Windows Runner checkout 为 CRLF、Vite 重建为 LF 时产生的伪差异。

@@ -19,7 +19,7 @@ def _slug(value: str) -> str:
 class MCPToolCatalog:
     def __init__(self, manager: MCPClientManager) -> None:
         self.manager = manager
-        self._cache: dict[str, tuple[str, tuple[MCPToolDescriptor, ...]]] = {}
+        self._cache: dict[str, tuple[str, int, tuple[MCPToolDescriptor, ...]]] = {}
         self._logical: dict[str, MCPToolDescriptor] = {}
 
     @staticmethod
@@ -53,9 +53,15 @@ class MCPToolCatalog:
     async def list_server(self, server: str, *, refresh: bool = False) -> tuple[MCPToolDescriptor, ...]:
         managed = await self.manager.get(server)
         cache_key = managed.metadata.cache_key
+        generation = self.manager.generation(server)
         cached = self._cache.get(server)
-        if cached is not None and cached[0] == cache_key and not refresh:
-            return cached[1]
+        if (
+            cached is not None
+            and cached[0] == cache_key
+            and cached[1] == generation
+            and not refresh
+        ):
+            return cached[2]
 
         async def collect(session: Any) -> list[Any]:
             from mcp import types
@@ -72,17 +78,18 @@ class MCPToolCatalog:
 
         raw_tools = await self.manager.call(server, collect, reconnect=True)
         cache_key = (await self.manager.get(server)).metadata.cache_key
+        generation = self.manager.generation(server)
         descriptors = tuple(self._descriptor(server, tool) for tool in raw_tools)
         logical_names = [item.logical_name for item in descriptors]
         if len(logical_names) != len(set(logical_names)):
             raise ValueError(f"MCP tool name collision on server {server}")
         previous = self._cache.get(server)
-        if previous and tuple(item.schema_hash for item in previous[1]) != tuple(
+        if previous and tuple(item.schema_hash for item in previous[2]) != tuple(
             item.schema_hash for item in descriptors
         ):
-            for item in previous[1]:
+            for item in previous[2]:
                 self._logical.pop(item.logical_name, None)
-        self._cache[server] = (cache_key, descriptors)
+        self._cache[server] = (cache_key, generation, descriptors)
         for descriptor in descriptors:
             if descriptor.logical_name in self._logical and self._logical[descriptor.logical_name] != descriptor:
                 raise ValueError(f"duplicate logical MCP tool: {descriptor.logical_name}")

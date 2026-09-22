@@ -22,6 +22,7 @@ class MCPClientManager:
         self._clients: dict[str, ManagedMCPSession] = {}
         self._stacks: dict[str, AsyncExitStack] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._generations: dict[str, int] = {}
         self._semaphores = {
             name: asyncio.Semaphore(server.max_concurrency) for name, server in config.servers.items()
         }
@@ -106,7 +107,12 @@ class MCPClientManager:
             )
             self._stacks[name] = stack
             self._clients[name] = managed
+            self._generations[name] = self._generations.get(name, 0) + 1
             return managed
+
+    def generation(self, name: str) -> int:
+        """Monotonic in-process session generation used by schema caches."""
+        return self._generations.get(name, 0)
 
     async def _discard(self, name: str) -> None:
         client = self._clients.pop(name, None)

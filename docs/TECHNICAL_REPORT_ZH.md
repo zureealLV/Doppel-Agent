@@ -1,4 +1,4 @@
-# Doppel Agent v0.13.2 技术汇报
+# Doppel Agent v0.14.0 技术汇报
 
 ## 1. 项目定位
 
@@ -21,7 +21,7 @@ Doppel Agent 是一个面向本地代码审查与编程任务的 Windows Agent�
 | Web 内核 | Microsoft Edge WebView2 | 153.0.4234.48 | 渲染桌面端 HTML/CSS/JavaScript |
 | 凭据保护 | Windows DPAPI | 当前用户作用域 | 加密保存模型 API Key，前端无法取回明文 |
 | 打包 | PyInstaller | 6.22.3 onedir | 生成无控制台窗口的 Windows EXE |
-| 验证 | pytest、Vitest、vue-tsc、Vite、Ruff、compileall | 141 passed + 1 Windows symlink skip；前端 5 tests | 回归 Workbench、子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
+| 验证 | pytest、Vitest、vue-tsc、Vite、Ruff、compileall | 146 passed + 1 Windows symlink skip；前端 5 tests；故障矩阵 10/10 | 回归 Workbench、故障恢复、子 Agent REST、矩阵协议、负载、Patch/Verification/Deep/Graph/MCP 与既有安全边界 |
 
 ## 3. 核心架构
 
@@ -53,7 +53,15 @@ AgentRuntime
 
 运行记录按任务 ID 写入 `.doppel-agent/runs/`，包含事件流、工具轨迹和会话结果。对话历史存入 SQLite，并会作为后续消息的真实模型上下文，而不是只在界面中展示。
 
-## 4. v0.13.0-v0.13.2 本轮交付
+## 4. v0.13.0-v0.14.0 本轮交付
+
+### v0.14 故障注入与恢复
+
+- `bench/fault_matrix.py` 固定 10 个场景，逐项落盘 injected fault、expected policy、raw observed、pass 和 failure reason；提交报告为 10/10，通过范围只限离线系统策略。
+- Provider 熔断器加入异步锁保护的单 half-open probe；429 尊重 Retry-After，连接失败、读取超时与 5xx 均受 attempt/retry budget 约束。
+- MCP session 每次成功重连递增 generation，catalog schema cache 同时绑定 generation 与服务 metadata；模糊断连后的副作用工具调用保持不自动重试。
+- RunService 启动前以单个 SQLite 事务将遗留 queued/running lease 收敛为 failed，并追加可由 SSE 顺序回放的 `run.recovered_after_restart` 事件。
+- 慢 SSE 消费者、命令超时清理和父子进程树取消均有确定性回归；这不等于真实网络 chaos 或真实模型质量评测。
 
 ### Vue Runtime Workbench
 
@@ -193,7 +201,7 @@ AgentRuntime
 - HTML 标签栈检查通过。
 - 隔离工作区中连续点击“新对话”与“代码审查”：每类空草稿仅 1 个、消息数 0、运行数 0。
 - Chromium 实际渲染检查通过：Runtime Workbench 在桌面/手机/横屏断点无横向溢出，真实 Graph run 完成后答案、六个 durable events 与精确耗时可见；旧页入口保持可用。
-- PyInstaller 6.22.3 onedir EXE 已重新生成并在隔离工作区冷启动；随机 loopback v1 health 与 `/runtime/` 返回 200，详见 `docs/releases/v0.13.2.md`。
+- PyInstaller 6.22.3 onedir EXE 已重新生成并在隔离工作区冷启动；随机 loopback v1 health 与 `/runtime/` 返回 200，详见 `docs/releases/v0.14.0.md`。
 
 ## 11. 安全与成本边界
 

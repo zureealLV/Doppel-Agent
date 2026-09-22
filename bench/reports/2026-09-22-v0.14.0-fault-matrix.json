@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2026-09-22T15:11:14.044228+00:00",
+  "environment": {
+    "platform": "Windows-10-10.0.22631-SP0",
+    "python": "3.11.15"
+  },
+  "denominator": 10,
+  "passed_count": 10,
+  "failed_count": 0,
+  "passed": true,
+  "scenarios": {
+    "provider_429_retry_after": {
+      "injected_fault": "HTTP 429 with Retry-After=0.125",
+      "expected": "one bounded retry after the server-requested delay",
+      "observed": {
+        "attempts": 2,
+        "delays": [
+          0.125
+        ],
+        "content": "ok"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "provider_connection_refused": {
+      "injected_fault": "connection refused",
+      "expected": "two total attempts followed by an explicit terminal error",
+      "observed": {
+        "attempts": 2,
+        "failure_kind": "connection",
+        "terminal_error": "provider connection failed"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "provider_read_timeout": {
+      "injected_fault": "read timeout",
+      "expected": "two total attempts followed by an explicit terminal error",
+      "observed": {
+        "attempts": 2,
+        "failure_kind": "timeout",
+        "terminal_error": "provider timeout"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "provider_5xx": {
+      "injected_fault": "HTTP 503",
+      "expected": "bounded retry followed by status-preserving terminal error",
+      "observed": {
+        "attempts": 2,
+        "terminal_error": "provider HTTP 503"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "provider_half_open": {
+      "injected_fault": "open circuit reaches reset window under concurrent demand",
+      "expected": "exactly one half-open probe",
+      "observed": {
+        "attempts": 2,
+        "parallel_probe_blocked": true,
+        "content": "recovered"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "mcp_disconnect_no_retry": {
+      "injected_fault": "MCP disconnect after a side-effecting call is sent",
+      "expected": "invalidate session but never auto-retry the ambiguous tool call",
+      "observed": {
+        "remote_calls": 1,
+        "terminal_error": "disconnected after side effect may have committed"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "mcp_schema_reconnect": {
+      "injected_fault": "MCP reconnect with unchanged server version but changed tool schema",
+      "expected": "session generation invalidates the schema cache",
+      "observed": {
+        "sessions_opened": 2,
+        "first_hash": "6ec02e061dc0cfeac3f0cd93f8e4e3e201eebca37e1af47f53766f101abd9dd2",
+        "second_hash": "9692b51b17996d29b29dc035fa49136fd4a39e982f3df929e84ef36e465967b2"
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "sse_slow_replay": {
+      "injected_fault": "slow SSE consumer reconnects after sequence 1",
+      "expected": "ordered durable replay with no duplicate event IDs",
+      "observed": {
+        "streamed_ids": [
+          2,
+          3,
+          4
+        ],
+        "durable_ids": [
+          2,
+          3,
+          4
+        ]
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "restart_lease_recovery": {
+      "injected_fault": "service restart loses queued/running in-memory leases",
+      "expected": "atomic failed terminal states plus durable recovery events",
+      "observed": {
+        "statuses": [
+          "failed",
+          "failed"
+        ],
+        "terminal_events": [
+          "run.recovered_after_restart",
+          "run.recovered_after_restart"
+        ]
+      },
+      "passed": true,
+      "failure_reason": null
+    },
+    "process_tree_timeout": {
+      "injected_fault": "command exceeds deadline",
+      "expected": "terminate supervised process tree and release registry entry",
+      "observed": {
+        "terminal_error": "command timed out after 0.1s",
+        "active_after": 0
+      },
+      "passed": true,
+      "failure_reason": null
+    }
+  },
+  "scope_note": "Offline deterministic fault-injection evidence. Provider and MCP transports are fixed fakes; this report is not a live-model quality or external-service availability claim."
+}

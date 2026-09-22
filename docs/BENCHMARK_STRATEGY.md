@@ -28,6 +28,12 @@ Doppel Agent 不把“模型返回了一段看起来合理的文字”当作任�
 
 `bench/reports/2026-09-22-v0.12.0-load.json` 是本机确定性 scheduler/lock probe：100 个短任务在 `max_active=4` 下峰值为 4；queue overflow 明确拒绝；20 读 + 5 写保持 writer 单实例且无读写重叠；运行中取消进入 `cancelled`。它不覆盖 Provider 429、MCP 断连、慢 SSE、进程树或重启 lease，这些场景必须单独记录，不能从当前报告外推。
 
+## v0.14 故障注入证据
+
+`bench/fault_matrix.py` 固定 10 个离线场景，`bench/reports/2026-09-22-v0.14.0-fault-matrix.json` 实际记录 10/10 通过：Provider 429 + Retry-After、连接拒绝、读取超时、503 和单探针 half-open；MCP 模糊断连不重试、同版本重连后的 schema cache 失效；慢 SSE 从 `after_seq` 有序回放；服务重启把 queued/running lease 收敛为持久失败终态；命令超时后进程监督表归零。报告保留固定分母、原始观察值和逐场景失败原因字段。
+
+这些场景使用 `httpx.MockTransport`、进程内 MCP fixture 与本地 SQLite，能够证明确定性故障策略，但不能证明真实 Provider/MCP 服务的网络可用性，更不能替代真实模型质量矩阵。进程父子树取消另由 Windows/POSIX 集成测试验证。
+
 ## 为什么当前不发布 SWE-bench 分数
 
 [SWE-bench Verified](https://github.com/SWE-bench/SWE-bench/blob/main/docs/guides/datasets.md) 是从 SWE-bench 中经人工验证的 500 个任务。合格评测需要为每题检出指定仓库和基础提交，让 Agent 生成补丁，再在隔离环境中运行该题的 `FAIL_TO_PASS` 与 `PASS_TO_PASS` 测试。当前 Doppel Agent 还没有完整的仓库检出、补丁收集、容器隔离和官方 harness 接口，因此现在写一个“SWE-bench 成功率”会是伪数据。
@@ -48,6 +54,7 @@ python bench/run_review.py --env-file .env
 python bench/run_project_reviews.py --env-file .env
 python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
 python bench/run_load.py --output .bench-results/load.json
+python -m bench.fault_matrix --output .bench-results/fault-matrix.json
 ```
 
 不要提交 `.env`、`.bench-results/` 或目标项目中的私密文件。

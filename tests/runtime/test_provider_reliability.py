@@ -58,6 +58,47 @@ class AsyncProviderTests(unittest.IsolatedAsyncioTestCase):
             await provider.anext_turn([Message("user", "hello")], [])
         await client.aclose()
 
+    async def test_half_open_allows_only_one_probe(self):
+        now = [100.0]
+        probe_started = asyncio.Event()
+        release_probe = asyncio.Event()
+        attempts = 0
+
+        async def handler(request):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return httpx.Response(503, request=request)
+            probe_started.set()
+            await release_probe.wait()
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "recovered"}}]},
+                request=request,
+            )
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        provider = AsyncOpenAICompatibleProvider(
+            "https://provider.example/v1",
+            "model",
+            client=client,
+            max_attempts=1,
+            circuit_failure_threshold=1,
+            circuit_reset_seconds=5,
+            clock=lambda: now[0],
+        )
+        with self.assertRaisesRegex(RuntimeError, "provider HTTP 503"):
+            await provider.anext_turn([Message("user", "trip")], [])
+        now[0] += 6
+        probe = asyncio.create_task(provider.anext_turn([Message("user", "probe")], []))
+        await probe_started.wait()
+        with self.assertRaises(ProviderCircuitOpen):
+            await provider.anext_turn([Message("user", "must not fan out")], [])
+        release_probe.set()
+        self.assertEqual((await probe).content, "recovered")
+        self.assertEqual(attempts, 2)
+        await client.aclose()
+
     async def test_cancellation_is_not_retried(self):
         started = asyncio.Event()
 

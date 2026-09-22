@@ -131,6 +131,7 @@ class RunService:
         self.notifier = EventNotifier()
         self.provider_override = provider
         self.approval_ttl_seconds = approval_ttl_seconds
+        self._started = False
         self._providers: dict[str, Any] = {}
         self.mcp_config = load_mcp_config(self.workspace)
         self.mcp_manager = MCPClientManager(self.mcp_config) if self.mcp_config.servers else None
@@ -147,8 +148,12 @@ class RunService:
         )
 
     async def start(self) -> None:
+        if self._started:
+            return
+        await asyncio.to_thread(self.runs.recover_incomplete)
         await self.scheduler.start()
         await self.subagents.start()
+        self._started = True
 
     async def close(self) -> None:
         await self.subagents.close()

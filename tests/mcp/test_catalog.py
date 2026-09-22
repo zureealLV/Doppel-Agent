@@ -1,6 +1,8 @@
 import tempfile
 import unittest
+from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 from mcp import types
 
@@ -56,5 +58,34 @@ class MCPToolCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(first[0].title, "lookup")
             session.version = 2
             second = await catalog.list_server("demo", refresh=True)
+            self.assertNotEqual(first[1].schema_hash, second[1].schema_hash)
+            await manager.close()
+
+    async def test_reconnect_invalidates_schema_cache_even_when_server_version_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sessions = [PagedSession(), PagedSession()]
+            sessions[1].version = 2
+            opened = 0
+
+            @asynccontextmanager
+            async def rotating_connector(server):
+                nonlocal opened
+                session = sessions[opened]
+                opened += 1
+                yield session, SimpleNamespace(
+                    protocol_version="2025-06-18",
+                    server_info=SimpleNamespace(name="fake", version="1.0"),
+                    capabilities={},
+                )
+
+            manager = MCPClientManager(
+                config(Path(directory)), connector=rotating_connector
+            )
+            catalog = MCPToolCatalog(manager)
+            first = await catalog.list_server("demo")
+            await manager.invalidate("demo")
+            second = await catalog.list_server("demo")
+
+            self.assertEqual(opened, 2)
             self.assertNotEqual(first[1].schema_hash, second[1].schema_hash)
             await manager.close()
