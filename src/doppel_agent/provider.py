@@ -92,7 +92,10 @@ class MockProvider:
 
 
 class OpenAICompatibleProvider:
-    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: float = 60):
+    def __init__(
+        self, base_url: str, model: str, api_key: str = "", timeout: float = 60,
+        *, temperature: float | None = None,
+    ):
         parsed = urlparse(base_url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise ValueError("base_url must be an HTTP(S) URL")
@@ -104,10 +107,13 @@ class OpenAICompatibleProvider:
             raise ValueError("remote providers must use HTTPS")
         if not model.strip():
             raise ValueError("model is required")
+        if temperature is not None and not 0 <= temperature <= 2:
+            raise ValueError("temperature must be between 0 and 2")
         self.endpoint = base_url.rstrip("/") + "/chat/completions"
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
+        self.temperature = temperature
 
     def next_turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> ModelTurn:
         body = {
@@ -115,6 +121,8 @@ class OpenAICompatibleProvider:
             "messages": [message.to_api() for message in messages],
             "stream": False,
         }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
@@ -189,6 +197,7 @@ class AsyncOpenAICompatibleProvider:
         model: str,
         api_key: str = "",
         *,
+        temperature: float | None = None,
         client: Any | None = None,
         max_attempts: int = 3,
         retry_budget_seconds: float = 10,
@@ -211,11 +220,14 @@ class AsyncOpenAICompatibleProvider:
             raise ValueError("remote providers must use HTTPS")
         if not model.strip():
             raise ValueError("model is required")
+        if temperature is not None and not 0 <= temperature <= 2:
+            raise ValueError("temperature must be between 0 and 2")
         if max_attempts < 1 or retry_budget_seconds < 0 or circuit_failure_threshold < 1:
             raise ValueError("invalid provider reliability settings")
         self.endpoint = base_url.rstrip("/") + "/chat/completions"
         self.model = model
         self.api_key = api_key
+        self.temperature = temperature
         self.max_attempts = max_attempts
         self.retry_budget_seconds = retry_budget_seconds
         self.circuit_failure_threshold = circuit_failure_threshold
@@ -287,6 +299,8 @@ class AsyncOpenAICompatibleProvider:
             "messages": [message.to_api() for message in messages],
             "stream": False,
         }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
         if tools:
             body.update(tools=tools, tool_choice="auto")
         headers = {"Content-Type": "application/json"}

@@ -67,6 +67,24 @@ class ProviderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             OpenAICompatibleProvider("http://example.com/v1", "model")
 
+    def test_explicit_temperature_is_sent_for_reproducible_live_runs(self):
+        with workspace() as root:
+            FixtureHandler.requests = []
+            server = HTTPServer(("127.0.0.1", 0), FixtureHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                provider = OpenAICompatibleProvider(
+                    f"http://127.0.0.1:{server.server_port}/v1", "fixture", temperature=0
+                )
+                Core(root, provider, allow_write=True).run("create result.txt")
+                self.assertTrue(FixtureHandler.requests)
+                self.assertTrue(all(request["temperature"] == 0 for request in FixtureHandler.requests))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_cli_ask_with_local_provider(self):
         with workspace() as root:
             FixtureHandler.requests = []

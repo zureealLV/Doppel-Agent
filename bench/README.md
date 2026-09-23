@@ -49,3 +49,28 @@ disconnect and schema reconnect behavior, slow resumable SSE, restart lease
 reconciliation, and process timeout cleanup. Every result stores the injected
 fault, expected policy, raw observation, pass bit, and failure reason. These
 fixed transports are systems evidence, not live-provider or model-quality data.
+
+## v0.15 live matrix canary
+
+Inspect the readiness gate without a credential or paid call:
+
+```powershell
+uv run --extra agent python -m bench.live_runtime_matrix --preflight
+```
+
+The only enabled paid path is **9 read-only navigation runs** (three grounded
+cases, each on legacy/graph/deep, one repeat). The runner requires a clean Git
+checkout, archives one exact commit's tracked `src/doppel_agent`, and uses a
+fresh workspace for each run. It records every attempt, including failures, in
+ignored `.bench-results/`; a matching second invocation resumes without
+replaying recorded runs. Set `DOPPEL_AGENT_API_KEY` in the process environment
+and supply `--base-url`, `--model`, both per-million-token prices, and
+`--max-cost-usd` to execute. Do not pass the secret as an argument.
+
+`--max-cost-usd` is checked **between** serial runs and cannot prevent a single
+model request from overshooting. Missing model-reported usage stops further
+paid runs. `summary.json` is transport/accounting evidence, while
+`review_queue.json` collects answers for separate human adjudication; the
+keyword validator is not a quality score. Full 20×3×3 execution is blocked
+until independent case fixtures and equivalent runtime capabilities exist.
+See `docs/plans/2026-09-23-v0.15-live-runtime-matrix.md` for the remaining gates.
