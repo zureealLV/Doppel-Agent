@@ -24,6 +24,7 @@ from typing import Any
 from urllib.parse import urlparse
 from zipfile import ZipFile
 
+from bench.runtime_fixtures import FIXTURE_ROOT, REVIEW_CASE_IDS, materialize_review_case
 from bench.runtime_matrix import MatrixRun, RuntimeMatrix
 from doppel_agent.provider import (
     OpenAICompatibleProvider,
@@ -47,6 +48,14 @@ def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
         )
         if len(selected) != 9 or any(run.permissions for run in selected):
             raise ValueError("canary fixture protocol changed; re-audit before live use")
+        return selected
+    if mode == "review-canary":
+        selected = tuple(
+            run for run in matrix.expand()
+            if run.case_id in REVIEW_CASE_IDS and run.repeat == 1
+        )
+        if len(selected) != 12 or any(run.permissions for run in selected):
+            raise ValueError("review fixture protocol changed; re-audit before live use")
         return selected
     if mode == "full":
         raise ValueError(
@@ -193,6 +202,7 @@ async def execute_runs(
             "input_tokens": input_tokens if usage_known else None,
             "output_tokens": output_tokens if usage_known else None,
             "cost_usd": cost,
+            "fixture_sha256": observation.get("fixture_sha256") if usage_known and status == "completed" else None,
             "validator_signal": (
                 run.validator["value"].lower() in answer.lower()
                 if run.validator["type"] == "answer_contains" else
@@ -222,7 +232,7 @@ def summarize(runs: Sequence[MatrixRun], results: Sequence[dict[str, Any]]) -> d
         "human_review_pending": len(results),
         "scope_note": (
             "Runtime completion and keyword signals are not task-quality success. "
-            "This read-only navigation canary is not the 20x3x3 matrix."
+            "This read-only canary is not the 20x3x3 matrix."
         ),
     }
 
@@ -303,65 +313,85 @@ def _extract_snapshot(archive: bytes, destination: Path) -> None:
 async def _run_navigation_case(
     run: MatrixRun, *, archive: bytes, base_url: str, model: str, api_key: str,
 ) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="doppel-live-navigation-") as directory:
+        workspace = Path(directory) / "workspace"
+        workspace.mkdir()
+        _extract_snapshot(archive, workspace)
+        return await _run_prepared_case(run, workspace, base_url, model, api_key)
+
+
+async def _run_review_case(
+    run: MatrixRun, *, public_source: bytes, base_url: str, model: str, api_key: str,
+) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="doppel-live-review-") as directory:
+        workspace = Path(directory) / "workspace"
+        digest = materialize_review_case(run.case_id, workspace, public_source=public_source)
+        result = await _run_prepared_case(run, workspace, base_url, model, api_key)
+        result["fixture_sha256"] = digest
+        return result
+
+
+async def _run_prepared_case(
+    run: MatrixRun, workspace: Path, base_url: str, model: str, api_key: str,
+) -> dict[str, Any]:
     from doppel_agent.concurrency import ResourceLimits
     from doppel_agent.runtime.base import RunRequest
     from doppel_agent.runtime.factory import create_runtime
     from doppel_agent.runtime.provider_adapter import ProviderAdapter
 
-    with tempfile.TemporaryDirectory(prefix="doppel-live-canary-") as directory:
-        workspace = Path(directory)
-        _extract_snapshot(archive, workspace)
-        state_root = workspace / ".doppel-agent"
-        state_root.mkdir()
-        provider = _UsageProvider(OpenAICompatibleProvider(base_url, model, api_key, timeout=120, temperature=0))
-        runtime_provider: Any = provider
-        if run.runtime != "legacy":
-            runtime_provider = ProviderAdapter(provider, profile_id="live-canary", limits=ResourceLimits())
-        runtime = create_runtime(
-            run.runtime, workspace, runtime_provider,
-            state_root=state_root, core_options={"max_steps": 8},
+    state_root = workspace / ".doppel-agent"
+    state_root.mkdir()
+    provider = _UsageProvider(OpenAICompatibleProvider(base_url, model, api_key, timeout=120, temperature=0))
+    runtime_provider: Any = provider
+    if run.runtime != "legacy":
+        runtime_provider = ProviderAdapter(provider, profile_id="live-canary", limits=ResourceLimits())
+    runtime = create_runtime(
+        run.runtime, workspace, runtime_provider,
+        state_root=state_root, core_options={"max_steps": 8},
+    )
+    sink = _EventSink()
+    started = perf_counter()
+    try:
+        result = await runtime.run(
+            RunRequest(run.prompt, run_id=run.deterministic_run_id,
+                       thread_id=run.deterministic_run_id), sink,
         )
-        sink = _EventSink()
-        started = perf_counter()
-        try:
-            result = await runtime.run(
-                RunRequest(run.prompt, run_id=run.deterministic_run_id,
-                           thread_id=run.deterministic_run_id), sink,
-            )
-            return {
-                "status": result.status,
-                "answer": result.answer,
-                "event_types": sink.types,
-                "wall_seconds": round(perf_counter() - started, 6),
-                "input_tokens": provider.input_tokens if provider.usage_complete else None,
-                "output_tokens": provider.output_tokens if provider.usage_complete else None,
-                "failure_class": (
-                    "deep_fallback" if result.metadata.get("fallback_runtime") else None
-                ),
-            }
-        finally:
-            if run.runtime == "deep":
-                await runtime.process_supervisor.close()
+        return {
+            "status": result.status,
+            "answer": result.answer,
+            "event_types": sink.types,
+            "wall_seconds": round(perf_counter() - started, 6),
+            "input_tokens": provider.input_tokens if provider.usage_complete else None,
+            "output_tokens": provider.output_tokens if provider.usage_complete else None,
+            "failure_class": (
+                "deep_fallback" if result.metadata.get("fallback_runtime") else None
+            ),
+        }
+    finally:
+        if run.runtime == "deep":
+            await runtime.process_supervisor.close()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Grounded, resumable read-only live canary")
     parser.add_argument("--preflight", action="store_true", help="inspect protocol without paid calls")
-    parser.add_argument("--mode", choices=("canary", "full"), default="canary")
+    parser.add_argument("--mode", choices=("canary", "review-canary", "full"), default="canary")
     parser.add_argument("--base-url")
     parser.add_argument("--model")
     parser.add_argument("--input-price-per-million", type=float)
     parser.add_argument("--output-price-per-million", type=float)
     parser.add_argument("--max-cost-usd", type=float)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".bench-results" / "live-canary")
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     matrix = RuntimeMatrix.load(MANIFEST)
     if args.preflight:
         print(json.dumps({
             "canary_run_count": len(select_runs(matrix, "canary")),
             "canary_cases": list(CANARY_CASE_IDS),
+            "review_canary_run_count": len(select_runs(matrix, "review-canary")),
+            "review_cases": list(REVIEW_CASE_IDS),
             "full_matrix_ready": False,
-            "full_blocker": "review/write/approval/MCP/cancel fixtures and runtime parity absent",
+            "full_blocker": "remaining navigation/write/approval/MCP/cancel fixtures and runtime parity absent",
         }, ensure_ascii=False, indent=2))
         return 0
     try:
@@ -376,21 +406,36 @@ def main() -> int:
         if not key:
             raise ValueError("DOPPEL_AGENT_API_KEY is not configured")
         commit, archive = _git_snapshot()
+        review_sources = {
+            case_id: (FIXTURE_ROOT / case_id / "public" / "service.py").read_bytes()
+            for case_id in REVIEW_CASE_IDS
+        }
         config = {
             "schema_version": "1.0",
             "protocol_sha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
             "commit": commit,
             "snapshot_sha256": hashlib.sha256(archive).hexdigest(),
+            "review_fixture_sha256": {
+                case_id: hashlib.sha256(payload).hexdigest()
+                for case_id, payload in review_sources.items()
+            },
             "mode": args.mode,
-            "base_url": args.base_url,
+            "base_url_host": parsed.netloc,
+            "base_url_sha256": hashlib.sha256(args.base_url.encode("utf-8")).hexdigest(),
             "model": args.model,
             "temperature": 0,
             "input_price_per_million": args.input_price_per_million,
             "output_price_per_million": args.output_price_per_million,
             "max_cost_usd": args.max_cost_usd,
         }
-        store = ResultStore(args.output_dir, config)
+        output_dir = args.output_dir or ROOT / ".bench-results" / f"live-{args.mode}"
+        store = ResultStore(output_dir, config)
         async def runner(run: MatrixRun) -> dict[str, Any]:
+            if args.mode == "review-canary":
+                return await _run_review_case(
+                    run, public_source=review_sources[run.case_id],
+                    base_url=args.base_url, model=args.model, api_key=key,
+                )
             return await _run_navigation_case(
                 run, archive=archive, base_url=args.base_url, model=args.model, api_key=key,
             )

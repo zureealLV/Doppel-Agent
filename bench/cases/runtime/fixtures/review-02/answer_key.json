@@ -1,0 +1,14 @@
+{
+  "case_id": "review-02",
+  "path": "service.py",
+  "findings": [
+    {
+      "id": "tenant-sql-injection",
+      "line": 15,
+      "signature": "WHERE owner_id = '{owner_id}'",
+      "trigger": "term contains %' OR 1=1 -- and is interpolated into SQL",
+      "impact": "The tenant predicate can be bypassed and other owners' rows returned",
+      "minimal_fix": "Parameterize owner_id and the LIKE pattern instead of interpolating either value"
+    }
+  ]
+}

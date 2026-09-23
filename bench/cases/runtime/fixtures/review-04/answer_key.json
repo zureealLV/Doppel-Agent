@@ -1,0 +1,14 @@
+{
+  "case_id": "review-04",
+  "path": "service.py",
+  "findings": [
+    {
+      "id": "cancelled-worker-survives",
+      "line": 20,
+      "signature": "_cancelled.add(process.pid)",
+      "trigger": "cancel_worker is called while the subprocess is still running",
+      "impact": "The child process remains alive and consumes resources after cancellation",
+      "minimal_fix": "Terminate the child, wait with a timeout, then kill and reap it if necessary"
+    }
+  ]
+}

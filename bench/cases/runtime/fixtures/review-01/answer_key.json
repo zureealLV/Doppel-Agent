@@ -1,0 +1,14 @@
+{
+  "case_id": "review-01",
+  "path": "service.py",
+  "findings": [
+    {
+      "id": "cross-owner-read",
+      "line": 14,
+      "signature": "SELECT body FROM documents WHERE id = ?",
+      "trigger": "requester_id names Alice but document_id belongs to Bob",
+      "impact": "An authenticated user can read another owner's document body",
+      "minimal_fix": "Filter by both document id and requester_id/owner_id in the SQL query"
+    }
+  ]
+}

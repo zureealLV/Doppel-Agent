@@ -58,10 +58,17 @@ Inspect the readiness gate without a credential or paid call:
 uv run --extra agent python -m bench.live_runtime_matrix --preflight
 ```
 
-The only enabled paid path is **9 read-only navigation runs** (three grounded
-cases, each on legacy/graph/deep, one repeat). The runner requires a clean Git
+Two paid paths are enabled: **9 read-only navigation runs** (`--mode canary`)
+and **12 blind read-only review runs** (`--mode review-canary`; four seeded
+cases on legacy/graph/deep, one repeat). The review workspace contains only
+`service.py`; `answer_key.json` remains outside it. Protocol v1.1 replaces
+the review prompts that disclosed the defect type in v1.0. Historical v1.0
+mock reports must not be compared as if the prompt were unchanged.
+
+The runner requires a clean Git
 checkout, archives one exact commit's tracked `src/doppel_agent`, and uses a
-fresh workspace for each run. It records every attempt, including failures, in
+fresh workspace for each run. Review fixture bytes and SHA-256 hashes are frozen
+at the start of a run. It records every attempt, including failures, in
 ignored `.bench-results/`; a matching second invocation resumes without
 replaying recorded runs. Set `DOPPEL_AGENT_API_KEY` in the process environment
 and supply `--base-url`, `--model`, both per-million-token prices, and
@@ -71,6 +78,7 @@ and supply `--base-url`, `--model`, both per-million-token prices, and
 model request from overshooting. Missing model-reported usage stops further
 paid runs. `summary.json` is transport/accounting evidence, while
 `review_queue.json` collects answers for separate human adjudication; the
-keyword validator is not a quality score. Full 20×3×3 execution is blocked
+keyword validator is not a quality score. Use a separate `--output-dir` for
+each mode and model. Full 20×3×3 execution is blocked
 until independent case fixtures and equivalent runtime capabilities exist.
 See `docs/plans/2026-09-23-v0.15-live-runtime-matrix.md` for the remaining gates.

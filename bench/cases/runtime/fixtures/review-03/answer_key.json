@@ -1,0 +1,14 @@
+{
+  "case_id": "review-03",
+  "path": "service.py",
+  "findings": [
+    {
+      "id": "attachment-traversal",
+      "line": 7,
+      "signature": "root / filename",
+      "trigger": "filename is ../secret.txt and the sibling file exists",
+      "impact": "A caller can read bytes outside the attachment directory",
+      "minimal_fix": "Resolve the candidate path and require it to remain under the resolved attachment root"
+    }
+  ]
+}

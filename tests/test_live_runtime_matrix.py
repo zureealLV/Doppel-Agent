@@ -14,6 +14,7 @@ from bench.live_runtime_matrix import (
     CANARY_CASE_IDS,
     ResultStore,
     _run_navigation_case,
+    _run_review_case,
     classify_failure,
     execute_runs,
     review_queue,
@@ -24,7 +25,8 @@ from bench.runtime_matrix import RuntimeMatrix
 from doppel_agent.provider import ProviderRequestError
 
 
-MANIFEST = Path(__file__).resolve().parents[1] / "bench/cases/runtime/manifest.json"
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = ROOT / "bench/cases/runtime/manifest.json"
 
 
 class LiveRuntimeMatrixTests(unittest.TestCase):
@@ -42,6 +44,14 @@ class LiveRuntimeMatrixTests(unittest.TestCase):
     def test_full_matrix_fails_closed_until_all_cases_have_fixtures(self):
         with self.assertRaisesRegex(ValueError, "fixture"):
             select_runs(self.matrix, "full")
+
+    def test_review_canary_has_four_grounded_cases_for_each_runtime(self):
+        runs = select_runs(self.matrix, "review-canary")
+        self.assertEqual(len(runs), 12)
+        self.assertEqual({run.case_id for run in runs},
+                         {"review-01", "review-02", "review-03", "review-04"})
+        self.assertEqual({run.runtime for run in runs}, {"legacy", "graph", "deep"})
+        self.assertTrue(all(run.repeat == 1 and not run.permissions for run in runs))
 
     def test_provider_error_has_stable_class_not_secret_message(self):
         error = ProviderRequestError("secret-token", kind="rate_limited", attempts=3, status_code=429)
@@ -164,6 +174,47 @@ class LiveRuntimeMatrixTests(unittest.TestCase):
             self.assertTrue(all(item["input_tokens"] >= 12 for item in results))
             self.assertTrue(all(item["output_tokens"] >= 9 for item in results))
             self.assertTrue(all("runtime.finished" in item["event_types"] for item in results))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_local_http_fixture_runs_blind_review_case(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                size = int(self.headers["Content-Length"])
+                request = json.loads(self.rfile.read(size))
+                assert "answer_key" not in json.dumps(request)
+                body = json.dumps({
+                    "choices": [{"message": {"role": "assistant", "content": "service.py:14 needs owner check"}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21},
+                }).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            runs = tuple(run for run in select_runs(self.matrix, "review-canary")
+                         if run.case_id == "review-01")
+            source = (ROOT / "bench/cases/runtime/fixtures/review-01/public/service.py").read_bytes()
+            async def exercise():
+                return [await _run_review_case(
+                    run, public_source=source,
+                    base_url=f"http://127.0.0.1:{server.server_port}/v1",
+                    model="fixture", api_key="fixture-secret",
+                ) for run in runs]
+            results = asyncio.run(exercise())
+            self.assertEqual([item["status"] for item in results], ["completed"] * 3)
+            self.assertTrue(all(item["fixture_sha256"] for item in results))
+            self.assertTrue(all(item["input_tokens"] >= 12 for item in results))
         finally:
             server.shutdown()
             server.server_close()

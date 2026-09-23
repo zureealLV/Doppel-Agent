@@ -26,6 +26,12 @@ Doppel Agent 不把“模型返回了一段看起来合理的文字”当作任�
 
 `bench/reports/2026-09-22-v0.12.0-runtime-smoke.json` 是使用离线 `MockProvider` 执行的 plumbing smoke：180/180 条 runtime path 完成，三种 runtime 各 60 次；所有 `task_score` 都是 `null`。这个分母只能证明统一接口和三条运行路径能完成调用，不能证明真实模型会完成题目，也不能用于成本或 Token 对比。
 
+## v0.15 盲审 fixture 与协议 v1.1
+
+`review-01` 至 `review-04` 现各有独立的 `public/service.py` 和不进入 Agent 工作区的 `answer_key.json`。本地测试分别执行跨用户读取、SQL 注入、路径穿越与取消后子进程存活，证明题目缺陷真实可复现。v1.0 的审查题在 prompt 中直接说出了缺陷种类；v1.1 改为四题同一盲审 prompt，因此历史 v1.0 Mock 报告不能当作相同题目设置下的质量对照。
+
+`bench/live_runtime_matrix.py --mode review-canary` 只开放 4 题 × 3 runtime × 1 次的只读验证；另外的导航 Canary 为 3 题 × 3 runtime × 1 次。两者结果均需要人工对照隐藏答案键复核，keyword signal 不算漏洞命中。其余类别缺少独立 fixture 或运行时能力等价性，20×3×3 全量实测仍被门禁阻止。当前进程没有真实模型凭据，不能宣称已跑过付费实测。
+
 `bench/reports/2026-09-22-v0.12.0-load.json` 是本机确定性 scheduler/lock probe：100 个短任务在 `max_active=4` 下峰值为 4；queue overflow 明确拒绝；20 读 + 5 写保持 writer 单实例且无读写重叠；运行中取消进入 `cancelled`。它不覆盖 Provider 429、MCP 断连、慢 SSE、进程树或重启 lease，这些场景必须单独记录，不能从当前报告外推。
 
 ## v0.14 故障注入证据
