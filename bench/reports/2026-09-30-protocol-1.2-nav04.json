@@ -1,0 +1,235 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2026-09-30T09:46:43.747810+00:00",
+  "source_commit": "f1892d1af12f4d5fa5e83b315d28c3c4b4fb3db0",
+  "evaluation_source_dirty": false,
+  "protocol_version": "1.2",
+  "manifest_sha256": "4059aa6adb0081def355c208f6b87bbe1ee9790e655302c3b058fa6fa3c6a694",
+  "provider": "local-scripted-no-network",
+  "boundary": "direct_factory",
+  "fixture_source_commit": "b90545f477da2bde6e6361ddfd7d603b44b1e4bc",
+  "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+  "fixture_cases": [
+    "nav-04"
+  ],
+  "runs": [
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "legacy",
+      "actual_runtime": "legacy",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "7ba5788aa11e788b5931a300ee6a35970962b42d388116870321d08360012fba",
+          "response_bytes": 7839
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "c093443eced2fd3a5ccae997827f8f15932f040a217cef060dcfed0f1241905b",
+          "response_bytes": 3130
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "680bf7aef81a6043cc65b49f78664240f9088febe1474180dfaeac6c9cd38dfd",
+          "response_bytes": 1248
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "1ab2c15b7b3fa34a7fa8c26a92edc2b271d9ad0618bab3a1c84ba162072dc06c",
+          "response_bytes": 20863
+        }
+      ]
+    },
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "graph",
+      "actual_runtime": "graph",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "7ba5788aa11e788b5931a300ee6a35970962b42d388116870321d08360012fba",
+          "response_bytes": 7839
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "c093443eced2fd3a5ccae997827f8f15932f040a217cef060dcfed0f1241905b",
+          "response_bytes": 3130
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "680bf7aef81a6043cc65b49f78664240f9088febe1474180dfaeac6c9cd38dfd",
+          "response_bytes": 1248
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "1ab2c15b7b3fa34a7fa8c26a92edc2b271d9ad0618bab3a1c84ba162072dc06c",
+          "response_bytes": 20863
+        }
+      ]
+    },
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "deep",
+      "actual_runtime": "deep",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "b671abd6ce6efc18edd0180c545ee4f4493e1692867650b33dcdfd8a8e993cbe",
+          "response_bytes": 4016
+        },
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "52485e5801fdcbbf90e97225d115fd524c02055e1d3aa04e2e9301713c5e9c6b",
+          "response_bytes": 3891
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "471cd234d633e09fb32fbf11cf4ea17d9f8df9796dcaf3da5feff73de90bf222",
+          "response_bytes": 2976
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "0b10c6f330f8fe3a62611c8277c5b3a151f05e9a4e429aae5b6fc8d34e575e72",
+          "response_bytes": 222
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "525c2bbd9bf731979f646e4c744368d563211c25ae42da7ad64f087bf123329c",
+          "response_bytes": 1270
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "61d9bd5ca5caa81ddabd8654aee0f225f49321ee681649bfd09191e3a21f7610",
+          "response_bytes": 3198
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "d9163222c9b4a784bfb715cd87073fa527ff50288ae245a82ef1e3982c8eae8c",
+          "response_bytes": 3883
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "92c8fecdaec15d2c01274dbeb05fa71106c055f3641a36e0eac20789311f3aa1",
+          "response_bytes": 4550
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "195224d252cb1dd2962bbdcc864f94a09df2eda9a8b1d7db5f86cf7bf684b8f2",
+          "response_bytes": 4475
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "d0a9197818a8679cecd95d3f5e88e72ce7970adfa464e8fc3a00a8331dad8c33",
+          "response_bytes": 4690
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "bcdbda5a4b117fb68df03605ba7da24913b135a7f7dbbb258bf01af5e58bb9ee",
+          "response_bytes": 311
+        }
+      ]
+    }
+  ],
+  "passed": true,
+  "full_matrix_ready": false,
+  "task_quality_scored": false,
+  "scope_note": "nav-04 only; three native factory runs, one repeat. Live 9/12 canaries unchanged. Human explanation pending."
+}
