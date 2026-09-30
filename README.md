@@ -4,9 +4,9 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README_CN.md) · English**
 
-## Current release: v0.14.3
+## Current release: v0.14.4
 
-This patch freezes per-boundary evaluation capability eligibility (81 direct-factory /126 service paths out of the original 180), fixes Graph MCP grants and task-affine MCP connector ownership, and adds real production-path lifecycle probes. Eligibility is not fixture readiness or model quality; paid canaries/full mode remain pending. See [update and test evidence](docs/releases/v0.14.3.md). The failed v0.14.1 tag remains historical; v0.14.2 checkpoint cleanup remains covered.
+This patch repairs cancellation during RunService initialization/finalization, drains owned SQLite writes before publishing a cancelled terminal state, and preserves operation cleanup when cancellation precedes coroutine entry. Deterministic scripted nav-04/tdd-01/tdd-02 fixtures are grounded, not paid model-quality results. Capability eligibility remains 81 direct-factory /126 service paths out of the original 180; full mode remains blocked. See [update and test evidence](docs/releases/v0.14.4.md). Historical failed CI/tags are not rewritten.
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 

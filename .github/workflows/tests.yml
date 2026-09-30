@@ -24,7 +24,7 @@ jobs:
       - name: Repeat checkpoint cancellation lifecycle gates
         run: |
           for ($i = 1; $i -le 5; $i++) {
-            python -m pytest -q tests/test_checkpoint_cancellation.py tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event
+            python -m pytest -q tests/test_service_cancellation.py tests/test_checkpoint_cancellation.py tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
       - name: Offline live-evaluation safety gates

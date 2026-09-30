@@ -27,6 +27,7 @@ class _Job:
     operation: Callable[[CancellationToken], Awaitable[Any]]
     future: asyncio.Future[Any]
     token: CancellationToken
+    started: bool = False
 
 
 class AsyncRunScheduler:
@@ -101,7 +102,7 @@ class AsyncRunScheduler:
                         job.future.cancel()
                     self._statuses[job.run_id] = "cancelled"
                     continue
-                task = asyncio.create_task(job.operation(job.token), name=f"doppel-run-{job.run_id}")
+                task = asyncio.create_task(self._invoke(job), name=f"doppel-run-{job.run_id}")
                 self._running[job.run_id] = task
                 self._peak_active_count = max(self._peak_active_count, len(self._running))
                 self._statuses[job.run_id] = "running"
@@ -124,6 +125,13 @@ class AsyncRunScheduler:
             finally:
                 self._queue.task_done()
 
+    async def _invoke(self, job: _Job) -> Any:
+        # A task cancelled before its first step never enters the operation's
+        # try/finally. Let the operation observe its token instead until entry;
+        # after this synchronous handoff normal task cancellation is safe.
+        job.started = True
+        return await job.operation(job.token)
+
     async def cancel(self, run_id: str) -> bool:
         async with self._lock:
             job = self._jobs.get(run_id)
@@ -136,7 +144,8 @@ class AsyncRunScheduler:
             job.token.cancel()
             running = self._running.get(run_id)
             if running is not None:
-                running.cancel()
+                if job.started:
+                    running.cancel()
             elif not job.future.done():
                 job.future.cancel()
             self._statuses[run_id] = "cancelled"
@@ -188,7 +197,8 @@ class AsyncRunScheduler:
             if cancel_running:
                 for run_id, task in tuple(self._running.items()):
                     self._jobs[run_id].token.cancel()
-                    task.cancel()
+                    if self._jobs[run_id].started:
+                        task.cancel()
             workers = list(self._workers)
             self._workers.clear()
         if not cancel_pending:

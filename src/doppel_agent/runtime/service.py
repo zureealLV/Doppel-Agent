@@ -44,6 +44,31 @@ from .factory import create_runtime
 from .provider_adapter import ProviderAdapter
 
 
+async def _await_durable(awaitable):
+    """Drain an owned persistence operation before propagating cancellation.
+
+    Cancelling ``to_thread`` does not stop its SQLite write. A late running
+    update must finish before we publish the cancelled terminal state.
+    """
+    task = asyncio.ensure_future(awaitable)
+    cancelled = False
+    while True:
+        try:
+            result = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
+            cancelled = True
+        except Exception:
+            if cancelled:
+                raise asyncio.CancelledError from None
+            raise
+        else:
+            if cancelled:
+                raise asyncio.CancelledError
+            return result
+
+
 class EventNotifier:
     def __init__(self) -> None:
         self._conditions: dict[str, asyncio.Condition] = {}
@@ -79,7 +104,7 @@ class DurableEventSink(EventSink):
         self.thread_id = thread_id
 
     async def emit(self, kind: str, **payload: Any) -> None:
-        await asyncio.to_thread(self.store.append, self.run_id, self.thread_id, kind, payload)
+        await _await_durable(asyncio.to_thread(self.store.append, self.run_id, self.thread_id, kind, payload))
         await self.notifier.notify(self.run_id)
 
 
@@ -342,6 +367,10 @@ class RunService:
             record["thread_id"],
         )
 
+    async def _record_cancelled(self, run_id: str, sink: DurableEventSink) -> None:
+        await sink.emit("run.cancelled")
+        await asyncio.to_thread(self.runs.update, run_id, "cancelled")
+
     async def create(self, request: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         run_id = uuid4().hex
         thread_id = request.get("conversation_id") or uuid4().hex
@@ -359,47 +388,46 @@ class RunService:
         await sink.emit("run.status_changed", previous=None, status="queued")
 
         async def operation(token) -> RuntimeResult:
-            token.raise_if_cancelled()
-            await asyncio.to_thread(self.runs.update, run_id, "running")
-            await sink.emit("run.status_changed", previous="queued", status="running")
-            runtime = await self._runtime(record)
-            runtime_request = RunRequest(request["prompt"], run_id=run_id, thread_id=thread_id)
-            lock = (
-                self.workspace_locks.write(self.workspace)
-                if request["permissions"].get("workspace_write")
-                else self.workspace_locks.read(self.workspace)
-            )
             try:
+                token.raise_if_cancelled()
+                await _await_durable(asyncio.to_thread(self.runs.update, run_id, "running"))
+                await sink.emit("run.status_changed", previous="queued", status="running")
+                runtime = await self._runtime(record)
+                runtime_request = RunRequest(request["prompt"], run_id=run_id, thread_id=thread_id)
+                lock = (
+                    self.workspace_locks.write(self.workspace)
+                    if request["permissions"].get("workspace_write")
+                    else self.workspace_locks.read(self.workspace)
+                )
                 async with lock:
                     token.raise_if_cancelled()
                     async with asyncio.timeout(request.get("deadline_seconds", 600)):
                         result = await runtime.run(runtime_request, sink)
+                await sink.emit("checkpoint.saved", thread_id=thread_id)
+                if result.status == "interrupted":
+                    for item in result.metadata.get("interrupts", []):
+                        await sink.emit(
+                            "approval.requested",
+                            interrupt_id=item.get("id", ""),
+                            request=item.get("value"),
+                        )
+                await sink.emit("run.status_changed", previous="running", status=result.status)
+                await _await_durable(asyncio.to_thread(
+                    self.runs.update,
+                    run_id,
+                    result.status,
+                    answer=result.answer,
+                    metadata=result.metadata,
+                ))
+                return result
             except asyncio.CancelledError:
-                await sink.emit("run.cancelled")
-                await asyncio.to_thread(self.runs.update, run_id, "cancelled")
+                await _await_durable(self._record_cancelled(run_id, sink))
                 raise
             except Exception as exc:  # noqa: BLE001 - isolate a failed agent run
                 error = f"{type(exc).__name__}: {exc}"
                 await sink.emit("run.failed", error=error)
                 await asyncio.to_thread(self.runs.update, run_id, "failed", error=error)
                 raise
-            await sink.emit("checkpoint.saved", thread_id=thread_id)
-            if result.status == "interrupted":
-                for item in result.metadata.get("interrupts", []):
-                    await sink.emit(
-                        "approval.requested",
-                        interrupt_id=item.get("id", ""),
-                        request=item.get("value"),
-                    )
-            await sink.emit("run.status_changed", previous="running", status=result.status)
-            await asyncio.to_thread(
-                self.runs.update,
-                run_id,
-                result.status,
-                answer=result.answer,
-                metadata=result.metadata,
-            )
-            return result
 
         try:
             handle = await self.scheduler.submit(run_id, operation)
@@ -471,37 +499,37 @@ class RunService:
             await self.scheduler.wait(run_id)
 
         async def operation(token) -> RuntimeResult:
-            token.raise_if_cancelled()
-            await asyncio.to_thread(self.runs.update, run_id, "running")
-            runtime = await self._runtime(record)
-            lock = (
-                self.workspace_locks.write(self.workspace)
-                if record["request"]["permissions"].get("workspace_write")
-                else self.workspace_locks.read(self.workspace)
-            )
             try:
+                token.raise_if_cancelled()
+                await _await_durable(asyncio.to_thread(self.runs.update, run_id, "running"))
+                runtime = await self._runtime(record)
+                lock = (
+                    self.workspace_locks.write(self.workspace)
+                    if record["request"]["permissions"].get("workspace_write")
+                    else self.workspace_locks.read(self.workspace)
+                )
                 async with lock:
+                    token.raise_if_cancelled()
                     async with asyncio.timeout(record["request"].get("deadline_seconds", 600)):
                         result = await runtime.resume(ResumeCommand(run_id, record["thread_id"], value), sink)
+                await sink.emit("checkpoint.saved", thread_id=record["thread_id"])
+                await sink.emit("run.status_changed", previous="running", status=result.status)
+                await _await_durable(asyncio.to_thread(
+                    self.runs.update,
+                    run_id,
+                    result.status,
+                    answer=result.answer,
+                    metadata=result.metadata,
+                ))
+                return result
             except asyncio.CancelledError:
-                await sink.emit("run.cancelled")
-                await asyncio.to_thread(self.runs.update, run_id, "cancelled")
+                await _await_durable(self._record_cancelled(run_id, sink))
                 raise
             except Exception as exc:  # noqa: BLE001 - isolate a failed agent run
                 error = f"{type(exc).__name__}: {exc}"
                 await sink.emit("run.failed", error=error)
                 await asyncio.to_thread(self.runs.update, run_id, "failed", error=error)
                 raise
-            await sink.emit("checkpoint.saved", thread_id=record["thread_id"])
-            await sink.emit("run.status_changed", previous="running", status=result.status)
-            await asyncio.to_thread(
-                self.runs.update,
-                run_id,
-                result.status,
-                answer=result.answer,
-                metadata=result.metadata,
-            )
-            return result
 
         handle = await self.scheduler.submit(run_id, operation)
         handle.future.add_done_callback(self._consume_future)
