@@ -37,6 +37,7 @@ from doppel_agent.provider import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "bench" / "cases" / "runtime" / "manifest.json"
+CAPABILITIES = MANIFEST.with_name("capabilities.json")
 CANARY_CASE_IDS = ("nav-01", "nav-02", "nav-03")
 RESULT_SCHEMA_VERSION = "1.1"
 _SAFE_KEY = re.compile(r"[a-z0-9-]+:(legacy|graph|deep):[123]\Z")
@@ -69,6 +70,23 @@ def validate_prices(input_price: Any, output_price: Any, max_cost_usd: Any) -> N
         raise ValueError("positive finite input/output prices and max_cost_usd are required")
 
 
+def freeze_capability_selection(
+    matrix: RuntimeMatrix,
+    runs: Sequence[MatrixRun],
+    path: Path = CAPABILITIES,
+) -> dict[str, Any]:
+    """Paid direct-factory execution must preserve its exact eligible run keys."""
+    report = matrix.capability_document(path, boundary="direct_factory")
+    keys = [run.run_key for run in runs]
+    if not keys or len(keys) != len(set(keys)):
+        raise ValueError("live capability selection must be nonempty and unique")
+    originals = {run.run_key: run for run in matrix.expand()}
+    supported = set(report["supported_run_keys"])
+    if any(run.run_key not in supported or originals.get(run.run_key) != run for run in runs):
+        raise ValueError("live capability selection contains unsupported or modified runs")
+    return {**report, "selected_run_count": len(keys), "selected_run_keys": keys}
+
+
 def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
     """Full mode stays blocked until every case has a seeded, runnable fixture."""
     if mode == "canary":
@@ -78,6 +96,7 @@ def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
         )
         if len(selected) != 9 or any(run.permissions for run in selected):
             raise ValueError("canary fixture protocol changed; re-audit before live use")
+        freeze_capability_selection(matrix, selected)
         return selected
     if mode == "review-canary":
         selected = tuple(
@@ -86,6 +105,7 @@ def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
         )
         if len(selected) != 12 or any(run.permissions for run in selected):
             raise ValueError("review fixture protocol changed; re-audit before live use")
+        freeze_capability_selection(matrix, selected)
         return selected
     if mode == "full":
         raise ValueError(
@@ -451,12 +471,17 @@ def main() -> int:
             "canary_cases": list(CANARY_CASE_IDS),
             "review_canary_run_count": len(select_runs(matrix, "review-canary")),
             "review_cases": list(REVIEW_CASE_IDS),
+            "capability_boundaries": {
+                boundary: matrix.capability_document(CAPABILITIES, boundary=boundary)
+                for boundary in ("direct_factory", "run_service")
+            },
             "full_matrix_ready": False,
             "full_blocker": "remaining navigation/write/approval/MCP/cancel fixtures and runtime parity absent",
         }, ensure_ascii=False, indent=2))
         return 0
     try:
         runs = select_runs(matrix, args.mode)
+        capability_selection = freeze_capability_selection(matrix, runs)
         validate_prices(args.input_price_per_million, args.output_price_per_million, args.max_cost_usd)
         if not args.base_url or not args.model:
             raise ValueError("base URL and model are required")
@@ -474,6 +499,7 @@ def main() -> int:
         config = {
             "schema_version": RESULT_SCHEMA_VERSION,
             "protocol_sha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
+            "capability_selection": capability_selection,
             "commit": commit,
             "snapshot_sha256": hashlib.sha256(archive).hexdigest(),
             "review_fixture_sha256": {

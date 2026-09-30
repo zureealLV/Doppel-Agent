@@ -264,6 +264,8 @@ class RunService:
             capabilities.add("workspace_write")
         if permissions.get("command_execute"):
             capabilities.add("command_execute")
+        if permissions.get("mcp_execute"):
+            capabilities.add("mcp_execute")
         registry = ToolRegistry(PermissionManager(frozenset(capabilities)))
         for tool in (
             workspace_map_tool(self.workspace),

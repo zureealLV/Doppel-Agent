@@ -4,9 +4,9 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README_CN.md) · English**
 
-## Current release: v0.14.2
+## Current release: v0.14.3
 
-This patch retains the fail-closed live evaluation boundary and fixes SQLite handle ownership during cancellation: checkpoint acquisition and cleanup finish before cancellation propagates, including repeated cancellation. The six offline safety gates remain required; paid canaries and the full quality matrix are still pending. See [update and test evidence](docs/releases/v0.14.2.md). The v0.14.1 tag is preserved as history but failed its final Windows cancellation-cleanup gate.
+This patch freezes per-boundary evaluation capability eligibility (81 direct-factory /126 service paths out of the original 180), fixes Graph MCP grants and task-affine MCP connector ownership, and adds real production-path lifecycle probes. Eligibility is not fixture readiness or model quality; paid canaries/full mode remain pending. See [update and test evidence](docs/releases/v0.14.3.md). The failed v0.14.1 tag remains historical; v0.14.2 checkpoint cleanup remains covered.
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 

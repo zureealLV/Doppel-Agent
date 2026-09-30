@@ -118,3 +118,46 @@ model usage. See `docs/releases/v0.14.1.md` and the separate
 `bench/reports/2026-09-30-v0.14.1-live-runner-audit.json` for the patch evidence;
 the earlier five-failure report is retained unchanged. Full mode remains
 blocked; the next offline task is the per-boundary capability contract.
+
+### v0.14.3 capability contract (Task 5A)
+
+`cases/runtime/capabilities.json` version **1.0** freezes the exact v1.1
+manifest bytes, eight capability definitions and the requirements of all 20
+cases. Inspect each execution boundary separately:
+
+```powershell
+uv run --extra agent python -m bench.runtime_matrix --boundary direct_factory
+uv run --extra agent python -m bench.runtime_matrix --boundary run_service
+```
+
+The original denominator remains **180**. Capability-eligible paths are
+**81** for the direct production factory and **126** for RunService/API;
+the reports include every excluded key and its reasons. Eligibility assumes
+the per-case grants and required project verification/MCP configuration; it
+does not certify fixtures, exact-once behavior, quality or full-matrix readiness.
+The historical Mock smoke still runs all 180 paths with null task scores.
+
+Direct Graph is read-only. RunService injects Graph patch/command/MCP tools.
+Deep exposes reviewed patches and configured post-patch verification, but
+never standalone commands; thus it cannot satisfy the TDD pre-patch command
+requirement. Reconstructed direct Deep cannot automatically restore reviewed
+patch metadata; RunService separately persists that metadata. Legacy writes,
+synchronous approval and MCPBridge do not establish reviewed patch, durable
+resume, cancellable worker or gateway parity. `nav-04` asks for source
+navigation, not MCP execution; its historical extra grant is explicitly noted
+and must be resolved with its fixture in Task 5B.
+
+Live canary context now also freezes the capability contract hash/version,
+boundary, original/supported/excluded denominators and exact selected keys
+**before any paid request**. Old contexts or changed selections cannot resume;
+use a fresh output directory. The enabled choices remain 9 navigation and 12
+review paths. Full mode is still hard-blocked pending Task 5B/5C executable
+oracles and a versioned parity/reduced-matrix decision, not unlocked merely by
+this eligibility report.
+
+Production-path probes also exposed and fixed two existing MCP defects:
+RunService's Graph registry omitted `mcp_execute`, and SDK connector cancel
+scopes were closed in a different task. Dedicated lifetime owners now enter and
+exit each connector in the same task; startup and all-server shutdown drain
+owned work even under repeated caller cancellation. Real local stdio gateway
+tests cover Graph/Deep approval, execution audit and clean service close.

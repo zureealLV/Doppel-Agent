@@ -6,6 +6,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from .config import MCPConfig, MCPServerConfig
@@ -15,18 +16,46 @@ from .types import MCPServerMetadata, ManagedMCPSession
 Connector = Callable[[MCPServerConfig], Any]
 
 
+async def _drain_owner(task: asyncio.Task[None]) -> None:
+    cancelled = False
+    while True:
+        try:
+            await asyncio.shield(task)
+            break
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+
+
+@dataclass
+class _OwnedConnection:
+    """SDK cancel scopes must enter and exit in the same lifetime task."""
+
+    ready: asyncio.Future[tuple[Any, Any]]
+    release: asyncio.Event
+    task: asyncio.Task[None]
+
+    async def close(self) -> None:
+        self.release.set()
+        await _drain_owner(self.task)
+
+
 class MCPClientManager:
     def __init__(self, config: MCPConfig, *, connector: Connector | None = None) -> None:
         self.config = config
         self.connector = connector or self._default_connector
         self._clients: dict[str, ManagedMCPSession] = {}
-        self._stacks: dict[str, AsyncExitStack] = {}
+        self._connections: dict[str, _OwnedConnection] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._generations: dict[str, int] = {}
         self._semaphores = {
             name: asyncio.Semaphore(server.max_concurrency) for name, server in config.servers.items()
         }
         self._closed = False
+        self._close_task: asyncio.Task[None] | None = None
 
     @asynccontextmanager
     async def _default_connector(self, server: MCPServerConfig) -> AsyncIterator[tuple[Any, Any]]:
@@ -90,22 +119,43 @@ class MCPClientManager:
             raise KeyError(f"unknown MCP server: {name}")
         lock = self._locks.setdefault(name, asyncio.Lock())
         async with lock:
+            if self._closed:
+                raise RuntimeError("MCP client manager is closed")
             existing = self._clients.get(name)
             if existing is not None and existing.valid:
                 return existing
             await self._discard(name)
-            stack = AsyncExitStack()
+            ready = asyncio.get_running_loop().create_future()
+            release = asyncio.Event()
+
+            async def own_connection() -> None:
+                try:
+                    async with self.connector(self.config.servers[name]) as opened:
+                        ready.set_result(opened)
+                        await release.wait()
+                except BaseException as exc:
+                    if not ready.done():
+                        ready.set_exception(exc)
+                    else:
+                        raise
+
+            connection = _OwnedConnection(ready, release, asyncio.create_task(own_connection()))
+            self._connections[name] = connection
             try:
-                session, initialized = await stack.enter_async_context(self.connector(self.config.servers[name]))
+                session, initialized = await asyncio.shield(ready)
             except BaseException:
-                await stack.aclose()
+                try:
+                    await self._discard(name)
+                finally:
+                    # Even a repeatedly cancelled caller must consume startup errors.
+                    if ready.done() and not ready.cancelled():
+                        ready.exception()
                 raise
             managed = ManagedMCPSession(
                 session=session,
                 metadata=self._metadata(self.config.servers[name], initialized),
                 semaphore=self._semaphores[name],
             )
-            self._stacks[name] = stack
             self._clients[name] = managed
             self._generations[name] = self._generations.get(name, 0) + 1
             return managed
@@ -118,9 +168,9 @@ class MCPClientManager:
         client = self._clients.pop(name, None)
         if client is not None:
             client.valid = False
-        stack = self._stacks.pop(name, None)
-        if stack is not None:
-            await stack.aclose()
+        connection = self._connections.pop(name, None)
+        if connection is not None:
+            await connection.close()
 
     async def invalidate(self, name: str) -> None:
         lock = self._locks.setdefault(name, asyncio.Lock())
@@ -156,8 +206,19 @@ class MCPClientManager:
         return (await self.get(name)).metadata
 
     async def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        for name in list(self._stacks):
-            await self._discard(name)
+        if self._close_task is None:
+            self._closed = True
+            self._close_task = asyncio.create_task(self._close_all())
+        await _drain_owner(self._close_task)
+
+    async def _close_all(self) -> None:
+        errors: list[BaseException] = []
+        for name in self.config.servers:
+            lock = self._locks.setdefault(name, asyncio.Lock())
+            async with lock:
+                try:
+                    await self._discard(name)
+                except BaseException as exc:
+                    errors.append(exc)
+        if errors:
+            raise BaseExceptionGroup("MCP connector shutdown failed", errors)

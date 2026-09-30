@@ -1,0 +1,441 @@
+{
+  "contract_version": "1.0",
+  "protocol_sha256": "8a1a6be085f767da74f78d7ec950652426afb032e299fcb3020e5a9f3e3c0f4d",
+  "boundaries": {
+    "direct_factory": {
+      "legacy": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy write_file is not the reviewed multi-file patch protocol."
+        },
+        "command_execute": {
+          "supported": true,
+          "grants": [
+            "command_execute"
+          ],
+          "reason": "Core can expose run_command with command permission."
+        },
+        "post_patch_verification": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "durable_resume": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy Core has synchronous approval only; no checkpoint resume."
+        },
+        "mcp_gateway": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+        },
+        "cancellation": {
+          "supported": false,
+          "grants": [],
+          "reason": "Cancelling the async wrapper cannot stop its synchronous Core worker."
+        },
+        "process_tree_cleanup": {
+          "supported": false,
+          "grants": [],
+          "reason": "No runtime-owned cancellation path for the Core command supervisor."
+        }
+      },
+      "graph": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "command_execute": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "post_patch_verification": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "durable_resume": {
+          "supported": true,
+          "grants": [],
+          "reason": "SQLite-backed LangGraph interrupt/resume; sensitive tools must also be exposed."
+        },
+        "mcp_gateway": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "cancellation": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "process_tree_cleanup": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        }
+      },
+      "deep": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": true,
+          "grants": [
+            "workspace_write"
+          ],
+          "reason": "Native Deep HITL exposes Doppel propose_patch, not builtin write/edit."
+        },
+        "command_execute": {
+          "supported": false,
+          "grants": [],
+          "reason": "Deep harness excludes execute; allow_command only enables post-patch verification."
+        },
+        "post_patch_verification": {
+          "supported": true,
+          "grants": [
+            "workspace_write",
+            "command_execute"
+          ],
+          "reason": "Patch tool invokes configured verification after approval; not standalone command access."
+        },
+        "durable_resume": {
+          "supported": false,
+          "grants": [],
+          "reason": "SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+        },
+        "mcp_gateway": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "cancellation": {
+          "supported": true,
+          "grants": [],
+          "reason": "Deep owns the running task and verification ProcessSupervisor."
+        },
+        "process_tree_cleanup": {
+          "supported": true,
+          "grants": [
+            "workspace_write",
+            "command_execute"
+          ],
+          "reason": "Deep owns supervised verification process trees, not arbitrary background commands."
+        }
+      }
+    },
+    "run_service": {
+      "legacy": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy write_file is not the reviewed multi-file patch protocol."
+        },
+        "command_execute": {
+          "supported": true,
+          "grants": [
+            "command_execute"
+          ],
+          "reason": "Core can expose run_command with command permission."
+        },
+        "post_patch_verification": {
+          "supported": false,
+          "grants": [],
+          "reason": "Not exposed by the production factory at this boundary."
+        },
+        "durable_resume": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy Core has synchronous approval only; no checkpoint resume."
+        },
+        "mcp_gateway": {
+          "supported": false,
+          "grants": [],
+          "reason": "Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+        },
+        "cancellation": {
+          "supported": false,
+          "grants": [],
+          "reason": "Cancelling the async wrapper cannot stop its synchronous Core worker."
+        },
+        "process_tree_cleanup": {
+          "supported": false,
+          "grants": [],
+          "reason": "No runtime-owned cancellation path for the Core command supervisor."
+        }
+      },
+      "graph": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": true,
+          "grants": [
+            "workspace_write"
+          ],
+          "reason": "RunService injects reviewed propose_patch."
+        },
+        "command_execute": {
+          "supported": true,
+          "grants": [
+            "command_execute"
+          ],
+          "reason": "RunService injects supervised run_command."
+        },
+        "post_patch_verification": {
+          "supported": true,
+          "grants": [
+            "workspace_write",
+            "command_execute"
+          ],
+          "reason": "RunService patch tool invokes configured verification after approval."
+        },
+        "durable_resume": {
+          "supported": true,
+          "grants": [],
+          "reason": "SQLite-backed LangGraph interrupt/resume; sensitive tools must also be exposed."
+        },
+        "mcp_gateway": {
+          "supported": true,
+          "grants": [
+            "mcp_execute"
+          ],
+          "reason": "RunService injects MCP catalog tools backed by MCPToolExecutor; configured reachable server required."
+        },
+        "cancellation": {
+          "supported": true,
+          "grants": [],
+          "reason": "RunService scheduler cancellation, not GraphRuntime.cancel, owns the running operation."
+        },
+        "process_tree_cleanup": {
+          "supported": true,
+          "grants": [
+            "command_execute"
+          ],
+          "reason": "RunService owns the command/verification ProcessSupervisor and cancels its run trees."
+        }
+      },
+      "deep": {
+        "workspace_read": {
+          "supported": true,
+          "grants": [],
+          "reason": "Production runtime exposes guarded workspace read tools."
+        },
+        "reviewed_patch": {
+          "supported": true,
+          "grants": [
+            "workspace_write"
+          ],
+          "reason": "Native Deep HITL exposes Doppel propose_patch, not builtin write/edit."
+        },
+        "command_execute": {
+          "supported": false,
+          "grants": [],
+          "reason": "Deep harness excludes execute; allow_command only enables post-patch verification."
+        },
+        "post_patch_verification": {
+          "supported": true,
+          "grants": [
+            "workspace_write",
+            "command_execute"
+          ],
+          "reason": "Patch tool invokes configured verification after approval; not standalone command access."
+        },
+        "durable_resume": {
+          "supported": true,
+          "grants": [],
+          "reason": "SQLite-backed LangGraph interrupt/resume; sensitive tools must also be exposed."
+        },
+        "mcp_gateway": {
+          "supported": true,
+          "grants": [
+            "mcp_execute"
+          ],
+          "reason": "RunService injects MCP catalog tools backed by MCPToolExecutor; configured reachable server required."
+        },
+        "cancellation": {
+          "supported": true,
+          "grants": [],
+          "reason": "Deep owns the running task and verification ProcessSupervisor."
+        },
+        "process_tree_cleanup": {
+          "supported": true,
+          "grants": [
+            "workspace_write",
+            "command_execute"
+          ],
+          "reason": "Deep owns supervised verification process trees, not arbitrary background commands."
+        }
+      }
+    }
+  },
+  "cases": {
+    "nav-01": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "nav-02": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "nav-03": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "nav-04": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Prompt asks to locate/explain source, not call MCP. Extra mcp_execute grant is retained as historical manifest data; resolve in Task 5B before live use."
+    },
+    "review-01": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "review-02": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "review-03": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "review-04": {
+      "requires": [
+        "workspace_read"
+      ],
+      "note": "Source reading only; keyword/event validator is not a quality oracle."
+    },
+    "tdd-01": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch",
+        "command_execute",
+        "post_patch_verification"
+      ],
+      "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+    },
+    "tdd-02": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch",
+        "command_execute",
+        "post_patch_verification"
+      ],
+      "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+    },
+    "tdd-03": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch",
+        "command_execute",
+        "post_patch_verification"
+      ],
+      "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+    },
+    "tdd-04": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch",
+        "command_execute",
+        "post_patch_verification"
+      ],
+      "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+    },
+    "patch-01": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch"
+      ],
+      "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+    },
+    "patch-02": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch"
+      ],
+      "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+    },
+    "patch-03": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch"
+      ],
+      "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+    },
+    "approval-01": {
+      "requires": [
+        "workspace_read",
+        "reviewed_patch",
+        "durable_resume"
+      ],
+      "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+    },
+    "approval-02": {
+      "requires": [
+        "workspace_read",
+        "command_execute",
+        "durable_resume"
+      ],
+      "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+    },
+    "mcp-01": {
+      "requires": [
+        "workspace_read",
+        "mcp_gateway"
+      ],
+      "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+    },
+    "mcp-02": {
+      "requires": [
+        "workspace_read",
+        "mcp_gateway"
+      ],
+      "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+    },
+    "cancel-01": {
+      "requires": [
+        "workspace_read",
+        "command_execute",
+        "cancellation",
+        "process_tree_cleanup"
+      ],
+      "note": "Requires a supervised command plus cancellation and OS child-death proof; fixture remains Task 5B."
+    }
+  }
+}

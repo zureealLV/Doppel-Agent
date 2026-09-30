@@ -29,6 +29,13 @@ jobs:
           }
       - name: Offline live-evaluation safety gates
         run: python -m bench.audit_live_runtime_matrix --output .bench-results/live-runner-audit.json
+      - name: Repeat production MCP lifecycle and process-death gates
+        run: |
+          $env:PYTHONPATH = "$PWD;$PWD/tests"
+          for ($i = 1; $i -le 3; $i++) {
+            python -m pytest -q tests/mcp/test_client_manager.py tests/test_runtime_capabilities.py -k "MCPClientManager or real_local_mcp or actual_parent"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Compile sources
         run: python -m compileall -q src tests bench spikes
 
