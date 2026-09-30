@@ -1,6 +1,6 @@
 {
-  "contract_version": "1.0",
-  "protocol_sha256": "8a1a6be085f767da74f78d7ec950652426afb032e299fcb3020e5a9f3e3c0f4d",
+  "contract_version": "1.1",
+  "protocol_sha256": "4059aa6adb0081def355c208f6b87bbe1ee9790e655302c3b058fa6fa3c6a694",
   "boundaries": {
     "direct_factory": {
       "legacy": {
@@ -315,7 +315,7 @@
       "requires": [
         "workspace_read"
       ],
-      "note": "Prompt asks to locate/explain source, not call MCP. Extra mcp_execute grant is retained as historical manifest data; resolve in Task 5B before live use."
+      "note": "Protocol 1.2 resolves nav-04 as read-only source navigation. No MCP execution grant; independent frozen source/evidence fixture required."
     },
     "review-01": {
       "requires": [

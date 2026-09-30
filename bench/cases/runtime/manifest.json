@@ -1,10 +1,10 @@
 {
-  "protocol_version": "1.1",
+  "protocol_version": "1.2",
   "cases": [
     {"id":"nav-01","category":"navigation","prompt":"Locate the runtime factory and explain how execution modes are selected.","permissions":{},"validator":{"type":"answer_contains","value":"runtime"}},
     {"id":"nav-02","category":"navigation","prompt":"Locate the workspace path boundary checks and summarize their purpose.","permissions":{},"validator":{"type":"answer_contains","value":"workspace"}},
     {"id":"nav-03","category":"navigation","prompt":"Find the persistent event store and explain event sequence ordering.","permissions":{},"validator":{"type":"answer_contains","value":"event"}},
-    {"id":"nav-04","category":"navigation","prompt":"Find the MCP tool adapter and explain the policy boundary.","permissions":{"mcp_execute":true},"validator":{"type":"answer_contains","value":"MCP"}},
+    {"id":"nav-04","category":"navigation","prompt":"Find the MCP tool adapter and explain the policy boundary.","permissions":{},"validator":{"type":"answer_contains","value":"MCP"}},
     {"id":"review-01","category":"known_answer_review","prompt":"Read service.py and review it for one consequential security or process-lifecycle defect. Report the precise file and line, trigger, impact, and minimal fix. Do not modify files or run commands.","permissions":{},"validator":{"type":"answer_contains","value":"authorization"}},
     {"id":"review-02","category":"known_answer_review","prompt":"Read service.py and review it for one consequential security or process-lifecycle defect. Report the precise file and line, trigger, impact, and minimal fix. Do not modify files or run commands.","permissions":{},"validator":{"type":"answer_contains","value":"SQL"}},
     {"id":"review-03","category":"known_answer_review","prompt":"Read service.py and review it for one consequential security or process-lifecycle defect. Report the precise file and line, trigger, impact, and minimal fix. Do not modify files or run commands.","permissions":{},"validator":{"type":"answer_contains","value":"path"}},

@@ -160,7 +160,7 @@ class RuntimeMatrix:
         contract = json.loads(raw)
         if not isinstance(contract, dict) or set(contract) != {
             "contract_version", "protocol_sha256", "boundaries", "cases",
-        } or contract["contract_version"] != "1.0":
+        } or contract["contract_version"] not in {"1.0", "1.1"}:
             raise ValueError("unsupported capability contract schema/version")
         # The original manifest serialization is intentionally preserved by load().
         if contract["protocol_sha256"] != self.manifest_sha256:

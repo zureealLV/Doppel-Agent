@@ -29,6 +29,8 @@ jobs:
           }
       - name: Offline live-evaluation safety gates
         run: python -m bench.audit_live_runtime_matrix --output .bench-results/live-runner-audit.json
+      - name: Offline task fixture production-path gates
+        run: python -m bench.audit_runtime_task_fixtures --output .bench-results/task-fixtures-audit.json
       - name: Repeat production MCP lifecycle and process-death gates
         run: |
           $env:PYTHONPATH = "$PWD;$PWD/tests"

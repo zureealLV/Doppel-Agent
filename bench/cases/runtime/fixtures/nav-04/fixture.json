@@ -1,0 +1,40 @@
+{
+  "case_id": "nav-04",
+  "fixture_version": "1.0",
+  "category": "navigation",
+  "source_commit": "b90545f477da2bde6e6361ddfd7d603b44b1e4bc",
+  "public_files": {
+    "src/doppel_agent/mcp/tool_adapter.py": "c093443eced2fd3a5ccae997827f8f15932f040a217cef060dcfed0f1241905b",
+    "src/doppel_agent/mcp/executor.py": "7ba5788aa11e788b5931a300ee6a35970962b42d388116870321d08360012fba",
+    "src/doppel_agent/permissions.py": "680bf7aef81a6043cc65b49f78664240f9088febe1474180dfaeac6c9cd38dfd",
+    "src/doppel_agent/runtime/service.py": "1ab2c15b7b3fa34a7fa8c26a92edc2b271d9ad0618bab3a1c84ba162072dc06c"
+  },
+  "allowed_edits": [],
+  "oracle": {
+    "kind": "navigation_evidence",
+    "required_reads": {
+      "src/doppel_agent/mcp/tool_adapter.py": [
+        "class MCPGatewayTool",
+        "self.executor.execute("
+      ],
+      "src/doppel_agent/mcp/executor.py": [
+        "class MCPToolExecutor",
+        "self.permissions.check("
+      ],
+      "src/doppel_agent/permissions.py": [
+        "class PermissionManager",
+        "capability denied:"
+      ],
+      "src/doppel_agent/runtime/service.py": [
+        "MCPToolExecutor(",
+        "capabilities.add(\"mcp_execute\")"
+      ]
+    },
+    "human_rubric": [
+      "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+      "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+      "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+      "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+    ]
+  }
+}

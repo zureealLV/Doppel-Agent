@@ -28,7 +28,7 @@ class RuntimeReviewFixtureTests(unittest.TestCase):
         matrix = RuntimeMatrix.load(ROOT / "bench/cases/runtime/manifest.json")
         review_cases = [case for case in matrix.cases if case.category == "known_answer_review"]
         review_ids = {case.case_id for case in review_cases}
-        self.assertEqual(matrix.protocol_version, "1.1")
+        self.assertEqual(matrix.protocol_version, "1.2")
         self.assertEqual(review_ids, set(REVIEW_CASE_IDS))
         self.assertEqual(len({case.prompt for case in review_cases}), 1)
         self.assertTrue(all("service.py" in case.prompt for case in review_cases))

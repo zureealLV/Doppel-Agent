@@ -121,7 +121,8 @@ blocked; the next offline task is the per-boundary capability contract.
 
 ### v0.14.3 capability contract (Task 5A)
 
-`cases/runtime/capabilities.json` version **1.0** freezes the exact v1.1
+The initial contract was **1.0** / manifest **1.1**. The current
+`cases/runtime/capabilities.json` version **1.1** freezes the exact v1.2
 manifest bytes, eight capability definitions and the requirements of all 20
 cases. Inspect each execution boundary separately:
 
@@ -144,8 +145,8 @@ requirement. Reconstructed direct Deep cannot automatically restore reviewed
 patch metadata; RunService separately persists that metadata. Legacy writes,
 synchronous approval and MCPBridge do not establish reviewed patch, durable
 resume, cancellable worker or gateway parity. `nav-04` asks for source
-navigation, not MCP execution; its historical extra grant is explicitly noted
-and must be resolved with its fixture in Task 5B.
+navigation, not MCP execution; Task 5B removes its historical extra grant in
+manifest 1.2 and freezes a dedicated read-only fixture.
 
 Live canary context now also freezes the capability contract hash/version,
 boundary, original/supported/excluded denominators and exact selected keys
@@ -161,3 +162,30 @@ scopes were closed in a different task. Dedicated lifetime owners now enter and
 exit each connector in the same task; startup and all-server shutdown drain
 owned work even under repeated caller cancellation. Real local stdio gateway
 tests cover Graph/Deep approval, execution audit and clean service close.
+
+### Task 5B: nav-04 source fixture (protocol 1.2)
+
+Only `nav-04` permissions changed; all four blind-review prompts and the
+20-case / 180-key original denominator remain unchanged. The capability
+denominators stay 81 direct / 126 service. Existing live contexts must use a
+fresh output directory because manifest/contract hashes changed.
+
+The fixture freezes four complete source files from commit `b90545f`.
+Only those hash-checked public bytes reach a fresh workspace; fixture metadata,
+expected read anchors and the human rubric remain outside it. No write,
+command or MCP execution grant is used. Reproduce the offline native paths:
+
+```powershell
+uv run --extra agent python -m bench.audit_runtime_task_fixtures --output .bench-results/task-fixtures-audit.json
+```
+
+The scripted provider reads public paths with each factory's real tools.
+Deep's native read defaults to 100 lines, so it follows returned pagination.
+The validator aggregates successful pages by exact path, requires every frozen
+anchor and unchanged public sources, and rejects unrelated/failed reads or
+extra files. The report separates requested/actual/fallback runtime identity.
+These checks prove source-read evidence, not the correctness of an explanation:
+`human_review=pending`, `task_quality_scored=false`. The old keyword field is
+still diagnostic only. Live selection stays 9 navigation / 12 review paths;
+full mode stays blocked. Original Task 5B still has **12 remaining fixtures**,
+then Task 5C must freeze scoring, argv/edits and adjudication inputs.
