@@ -82,3 +82,21 @@ keyword validator is not a quality score. Use a separate `--output-dir` for
 each mode and model. Full 20×3×3 execution is blocked
 until independent case fixtures and equivalent runtime capabilities exist.
 See `docs/plans/2026-09-23-v0.15-live-runtime-matrix.md` for the remaining gates.
+
+### 2026-09-30 offline adversarial audit
+
+Before using a paid provider, reproduce the stronger local safety audit:
+
+```powershell
+uv run --extra agent python -m bench.audit_live_runtime_matrix `
+  --output .bench-results/live-runner-audit.json
+```
+
+This uses only loopback scripted HTTP and no-network fake runners. It forces
+read-tool round trips for all 21 enabled paths and checks request-level usage
+stops, fallback after authentication errors, real synchronous error taxonomy,
+invalid token usage and non-finite prices/budgets. It never scores model quality.
+Exit 1 means a desired safety gate failed. At the 2026-09-30 source baseline,
+all 21 positive paths passed but five safety gates failed; paid execution must
+wait for Task 3A–3C in the existing plan. See
+`bench/reports/2026-09-30-v0.15-retest.md` for evidence and boundaries.
