@@ -1,0 +1,664 @@
+{
+  "schema_version": "1.1",
+  "recorded_at": "2026-09-30T11:16:10.356277+00:00",
+  "source_commit": "cbae6ae95ce1dd690180b918e5d9321280aaa6fa",
+  "evaluation_source_dirty": false,
+  "protocol_version": "1.2",
+  "manifest_sha256": "4059aa6adb0081def355c208f6b87bbe1ee9790e655302c3b058fa6fa3c6a694",
+  "provider": "local-scripted-reference-controls-no-network",
+  "boundary": "explicit_per_run",
+  "fixture_contexts": {
+    "nav-04": {
+      "source_kind": "git_snapshot",
+      "source_baseline_commit": "b90545f477da2bde6e6361ddfd7d603b44b1e4bc",
+      "fixture_version": "1.0",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f"
+    },
+    "tdd-01": {
+      "source_kind": "synthetic_seed",
+      "source_baseline_commit": "dc0e6c5d8e54a7b48c0f088f574af526837d8320",
+      "fixture_version": "1.1",
+      "fixture_sha256": "cc52871a3723b9584ea6adf4cf06f3d9c6b183f8b8c534f3606fdaebaf89009f"
+    },
+    "tdd-02": {
+      "source_kind": "synthetic_seed",
+      "source_baseline_commit": "f633817bc5163879346b63006ed4f873e49048a7",
+      "fixture_version": "1.1",
+      "fixture_sha256": "a0c4c40e77ea224a1c535197c422cccb10a461d5a59a852fa3c75560500c14ff"
+    }
+  },
+  "original_run_count": 180,
+  "eligible_denominators": {
+    "direct_factory": 81,
+    "run_service": 126
+  },
+  "fixture_cases": [
+    "nav-04",
+    "tdd-01",
+    "tdd-02"
+  ],
+  "runs": [
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "legacy",
+      "actual_runtime": "legacy",
+      "boundary": "direct_factory",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "7ba5788aa11e788b5931a300ee6a35970962b42d388116870321d08360012fba",
+          "response_bytes": 7839
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "c093443eced2fd3a5ccae997827f8f15932f040a217cef060dcfed0f1241905b",
+          "response_bytes": 3130
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "680bf7aef81a6043cc65b49f78664240f9088febe1474180dfaeac6c9cd38dfd",
+          "response_bytes": 1248
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "1ab2c15b7b3fa34a7fa8c26a92edc2b271d9ad0618bab3a1c84ba162072dc06c",
+          "response_bytes": 20863
+        }
+      ],
+      "run_key": "nav-04:legacy:1"
+    },
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "graph",
+      "actual_runtime": "graph",
+      "boundary": "direct_factory",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "7ba5788aa11e788b5931a300ee6a35970962b42d388116870321d08360012fba",
+          "response_bytes": 7839
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "c093443eced2fd3a5ccae997827f8f15932f040a217cef060dcfed0f1241905b",
+          "response_bytes": 3130
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "680bf7aef81a6043cc65b49f78664240f9088febe1474180dfaeac6c9cd38dfd",
+          "response_bytes": 1248
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "1ab2c15b7b3fa34a7fa8c26a92edc2b271d9ad0618bab3a1c84ba162072dc06c",
+          "response_bytes": 20863
+        }
+      ],
+      "run_key": "nav-04:graph:1"
+    },
+    {
+      "case_id": "nav-04",
+      "fixture_sha256": "7827fc6dd2c361d3318cffa76392c7ccea36f1e20558ac8b672eddd92a910f0f",
+      "deterministic_pass": true,
+      "read_checks": {
+        "src/doppel_agent/mcp/tool_adapter.py": true,
+        "src/doppel_agent/mcp/executor.py": true,
+        "src/doppel_agent/permissions.py": true,
+        "src/doppel_agent/runtime/service.py": true
+      },
+      "source_unchanged": true,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "human_rubric": [
+        "Cite precise source files/lines linking catalog adapters to MCPToolExecutor; distinguish graph and Deep adapters.",
+        "Explain per-run mcp_execute grant, runtime HITL approval and executor policy checks, not simply a transport connection.",
+        "Explain that server descriptions/content are untrusted and structured tool errors are not successful execution.",
+        "Do not claim nav-04 executed an MCP server; this fixture is strictly read-only source navigation."
+      ],
+      "scope_note": "Successful reads and unchanged files only; explanation correctness requires human adjudication.",
+      "runtime": "deep",
+      "actual_runtime": "deep",
+      "boundary": "direct_factory",
+      "fallback_runtime": null,
+      "status": "completed",
+      "reads": [
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "b671abd6ce6efc18edd0180c545ee4f4493e1692867650b33dcdfd8a8e993cbe",
+          "response_bytes": 4016
+        },
+        {
+          "path": "src/doppel_agent/mcp/executor.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "52485e5801fdcbbf90e97225d115fd524c02055e1d3aa04e2e9301713c5e9c6b",
+          "response_bytes": 3891
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "471cd234d633e09fb32fbf11cf4ea17d9f8df9796dcaf3da5feff73de90bf222",
+          "response_bytes": 2976
+        },
+        {
+          "path": "src/doppel_agent/mcp/tool_adapter.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "0b10c6f330f8fe3a62611c8277c5b3a151f05e9a4e429aae5b6fc8d34e575e72",
+          "response_bytes": 222
+        },
+        {
+          "path": "src/doppel_agent/permissions.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "525c2bbd9bf731979f646e4c744368d563211c25ae42da7ad64f087bf123329c",
+          "response_bytes": 1270
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "61d9bd5ca5caa81ddabd8654aee0f225f49321ee681649bfd09191e3a21f7610",
+          "response_bytes": 3198
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "d9163222c9b4a784bfb715cd87073fa527ff50288ae245a82ef1e3982c8eae8c",
+          "response_bytes": 3883
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "92c8fecdaec15d2c01274dbeb05fa71106c055f3641a36e0eac20789311f3aa1",
+          "response_bytes": 4550
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "195224d252cb1dd2962bbdcc864f94a09df2eda9a8b1d7db5f86cf7bf684b8f2",
+          "response_bytes": 4475
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "d0a9197818a8679cecd95d3f5e88e72ce7970adfa464e8fc3a00a8331dad8c33",
+          "response_bytes": 4690
+        },
+        {
+          "path": "src/doppel_agent/runtime/service.py",
+          "success": true,
+          "tool": "read_file",
+          "response_sha256": "bcdbda5a4b117fb68df03605ba7da24913b135a7f7dbbb258bf01af5e58bb9ee",
+          "response_bytes": 311
+        }
+      ],
+      "run_key": "nav-04:deep:1"
+    },
+    {
+      "case_id": "tdd-01",
+      "prompt": "Add a failing test and fix duplicate idempotency-key handling.",
+      "protocol_version": "1.2",
+      "fixture_sha256": "cc52871a3723b9584ea6adf4cf06f3d9c6b183f8b8c534f3606fdaebaf89009f",
+      "fixture_version": "1.1",
+      "source_kind": "synthetic_seed",
+      "source_baseline_commit": "dc0e6c5d8e54a7b48c0f088f574af526837d8320",
+      "runtime": "graph",
+      "actual_runtime": "graph",
+      "boundary": "run_service",
+      "checks": {
+        "chronology": true,
+        "native_completion": true,
+        "unique_executor_receipts": true,
+        "frozen_public_base": true,
+        "actual_source_read": true,
+        "edit_inventory": true,
+        "test_before_fix": true,
+        "source_fix_after_red": true,
+        "candidate_test_not_weakened": true,
+        "explicit_allowlisted_red_green": true,
+        "actual_post_patch_verification": true,
+        "approved_without_early_effects": true,
+        "seeded_target_failure": true,
+        "independent_target_and_regression": true,
+        "frozen_external_oracles": true
+      },
+      "deterministic_pass": true,
+      "initial": {
+        "service.py": "ed43ab0ffa656a978f388319d3fa8dec9bc4b903c1c00ab729bdcfda11c72e4b",
+        "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+        ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+      },
+      "receipts": [
+        {
+          "tool_call_id": "tdd-1",
+          "tool": "read_file",
+          "response_sha256": "ed43ab0ffa656a978f388319d3fa8dec9bc4b903c1c00ab729bdcfda11c72e4b",
+          "snapshot": {
+            "service.py": "ed43ab0ffa656a978f388319d3fa8dec9bc4b903c1c00ab729bdcfda11c72e4b",
+            "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "path": "service.py"
+        },
+        {
+          "tool_call_id": "tdd-2",
+          "tool": "propose_patch",
+          "response_sha256": "a5d246b8f7284c264ad60ef20bd15969b054d3166e21cd396723567bf337df79",
+          "snapshot": {
+            "service.py": "ed43ab0ffa656a978f388319d3fa8dec9bc4b903c1c00ab729bdcfda11c72e4b",
+            "test_candidate.py": "93c9289c80289c64345867b3ec8f853b200ac0bb715d153d5fe64e4d2a8e0214",
+            "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "requested_paths": [
+            "test_candidate.py"
+          ],
+          "changed_paths": [
+            "test_candidate.py"
+          ],
+          "verification": [
+            {
+              "exit_code": 1,
+              "tests_run": 2,
+              "failures": 1,
+              "errors": 0,
+              "success": false,
+              "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+            }
+          ]
+        },
+        {
+          "tool_call_id": "tdd-3",
+          "tool": "run_command",
+          "response_sha256": "797c8e65f0e50f3c219c041f217bd6f53703f9840d0e76aaf6769fdc6727ec0f",
+          "snapshot": {
+            "service.py": "ed43ab0ffa656a978f388319d3fa8dec9bc4b903c1c00ab729bdcfda11c72e4b",
+            "test_candidate.py": "93c9289c80289c64345867b3ec8f853b200ac0bb715d153d5fe64e4d2a8e0214",
+            "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "exit_code": 1,
+          "tests_run": 2,
+          "failures": 1,
+          "errors": 0,
+          "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+        },
+        {
+          "tool_call_id": "tdd-4",
+          "tool": "propose_patch",
+          "response_sha256": "2721f56a07c6a03100a9673e624e4623e31cab98416c3dc8de14cc8c8496fa4b",
+          "snapshot": {
+            "service.py": "2ed2cb82e7ab9586e9a6be21a6fffc5fce7b12a3f5fe1ba560f3365f5afb3dde",
+            "test_candidate.py": "93c9289c80289c64345867b3ec8f853b200ac0bb715d153d5fe64e4d2a8e0214",
+            "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "requested_paths": [
+            "service.py"
+          ],
+          "changed_paths": [
+            "service.py"
+          ],
+          "verification": [
+            {
+              "exit_code": 0,
+              "tests_run": 2,
+              "failures": 0,
+              "errors": 0,
+              "success": true,
+              "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+            }
+          ]
+        },
+        {
+          "tool_call_id": "tdd-5",
+          "tool": "run_command",
+          "response_sha256": "55954e4e14c027aab9d81c35cecb08efe99a30fa7fb45ca506911f22853e7934",
+          "snapshot": {
+            "service.py": "2ed2cb82e7ab9586e9a6be21a6fffc5fce7b12a3f5fe1ba560f3365f5afb3dde",
+            "test_candidate.py": "93c9289c80289c64345867b3ec8f853b200ac0bb715d153d5fe64e4d2a8e0214",
+            "test_public.py": "bb6d52d08cf285c681bdb5e5b048d3a984d5f9e509ca294f1354787e0d476ff5",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "exit_code": 0,
+          "tests_run": 2,
+          "failures": 0,
+          "errors": 0,
+          "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+        }
+      ],
+      "approvals": [
+        {
+          "tool": "propose_patch",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "run_command",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "propose_patch",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "run_command",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        }
+      ],
+      "external_target_before": {
+        "exit_code": 1,
+        "tests_run": 2,
+        "failures": 2,
+        "errors": 0,
+        "oracle_sha256": "2089de9bd04adb06bb139fad5ebe7552885b17d87b4e9b158aa49b9d873727bd"
+      },
+      "external_regression_before": {
+        "exit_code": 0,
+        "tests_run": 3,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "30dc000e0ea05c34f728b4a977ba4264218c1aaff359f3aeccf1e3bc68282548"
+      },
+      "external_target_after": {
+        "exit_code": 0,
+        "tests_run": 2,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "2089de9bd04adb06bb139fad5ebe7552885b17d87b4e9b158aa49b9d873727bd"
+      },
+      "external_regression_after": {
+        "exit_code": 0,
+        "tests_run": 3,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "30dc000e0ea05c34f728b4a977ba4264218c1aaff359f3aeccf1e3bc68282548"
+      },
+      "status": "completed",
+      "fallback_runtime": null,
+      "command_exit_codes": [
+        1,
+        0
+      ],
+      "patch_verification_exit_codes": [
+        1,
+        0
+      ],
+      "approval_count": 4,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "scope_note": "Trusted scripted control and subprocess tests, not model quality or strong OS isolation.",
+      "run_key": "tdd-01:graph:1"
+    },
+    {
+      "case_id": "tdd-02",
+      "prompt": "Add a failing test and fix queue-capacity rejection accounting.",
+      "protocol_version": "1.2",
+      "fixture_sha256": "a0c4c40e77ea224a1c535197c422cccb10a461d5a59a852fa3c75560500c14ff",
+      "fixture_version": "1.1",
+      "source_kind": "synthetic_seed",
+      "source_baseline_commit": "f633817bc5163879346b63006ed4f873e49048a7",
+      "runtime": "graph",
+      "actual_runtime": "graph",
+      "boundary": "run_service",
+      "checks": {
+        "chronology": true,
+        "native_completion": true,
+        "unique_executor_receipts": true,
+        "frozen_public_base": true,
+        "actual_source_read": true,
+        "edit_inventory": true,
+        "test_before_fix": true,
+        "source_fix_after_red": true,
+        "candidate_test_not_weakened": true,
+        "explicit_allowlisted_red_green": true,
+        "actual_post_patch_verification": true,
+        "approved_without_early_effects": true,
+        "seeded_target_failure": true,
+        "independent_target_and_regression": true,
+        "frozen_external_oracles": true
+      },
+      "deterministic_pass": true,
+      "initial": {
+        "service.py": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+        "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+        ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+      },
+      "receipts": [
+        {
+          "tool_call_id": "tdd-1",
+          "tool": "read_file",
+          "response_sha256": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+          "snapshot": {
+            "service.py": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+            "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "path": "service.py"
+        },
+        {
+          "tool_call_id": "tdd-2",
+          "tool": "propose_patch",
+          "response_sha256": "f42b65d6a69809773e4dab779dee9910782ef163b149de076b7bdfd518b332ba",
+          "snapshot": {
+            "service.py": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+            "test_candidate.py": "c35b03e2b34926a07e7760417073fd7903b0bbfafd45b5092ad82376cd08a08d",
+            "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "requested_paths": [
+            "test_candidate.py"
+          ],
+          "changed_paths": [
+            "test_candidate.py"
+          ],
+          "verification": [
+            {
+              "exit_code": 1,
+              "tests_run": 2,
+              "failures": 1,
+              "errors": 0,
+              "success": false,
+              "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+            }
+          ]
+        },
+        {
+          "tool_call_id": "tdd-3",
+          "tool": "run_command",
+          "response_sha256": "6aa738c4b95a370c321b20cda2f2e173aaedf7ac3a51c48c3427279ec9b078c9",
+          "snapshot": {
+            "service.py": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+            "test_candidate.py": "c35b03e2b34926a07e7760417073fd7903b0bbfafd45b5092ad82376cd08a08d",
+            "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "exit_code": 1,
+          "tests_run": 2,
+          "failures": 1,
+          "errors": 0,
+          "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+        },
+        {
+          "tool_call_id": "tdd-4",
+          "tool": "propose_patch",
+          "response_sha256": "e4ade55ced92d4957f816bae78bf56de95a956420a7d373eaa93389d66c7a817",
+          "snapshot": {
+            "service.py": "07f6f6b11a6d4721369adc6485ffb8e787c88db39e3d1c69b0fd6ade9701ba08",
+            "test_candidate.py": "c35b03e2b34926a07e7760417073fd7903b0bbfafd45b5092ad82376cd08a08d",
+            "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "requested_paths": [
+            "service.py"
+          ],
+          "changed_paths": [
+            "service.py"
+          ],
+          "verification": [
+            {
+              "exit_code": 0,
+              "tests_run": 2,
+              "failures": 0,
+              "errors": 0,
+              "success": true,
+              "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+            }
+          ]
+        },
+        {
+          "tool_call_id": "tdd-5",
+          "tool": "run_command",
+          "response_sha256": "55954e4e14c027aab9d81c35cecb08efe99a30fa7fb45ca506911f22853e7934",
+          "snapshot": {
+            "service.py": "07f6f6b11a6d4721369adc6485ffb8e787c88db39e3d1c69b0fd6ade9701ba08",
+            "test_candidate.py": "c35b03e2b34926a07e7760417073fd7903b0bbfafd45b5092ad82376cd08a08d",
+            "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f",
+            ".doppel/verification.json": "38ec5fb837eeba88bc9c7e6050f38b4947c8b7cd20af29e717f3d1e3c0117b29"
+          },
+          "exit_code": 0,
+          "tests_run": 2,
+          "failures": 0,
+          "errors": 0,
+          "argv_sha256": "8ab8105f2e6186dd645f650991767fd92b3b2e877bcaf938ff42d64486b961d6"
+        }
+      ],
+      "approvals": [
+        {
+          "tool": "propose_patch",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "run_command",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "propose_patch",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        },
+        {
+          "tool": "run_command",
+          "bounds_pass": true,
+          "no_unapproved_effects": true
+        }
+      ],
+      "external_target_before": {
+        "exit_code": 1,
+        "tests_run": 2,
+        "failures": 2,
+        "errors": 0,
+        "oracle_sha256": "4c830af1cf221611967b0043ec4de67cf918b7592df85406dd02ebca6ce347bd"
+      },
+      "external_regression_before": {
+        "exit_code": 0,
+        "tests_run": 3,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "420f468129356ee3d484583750877fb73d2adeac68fceb4264816742d15a9832"
+      },
+      "external_target_after": {
+        "exit_code": 0,
+        "tests_run": 2,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "4c830af1cf221611967b0043ec4de67cf918b7592df85406dd02ebca6ce347bd"
+      },
+      "external_regression_after": {
+        "exit_code": 0,
+        "tests_run": 3,
+        "failures": 0,
+        "errors": 0,
+        "oracle_sha256": "420f468129356ee3d484583750877fb73d2adeac68fceb4264816742d15a9832"
+      },
+      "status": "completed",
+      "fallback_runtime": null,
+      "command_exit_codes": [
+        1,
+        0
+      ],
+      "patch_verification_exit_codes": [
+        1,
+        0
+      ],
+      "approval_count": 4,
+      "human_review": "pending",
+      "task_quality_scored": false,
+      "scope_note": "Trusted scripted control and subprocess tests, not model quality or strong OS isolation.",
+      "run_key": "tdd-02:graph:1"
+    }
+  ],
+  "passed": true,
+  "full_matrix_ready": false,
+  "task_quality_scored": false,
+  "scope_note": "Ready fixture controls only, one repeat; per-run factory/service boundaries, not a pooled quality rate. Live 9/12 canaries unchanged; full mode blocked."
+}

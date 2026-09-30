@@ -1,0 +1,265 @@
+{
+  "version": "0.14.4",
+  "scope": "Fresh isolated EXE, explicit Mock then loopback scripted Provider and local stdio MCP; no external provider, credentials, paid quality or visual QA",
+  "mock_runs": [
+    {
+      "mode": "legacy",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "graph",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "deep",
+      "status": "completed",
+      "read_fixture_confirmed": false,
+      "native_no_fallback": true
+    }
+  ],
+  "mcp_runs": [
+    {
+      "mode": "graph",
+      "approved": true,
+      "completed": true,
+      "gateway_calls": 1,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "deep",
+      "approved": true,
+      "completed": true,
+      "gateway_calls": 1,
+      "native_no_fallback": true
+    }
+  ],
+  "cancellation_runs": [
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 1,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 2,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 3,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 4,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 5,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "provider_entered",
+      "repeat": 6,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 1,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 2,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 3,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 4,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 5,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "graph",
+      "phase": "running_observed",
+      "repeat": 6,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 1,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 2,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 3,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 4,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 5,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "provider_entered",
+      "repeat": 6,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 1,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 2,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 3,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 4,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": false
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 5,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    },
+    {
+      "mode": "deep",
+      "phase": "running_observed",
+      "repeat": 6,
+      "status": "cancelled",
+      "cancelled_events": 1,
+      "provider_entered_before_release": true
+    }
+  ],
+  "health_openapi_runtime_page": true,
+  "cancellation_scope": "24 actual EXE API requests; provider-entered gate and first observed running, not precise instrumentation of EXE setup await boundaries",
+  "normal_close_owned_exe_and_mcp_children_exited": true,
+  "observed_mcp_child_count": 1,
+  "checkpoint_physically_deleted": true,
+  "artifacts": {
+    "DoppelAgent.exe": {
+      "sha256": "fbd87ae270115a03beba30e5aceef4eacb0193cf30dc83bfdf2bc12f2c8c2775",
+      "bytes": 21243794
+    },
+    "doppel_agent-0.14.4-py3-none-any.whl": {
+      "sha256": "a43fae4ae26d169a5ef801e1ec33a7055951d7d9af8438f1e7dddd286912097b",
+      "bytes": 176603
+    },
+    "doppel_agent-0.14.4.tar.gz": {
+      "sha256": "7d1f8568be0b4629db92ae54f5f8be333e5e1946946f119dbfc9ed2736fbd582",
+      "bytes": 183205
+    }
+  },
+  "verified_source_commit": "cbae6ae95ce1dd690180b918e5d9321280aaa6fa",
+  "embedded_source_verification": {
+    "doppel_agent.runtime.service": {
+      "bytecode_matches_committed_source": true,
+      "source_sha256": "fe4fac44192436a6bf9ac39e78e82ffa0d4dc5472ece9b4636b94215ddea3336"
+    },
+    "doppel_agent.concurrency.scheduler": {
+      "bytecode_matches_committed_source": true,
+      "source_sha256": "58b74fbf0e5afd88ac0681beb88c199e301af444689a24d9cab5dd0a3f91f1fc"
+    }
+  },
+  "package_build_provenance": "Built from tested candidate tree before source commit; embedded service/scheduler code objects verified against unchanged committed source, not a git-archive build"
+}
