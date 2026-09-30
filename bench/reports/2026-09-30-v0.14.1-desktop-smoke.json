@@ -64,12 +64,13 @@
       "bytes": 21240262
     },
     "doppel_agent-0.14.1-py3-none-any.whl": {
-      "sha256": "9f8478eddfe6ff6f4dc3c559f5571978c0b9915c7790fe468882026ffa398196",
+      "sha256": "7b9e855ade5e5e7832efc4846e0a296c9a733016d060e63d951d59122ac3cd9c",
       "bytes": 175095
     },
     "doppel_agent-0.14.1.tar.gz": {
-      "sha256": "89539eca8e3db8cdc73f77aed07524a3621cbe112a20df8cd7a25e0e96d9fe29",
-      "bytes": 169297
+      "sha256": "ad080e66af0df5469025426e9b4bd7ed0085b29f94c0930e2d548527e945fa7b",
+      "bytes": 169454
     }
-  }
+  },
+  "package_rebuild_note": "wheel/sdist rebuilt after CI timing-test fix; sdist regression source verified; production EXE unchanged"
 }

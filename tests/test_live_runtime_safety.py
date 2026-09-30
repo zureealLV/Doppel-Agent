@@ -192,9 +192,15 @@ def test_synchronous_timeout_has_stable_class():
         thread.join(timeout=2)
 
 
-def test_failed_attempt_has_elapsed_time_and_independent_usage_flag(tmp_path):
+@pytest.mark.parametrize("elapsed", [0.000953, 0.025])
+def test_failed_attempt_has_elapsed_time_and_independent_usage_flag(tmp_path, monkeypatch, elapsed):
+    # Windows' event-loop clock can wake a short sleep early. Check the actual
+    # measurement contract with an injected clock, not a sleep lower bound.
+    ticks = iter((100.0, 100.0 + elapsed))
+    monkeypatch.setattr(live, "perf_counter", lambda: next(ticks))
+
     async def runner(_run):
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0)
         raise ProviderRequestError("fixture-secret", kind="timeout", attempts=1)
 
     store = live.ResultStore(tmp_path, {})
@@ -203,7 +209,7 @@ def test_failed_attempt_has_elapsed_time_and_independent_usage_flag(tmp_path):
     record = store.load(RUNS[0].run_key)
     assert record["failure_class"] == "provider_timeout"
     assert record["usage_unknown"] is True
-    assert record["wall_seconds"] >= 0.001
+    assert record["wall_seconds"] == elapsed
     assert "fixture-secret" not in json.dumps(record)
 
 
