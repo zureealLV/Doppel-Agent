@@ -1,5 +1,13 @@
 # 更新记录
 
+## v0.14.2 — 2026-09-30
+
+- 修复取消发生在 aiosqlite worker 创建连接时的句柄遗失：调用方持有并 shield 获取任务，等待实际获取完成并关闭后才传播取消；不依赖 GC 或 Windows 删除重试。
+- Checkpoint close 同样受所有权保护，重复取消不能中断清理；初始化失败关闭已获取连接，获取失败保持原始异常/取消语义。
+- 增加 8 个 checkpoint 生命周期回归，包括真实 SQLite worker、重复取消、close 中取消、初始化/获取异常和真实 RunService/API 取消后文件删除。
+- 保留 v0.14.1 标签及失败 CI 证据，不强推/覆盖已发布的 tag。v0.14.1 安全门禁通过，但标签 CI 暴露的 SQLite cleanup 问题不能算完整发布验收成功。
+- 更新与测试报告：`docs/releases/v0.14.2.md`；完成该 hotfix 的本地/远端/标签门禁后再继续原计划 Task 5A。
+
 ## v0.14.1 — 2026-09-30
 
 - 修复评测请求级止损：缺少/无效 usage 或 Provider 传输错误后立即进入粘性终止状态；Legacy 吞异常、Deep 尝试 Graph fallback 都不能继续发送 HTTP 请求，不改变普通产品 runtime 的 fallback 策略。

@@ -1,0 +1,77 @@
+{
+  "scope": "isolated packaged EXE; explicit Mock + loopback scripted cancellation, no external provider or credentials; not model quality or visual QA",
+  "version": "0.14.2",
+  "health_http": 200,
+  "runtime_page_http": 200,
+  "runs": [
+    {
+      "mode": "legacy",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "metadata": {},
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    },
+    {
+      "mode": "graph",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "metadata": {
+        "step_count": 2,
+        "error": null
+      },
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    },
+    {
+      "mode": "deep",
+      "status": "completed",
+      "read_fixture_confirmed": false,
+      "metadata": {
+        "message_count": 2,
+        "subagent_limit": 0
+      },
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "deep.model_finished",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    }
+  ],
+  "graph_cancelled": true,
+  "cancel_terminal_events": 1,
+  "cleanup_verified": true,
+  "cleanup_method": "CloseMainWindow; owned EXE/captured immediate children exited; isolated checkpoint file successfully unlinked on Windows",
+  "checkpoint_delete_verified": true,
+  "artifacts": {
+    "DoppelAgent.exe": {
+      "sha256": "00e576ea238361b355af06a7849e2f7aea87ab5cbd59dd2d5d61626d0b330d64",
+      "bytes": 21241021
+    },
+    "doppel_agent-0.14.2-py3-none-any.whl": {
+      "sha256": "d3cf4697b2ec20ccf208d25d4146193128ed5870aad8906aec8948b127b78a0b",
+      "bytes": 175532
+    },
+    "doppel_agent-0.14.2.tar.gz": {
+      "sha256": "940de019d8a4874ba57d3c07b13ec127e1c5e2e8717a79c5d7b098f94853c9b9",
+      "bytes": 171730
+    }
+  },
+  "python_package_checks": "wheel/sdist version, English README, bundled Vue, lifecycle fix source, test source, no test output/settings; locked agent dependencies installed in isolated Python 3.11.15; CLI help passed"
+}

@@ -4,9 +4,9 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README_CN.md) · English**
 
-## Current release: v0.14.1
+## Current release: v0.14.2
 
-This patch hardens the live evaluation boundary: strict per-call usage validation, sticky request stops across fallback, typed synchronous Provider errors, finite accounting, and schema 1.1 results. The six offline safety gates pass; paid canaries and the full quality matrix are still pending. See [update and test evidence](docs/releases/v0.14.1.md).
+This patch retains the fail-closed live evaluation boundary and fixes SQLite handle ownership during cancellation: checkpoint acquisition and cleanup finish before cancellation propagates, including repeated cancellation. The six offline safety gates remain required; paid canaries and the full quality matrix are still pending. See [update and test evidence](docs/releases/v0.14.2.md). The v0.14.1 tag is preserved as history but failed its final Windows cancellation-cleanup gate.
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 

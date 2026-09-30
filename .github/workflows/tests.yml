@@ -21,6 +21,12 @@ jobs:
         run: ruff check src tests bench spikes
       - name: Run tests
         run: python -m pytest -q
+      - name: Repeat checkpoint cancellation lifecycle gates
+        run: |
+          for ($i = 1; $i -le 5; $i++) {
+            python -m pytest -q tests/test_checkpoint_cancellation.py tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Offline live-evaluation safety gates
         run: python -m bench.audit_live_runtime_matrix --output .bench-results/live-runner-audit.json
       - name: Compile sources
