@@ -1,0 +1,38 @@
+{
+  "case_id": "tdd-02",
+  "fixture_version": "1.1",
+  "category": "tdd_fix",
+  "source_kind": "synthetic_seed",
+  "source_commit": "f633817bc5163879346b63006ed4f873e49048a7",
+  "public_files": {
+    "service.py": "98975b5a5a1eb4736fdb59557d520fbb6c6e1375423af59e8d98100bf42ecfa6",
+    "test_public.py": "03434358b061a04e5cafcf6e753648c2a5e8c71a8c8faecf5ff3e7d315ea009f"
+  },
+  "allowed_edits": [
+    "service.py",
+    "test_candidate.py"
+  ],
+  "oracle": {
+    "kind": "tdd_red_green",
+    "source_file": "service.py",
+    "candidate_test": "test_candidate.py",
+    "allowed_argv": [
+      [
+        "{python}",
+        "-B",
+        "-m",
+        "unittest",
+        "-q",
+        "test_candidate",
+        "test_public"
+      ]
+    ],
+    "hidden_files": {
+      "reference_source.py": "07f6f6b11a6d4721369adc6485ffb8e787c88db39e3d1c69b0fd6ade9701ba08",
+      "regression_tests.py": "420f468129356ee3d484583750877fb73d2adeac68fceb4264816742d15a9832",
+      "scripted_test.py": "c35b03e2b34926a07e7760417073fd7903b0bbfafd45b5092ad82376cd08a08d",
+      "target_tests.py": "4c830af1cf221611967b0043ec4de67cf918b7592df85406dd02ebca6ce347bd"
+    },
+    "expected_seed_target_failures": 2
+  }
+}
