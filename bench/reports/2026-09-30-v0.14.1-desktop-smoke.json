@@ -1,0 +1,75 @@
+{
+  "scope": "isolated packaged EXE / explicit MockProvider; not model quality or visual QA",
+  "version": "0.14.1",
+  "health_http": 200,
+  "runtime_page_http": 200,
+  "runs": [
+    {
+      "mode": "legacy",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "metadata": {},
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    },
+    {
+      "mode": "graph",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "metadata": {
+        "step_count": 2,
+        "error": null
+      },
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    },
+    {
+      "mode": "deep",
+      "status": "completed",
+      "read_fixture_confirmed": false,
+      "metadata": {
+        "message_count": 2,
+        "subagent_limit": 0
+      },
+      "event_types": [
+        "run.status_changed",
+        "run.status_changed",
+        "runtime.started",
+        "deep.model_finished",
+        "runtime.finished",
+        "checkpoint.saved",
+        "run.status_changed"
+      ]
+    }
+  ],
+  "cleanup_verified": true,
+  "initial_probe": "fresh settings default to OpenAI-compatible, not Mock; one unauthenticated HTTP 401 before explicit isolated Mock configuration; no credentials used",
+  "cleanup_method": "CloseMainWindow; own packaged EXE and captured immediate children exited",
+  "deep_native_evidence": "deep.model_finished event; no fallback_runtime metadata",
+  "artifacts": {
+    "DoppelAgent.exe": {
+      "sha256": "d69164246d7e47b91ee0acf7ab31339baa22067b42d9aeac83a96cc9db5c1bf1",
+      "bytes": 21240262
+    },
+    "doppel_agent-0.14.1-py3-none-any.whl": {
+      "sha256": "9f8478eddfe6ff6f4dc3c559f5571978c0b9915c7790fe468882026ffa398196",
+      "bytes": 175095
+    },
+    "doppel_agent-0.14.1.tar.gz": {
+      "sha256": "89539eca8e3db8cdc73f77aed07524a3621cbe112a20df8cd7a25e0e96d9fe29",
+      "bytes": 169297
+    }
+  }
+}

@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
+from .. import __version__
 from ..runtime.service import RunService
 from .routes.runs import router as runs_router
 from .routes.subagents import router as subagents_router
@@ -43,7 +44,7 @@ def create_app(
 
     app = FastAPI(
         title="Doppel Agent Runtime API",
-        version="0.14.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",

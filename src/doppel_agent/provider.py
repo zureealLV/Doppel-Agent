@@ -139,9 +139,16 @@ class OpenAICompatibleProvider:
             with urlopen(request, timeout=self.timeout) as response:
                 raw = response.read(4 * 1024 * 1024 + 1)
         except HTTPError as exc:
-            raise RuntimeError(f"provider HTTP {exc.code}") from exc
+            raise ProviderRequestError(
+                f"provider HTTP {exc.code}",
+                kind="rate_limited" if exc.code == 429 else "http_status",
+                attempts=1, status_code=exc.code,
+            ) from exc
         except URLError as exc:
-            raise RuntimeError(f"provider connection failed: {exc.reason}") from exc
+            kind = "timeout" if isinstance(exc.reason, TimeoutError) else "connection"
+            raise ProviderRequestError(f"provider {kind} failed", kind=kind, attempts=1) from exc
+        except TimeoutError as exc:
+            raise ProviderRequestError("provider timeout", kind="timeout", attempts=1) from exc
         if len(raw) > 4 * 1024 * 1024:
             raise RuntimeError("provider response exceeds 4 MiB")
         return parse_model_turn(raw)

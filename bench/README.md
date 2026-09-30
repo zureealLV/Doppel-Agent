@@ -100,3 +100,21 @@ Exit 1 means a desired safety gate failed. At the 2026-09-30 source baseline,
 all 21 positive paths passed but five safety gates failed; paid execution must
 wait for Task 3A–3C in the existing plan. See
 `bench/reports/2026-09-30-v0.15-retest.md` for evidence and boundaries.
+
+### v0.14.1 safety patch status
+
+Task 3A–3C is now implemented: all six audit gates must pass (exit 0).
+Unknown/invalid per-turn usage and transport failures set a sticky terminal
+evaluation state **before any subsequent provider request**, including Deep's
+fallback. The sync adapter provides typed status/timeout/connection failures
+without adding retries. Prices/budget must be positive finite numbers and token
+counts non-bool non-negative integers. Unrepresentable costs are recorded and
+stop subsequent execution; elapsed time and fixture hashes survive failed runs.
+
+Live result/config/summary/review schema is **1.1**. Existing schema-1.0 stores
+are not migrated or overwritten: start a new output directory. The audit
+artifact has its own unchanged schema. Its scripted token counts are not paid
+model usage. See `docs/releases/v0.14.1.md` and the separate
+`bench/reports/2026-09-30-v0.14.1-live-runner-audit.json` for the patch evidence;
+the earlier five-failure report is retained unchanged. Full mode remains
+blocked; the next offline task is the per-boundary capability contract.

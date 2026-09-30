@@ -22,6 +22,7 @@
 | P9 Patch / Verification / Process / Async Subagents | `workspace/{patching,verification,process_supervisor}.py`、`runtime/async_subagents.py` | 具体 diff 审批；旧 base 冲突；allowlist 验证；取消进程树；后台子任务查询/追问/取消 | v0.11 完成运行层；v0.12 完成 REST/本地压测；v0.13 完成 diff、审批、事件与子 Agent UI。外部故障场景待做 |
 | P10 Runtime Observability UI | `frontend/`、`web/frontend_dist/`、静态资产安全路由与 frontend CI | 375/768/1024/1440；SSE 回放；Graph/Skill/MCP/Patch/子 Agent 分类；HITL 三种决定；无路径穿越 | v0.13.2 已完成；完整替换旧对话/设置页需先达到功能 parity |
 | P11 Fault Injection & Recovery | `bench/fault_matrix.py`、Provider half-open、MCP generation cache、restart reconciliation | 固定 10 场景；原始结果/分母/失败原因；副作用不重复；重启后明确终态 | v0.14.0 已完成；真实外部服务 chaos 不在本地 fixture 结论内 |
+| P12 Live Matrix Safety & Grounding | `bench/live_runtime_matrix.py`、请求级 accounting guard、独立 fixture/capability contract | 未知 usage 后不再发 HTTP；固定失败分类；冻结能力/分母与真实裁判 | v0.14.1 完成安全修补（六审计门禁通过）；真实 9+12 Canary、余下 13 fixture 和 full matrix 尚未完成。下一步沿用 2026-09-23 计划 Task 5A |
 
 ## P1 实现/验证明细
 

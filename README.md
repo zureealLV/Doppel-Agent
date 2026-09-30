@@ -1,147 +1,79 @@
 # Doppel Agent
 
-一个在本机运行的编程 Agent。可通过 Windows 桌面窗口、浏览器工作台或命令行连接模型、执行任务，并查看模型回合、工具调用与最终结果。
+A local coding agent with a Windows desktop GUI, a browser-based console, and a CLI. Connect an OpenAI-compatible Chat Completions endpoint, run a task, and inspect every model/tool step.
 
-**语言：简体中文 · [English introduction](README_EN.md)**
+**Language: [简体中文](README_CN.md) · English**
 
-> 当前版本：`v0.14.0`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+## Current release: v0.14.1
 
-![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
+This patch hardens the live evaluation boundary: strict per-call usage validation, sticky request stops across fallback, typed synchronous Provider errors, finite accounting, and schema 1.1 results. The six offline safety gates pass; paid canaries and the full quality matrix are still pending. See [update and test evidence](docs/releases/v0.14.1.md).
 
-## 功能
+![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
-- **Agent Loop**：模型发起工具调用，Core 校验并执行，再把结果返回模型；单次运行有最大步数限制。
-- **三运行时**：保留 `legacy` ReAct 基线、LangGraph `graph` 主链，并增加可选 Deep Agents `deep` 模式；三者共用异步 Runtime 契约，Graph/Deep 使用 SQLite Checkpointer。
-- **Deep Agents 适配**：自定义 `BaseChatModel` 复用现有 OpenAI-compatible Provider；`DoppelBackend` 拒绝秘密文件、状态目录、路径逃逸和内置 shell；深度模式最多两个只读子 Agent，分别限制模型调用与 Token 预算，异常会记录后降级到 focused graph。
-- **Diff-first 可恢复审批**：Graph/Deep 只能先提交带 base hash 的多文件 unified diff；批准、拒绝、编辑均可 resume，旧 base 变化拒绝覆盖，多文件失败原子回滚，工具幂等账本阻止重复执行。
-- **项目验证流水线**：`.doppel/verification.json` 只允许项目预先配置的 argv；补丁批准后可自动运行测试/静态检查并返回结构化结果，不接受模型生成的 shell 字符串。
-- **可取消进程树**：Windows 优先 Job Object，无法绑定时显式记录 `taskkill /T` 降级；取消、超时和关闭服务都会清理命令及其后代进程。
-- **异步子 Agent API**：同进程后台子任务使用有界调度与 SQLite 生命周期；父 run 显式授予 `delegate` 后，可经 FastAPI 创建、列出、查询、追问和取消。请求固定只读并禁止递归委派，生命周期事件进入父 run 的持久时间线。
-- **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。服务重启会把失去内存 lease 的 queued/running 记录原子收敛为失败终态并追加恢复事件。
-- **Vue Runtime Workbench**：Vue 3 + TypeScript + Vite 三栏运行时界面位于 `/runtime/`，可选择 legacy/graph/deep，实时展示队列与执行耗时、Graph/Skill/MCP/子 Agent/补丁事件、HITL 审批、真实 unified diff 和子 Agent 生命周期。
-- **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
-- **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试；reset window 只允许一个 half-open probe。
-- **审查工具**：工作区文件图、递归文本检索、按行读取、普通读写与 argv 命令；审查优先窄化范围，减少整文件上下文浪费。
-- **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
-- **模型接入**：支持多个 OpenAI-compatible 模型档案（名称、Base URL、模型、Key 与可选单价），可在每个对话中切换，也提供离线 Mock。
-- **Agent 工作台**：Ghostty 风格三色窗口按钮与无白边圆角窗口，默认采用 Codex 式双栏布局；右上角菜单按需展开可调宽度的执行详情，模型选择位于输入区。
-- **持久对话**：消息自动写入 SQLite，支持 `Ctrl+K` 全局搜索标题与消息正文、重命名、分组、归档、删除和重启恢复；同一对话历史会继续参与模型推理。
-- **效率证据**：快速/均衡/深度三档限制 Agent 步数；执行面板显示耗时、工具调用、Token 与按模型单价估算的费用。成本结论仍需同模型同任务基线。
-- **安全保存模型配置**：Base URL 与模型名保存在当前工作区；API Key 使用 Windows DPAPI 按当前用户加密，明文不会返回浏览器。
-- **Windows GUI**：独立桌面窗口复用同一套本机工作台；无需使用 TUI，关闭窗口即停止该实例的本地服务。
-- **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
-- **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
-- **Agent Skills Registry**：兼容 `.doppel/skills/`，并支持 `skills/`；校验 frontmatter、唯一名称、大小、链接路径和疑似明文密钥，通过 progressive disclosure 先暴露摘要、命中后再加载正文。仓库内置 code-review、bugfix、test-repair、mcp-operations 四个工作流 Skill。
-- **MCP SDK Gateway**：支持 stdio 与 Streamable HTTP；统一 session 生命周期、健康探针、重连、分页 catalog、按连接 generation 失效的 schema 缓存、每服务器 semaphore、参数校验、HITL、幂等、审计以及文本/图片/音频/resource/structured content。模型只看到规范化的 `mcp__server__tool`，不能绕过网关直连。
-- **只读子任务**：按次启用委派，子任务最多两次、每次最多四轮，只能读取工作区，不能继续委派；会产生额外模型调用与费用。
-- **常驻 Core**：CLI 与 daemon 使用 localhost JSON-RPC/NDJSON 通信。
+- Bounded agent loop with validated tool calls and tool-result feedback.
+- A unified async runtime contract with `legacy`, durable LangGraph `graph`, and optional Deep Agents `deep` modes.
+- A provider-backed `BaseChatModel`, policy-constrained `DoppelBackend`, bounded read-only subagents, and recorded fallback to the focused graph.
+- SQLite checkpoints plus approve/reject/edit interrupts and a tool-call idempotency ledger.
+- Diff-first multi-file patches with reviewed base hashes, stale-base rejection, atomic rollback, and durable proposed/applied/conflict events in both Graph and Deep modes.
+- A project-owned `.doppel/verification.json` argv allowlist with structured results; approved patches can automatically run configured checks when command capability is granted.
+- Cancellable command trees using a Windows Job Object first and an explicit `taskkill /T` fallback, plus persistent bounded async subagents exposed through parent-scoped create/list/get/follow-up/cancel REST endpoints. Children remain read-only and non-recursive.
+- FastAPI `/api/v1` run lifecycle endpoints, durable resumable SSE, bounded FIFO scheduling, cancellation, workspace read/write locks, resource limits, and atomic failed-state reconciliation for queued/running leases lost across a service restart.
+- A Vue 3 + TypeScript + Vite Runtime Workbench at `/runtime/` for legacy/graph/deep launches, queue/runtime metrics, durable event grouping, HITL approve/reject/edit, exact diffs, and async subagent lifecycle controls.
+- A long-lived async HTTP provider with bounded 429/5xx retry, `Retry-After`, deadlines, and a profile circuit breaker with a single half-open probe.
+- Compact workspace maps, recursive text search, line-range reads, UTF-8 read/write, and argv-only command execution.
+- Read-only by default; writing and command execution require explicit per-run grants.
+- A frameless desktop window without transparent white padding, Ghostty-style traffic-light controls, and a Codex-style two-pane default workspace; the resizable run inspector opens from the top-right menu.
+- Multiple custom provider profiles and per-conversation model switching; optional prices drive transparent per-run cost estimates.
+- Persistent conversations with `Ctrl+K` search across titles, message bodies, and archived items; per-workspace provider settings use Windows DPAPI for API keys.
+- A native Windows GUI window backed by the same local console, built with pywebview and PyInstaller; no TUI is required.
+- Per-run `events.jsonl`, `trace.jsonl`, and `session.json` records.
+- SQLite task dependency graph, estimated context-watermark compaction, and a strict progressive-disclosure Agent Skills registry with four built-in engineering workflows.
+- Per-tool manual approval for writes/commands in the web console; saved runs can be replayed after restarting the console.
+- A policy-aware MCP SDK gateway for stdio and Streamable HTTP with pooled lifecycle management, health/reconnect, generation-invalidated paginated schema caching, per-server semaphores, HITL, idempotency, audit events, and typed multimodal results.
+- The legacy loop retains opt-in read-only subagents capped at two delegations and four model turns per run. Deep mode instead exposes two read-only specialist subagents, each bounded to six model calls and an 8,000-token budget; neither path inherits write, command, MCP, or recursive-delegation capability.
+- CLI plus a localhost JSON-RPC/NDJSON daemon.
+- An isolated synthetic code-review case with a reproducible live-provider runner and a manually adjudicated result; no general benchmark claims.
+- A fixed 20-case × 3-runtime × 3-repeat protocol, a 180/180 offline Mock runtime-path smoke report with null task scores, deterministic local scheduler/lock load evidence, and a committed 10/10 offline fault-injection matrix for Provider, MCP, SSE, restart recovery, and process timeouts.
 
-## 快速开始
+This release does **not** include a CLI/daemon interactive approval workflow, a precise provider tokenizer, strong OS isolation, a TUI, full Vue parity for legacy conversations/settings, or a real-model adjudicated three-runtime quality benchmark. The Mock matrix validates plumbing only. See the [implementation plan](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md).
 
-要求：Windows 10、Python 3.11 或更新版本。旧 `legacy` CLI 仍可使用基础依赖；LangGraph/FastAPI 主链安装 `agent` 依赖组。
+## Start on Windows
+
+Requires Python 3.11+. The legacy CLI remains lightweight; install `.[agent]` for the LangGraph/FastAPI runtime.
 
 ```powershell
-cd '<你的 Doppel-Agent 仓库目录>'
-.\doppel.cmd doctor
+cd '<your Doppel-Agent repository directory>'
 .\doppel.cmd ui
 ```
 
-打开 [http://127.0.0.1:8766/](http://127.0.0.1:8766/)；点击左下角“模型与 API”，填写 API Base URL、模型名称和 API Key，测试后保存，再开始对话。`ui` 仅监听 `127.0.0.1`。配置保存在当前工作区 `.doppel-agent/`；Key 由 Windows DPAPI 加密，只能由同一台电脑上的当前 Windows 用户解密，接口不会把明文发回页面。
+Start the v0.14 API with `python -m pip install -e ".[agent]"` and `.\doppel.cmd api --workspace 'D:\your-project' --port 8765`; OpenAPI is at `/api/docs`, versioned endpoints are under `/api/v1`, and run mode may be `legacy`, `graph`, or `deep`. The desktop hybrid server exposes the Vue workbench at `/runtime/`; a parent run created with `permissions.delegate=true` owns the nested `/runs/{run_id}/subagents` lifecycle endpoints.
 
-### Windows 桌面 GUI（无需 TUI）
+Open [http://127.0.0.1:8766/](http://127.0.0.1:8766/), open **Model & API** in the lower-left corner, enter the endpoint, model and key, test, save, then start a conversation. Conversations and settings live under the selected workspace's `.doppel-agent/`; the key is stored only as a current-user Windows DPAPI ciphertext and is never returned by the settings API.
 
-已构建的程序位于 `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`。保留同目录的 `_internal` 文件夹；双击 EXE 即可打开独立窗口。默认把启动时的当前目录作为工作区；指定其他项目时：
-
-```powershell
-& 'D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe' --workspace 'D:\your-project'
-```
-
-桌面 GUI 需要系统安装 Microsoft Edge WebView2 Runtime；Windows 10 上如果缺少它，程序会显示启动错误。它复用 Web 控制台的功能和安全边界，但使用随机的 `127.0.0.1` 端口，关闭窗口会停止这个实例。对话和加密后的 API Key 会保存在所选工作区。
-
-左上三色按钮依次为关闭、最小化和最大化/还原，双击标题栏也可切换最大化；右上角菜单用于显示或隐藏执行详情。“新对话”和“代码审查”会分别复用尚未发送的空草稿。“代码审查”先显示全面审查、安全与权限、缺陷与异常、测试与回归四种模板，选择后才把提示词放入输入框，**不会自动消耗模型额度**；点击发送按钮后才会开始运行。按 `Ctrl+K` 可搜索全部对话及归档内容。
-
-重新构建：`./scripts/build-desktop.ps1`。脚本在项目 `.venv` 安装 `pywebview` 和 `PyInstaller`，产出无控制台窗口的 onedir EXE。也可通过 `python -m pip install -e '.[desktop]'` 后执行 `doppel-agent desktop --workspace 'D:\your-project'`。
-
-不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
-
-### v0.14 Runtime API 与 Workbench
+Offline smoke test:
 
 ```powershell
-python -m pip install -e ".[agent]"
-.\doppel.cmd api --workspace 'D:\your-project' --port 8765
-```
-
-打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做基线，或传 `mode: "deep"` 启用 Deep Agents。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
-
-通过桌面程序或混合 API 服务访问 `/runtime/` 可打开 Vue Runtime Workbench。旧 `/` 对话界面保留并提供 **Runtime Lab** 入口，待持久对话与设置达到功能对齐后再决定是否替换，避免用“重写完成”掩盖功能回退。
-
-父 run 在 `permissions.delegate=true` 时，可使用 `/api/v1/runs/{run_id}/subagents` 创建或列出后台只读子任务，并通过 `/{subagent_id}`、`/follow-ups` 与 `/cancel` 查询、追问和取消。OpenAPI 给出完整请求 schema；不具备 delegate grant 的父 run 返回 403。
-
-### 固定矩阵与本地负载证据
-
-```powershell
-uv run --extra agent python bench/runtime_matrix.py --output .bench-results/runtime-protocol.json
-uv run --extra agent python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
-uv run --extra agent python bench/run_load.py --output .bench-results/load.json
-uv run --extra agent python -m bench.fault_matrix --output .bench-results/fault-matrix.json
-```
-
-v0.12 固定了 20 个 case、三种 runtime、每题三次的 180-run 协议，并完成 180/180 次离线 Mock runtime-path smoke。该结果只证明三条执行链能跑通，`task_score` 明确保留为 `null`，不代表真实模型编程成功率。v0.14 又提交了 10/10 确定性故障场景，覆盖 Provider、MCP、SSE、重启 lease 与进程超时；它同样使用固定本地替身，只证明故障策略，不代表外部服务可用性或模型质量。
-
-### 命令行
-
-```powershell
-# 离线链路测试
 .\doppel.cmd demo "read README.md"
-
-# 真实模型：在当前 PowerShell 会话设置，不要提交密钥文件
-$env:DOPPEL_AGENT_BASE_URL = 'https://api.deepseek.com'
-$env:DOPPEL_AGENT_MODEL = 'deepseek-flash'
-$env:DOPPEL_AGENT_API_KEY = '<你的 API Key>'
-.\doppel.cmd ask '列出当前目录，并解释项目结构'
-
-# 需要修改文件时，单次显式授权
-.\doppel.cmd ask '创建 hello.py' --allow-write
-```
-
-Base URL 后会自动追加 `/chat/completions`。服务需要兼容 Chat Completions 的 `tools` / `tool_calls` 格式；不同提供商的模型名请以其文档为准。
-
-### MCP 扩展
-
-安装 `python -m pip install -e ".[agent]"`，再按 [MCP Gateway 配置说明](docs/MCP.md) 创建配置。Graph/Deep 只在本次运行授予 `mcp_execute` 后加载规范化工具，并在真实调用前持久化审批。HTTP 认证仅在环境变量中按 auth profile 提供；配置文件不保存令牌。**stdio 服务仍以当前用户运行，不是操作系统沙箱。**
-
-### 只读子任务
-
-Web 勾选“允许只读子任务”，或 CLI 添加 `--allow-delegate`。该能力默认关闭；子任务共享本次任务的模型连接，限制为读文件/列目录、四轮模型调用和 8000 字符的返回值。它不是并行执行器，也不会继承父任务的写入、命令或 MCP 权限。
-
-### 测试
-
-```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
-python -m pytest -q
-ruff check src tests
+python -m unittest discover -s tests -v
 ```
 
-测试包含本地 HTTP 模型替身的完整工具回合、Web 控制台接口、daemon/client 通信、路径越界与权限拒绝。没有配置真实 API Key 时，这些测试**不能**证明某个付费提供商的在线可用性。
+The mock is deterministic and cannot perform general coding tasks. The synthetic live review plus read-only reviews of three real local projects are documented in the [benchmark strategy](docs/BENCHMARK_STRATEGY.md); they are not a general benchmark or a SWE-bench score.
 
-### 真实代码审查验收
+### Windows GUI executable
 
-`bench/` 提供独立的合成代码审查样本：运行时只把样本 `service.py` 放入临时工作区，答案键不会暴露给 Agent。若已拥有 DeepSeek Key，可运行：
+The tested onedir build is at `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`. Keep the `_internal` directory beside it. Double-click to use the current directory as workspace, or pass `--workspace 'D:\your-project'`. The GUI needs Microsoft Edge WebView2 Runtime. Rebuild with `./scripts/build-desktop.ps1`; the script installs the optional desktop dependencies into `.venv`. The embedded server binds to a random `127.0.0.1` port and stops when the window closes.
 
-```powershell
-python bench/run_review.py --env-file '<你的本机 .env 路径>'
-```
+The traffic-light buttons close, minimize, and maximize/restore the window. The top-right menu toggles the run inspector. **New Conversation** and **Code Review** each reuse an existing empty draft. Code Review first offers four review templates and only fills the composer after a choice; it never calls the model until the user explicitly sends the prompt. Press `Ctrl+K` to search all active and archived conversations.
 
-报告存入忽略提交的 `.bench-results/`；密钥不写入报告。三轮合成题与三个真实项目的分层结果、SWE-bench 接入边界见 [代码审查测试策略](docs/BENCHMARK_STRATEGY.md)，早期逐项结果见 [审查验收记录](bench/reports/2026-09-19-review-001.md)。一个样本不能证明通用成功率。
+For MCP, install `python -m pip install -e ".[agent]"` and follow the [MCP Gateway guide](docs/MCP.md). Stdio servers run as the current user and are not an OS sandbox; HTTP auth tokens are resolved from environment profiles rather than stored in JSON.
 
-## 安全边界
+## Security
 
-Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
+The web console binds to `127.0.0.1` and rejects cross-origin requests. Web write/command/MCP calls require both the per-run checkbox and approval of the individual call; approval expires after 120 seconds. CLI/daemon grants are not interactive. File tools enforce workspace boundaries. `--allow-command` and MCP run programs as the current user and are **not** an OS sandbox. A model can receive file content returned by tools; use a trusted workspace and provider.
 
-旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph/Deep 的异步 Provider 可立即传播取消。当前仍没有强 OS 隔离、TUI、完整 Vue 对话/设置平替，或经真实模型裁判的三运行时质量成绩。Windows Job Object 负责进程树生命周期，但命令仍以当前用户权限运行。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
+## Project notes
 
-## 版本与来源
+Releases use version increments and a [changelog](CHANGELOG.md). The architecture was informed by the public description of [TackleClaude](https://github.com/Tackle-B/TackleClaude), but this repository is an independent implementation and does not claim its published benchmarks.
 
-版本按功能迭代发布；每次推送应更新版本号、[更新记录](CHANGELOG.md)并通过测试。项目独立开发，设计上参考了 [TackleClaude](https://github.com/Tackle-B/TackleClaude) 对本地 Agent 运行时的公开介绍；没有复制其源码，也不沿用其成本、成功率等数据。
-
-v0.14.0 的逐项发布证据、原始故障矩阵与 v0.15/v1.0 路线见 [v0.14.0 发布证据与下一阶段](docs/releases/v0.14.0.md)。
+See the [v0.14.0 release evidence and next-stage plan](docs/releases/v0.14.0.md) for exact gates, limitations, and the v0.15/v1.0 roadmap.

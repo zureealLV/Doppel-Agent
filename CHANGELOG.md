@@ -1,5 +1,15 @@
 # 更新记录
 
+## v0.14.1 — 2026-09-30
+
+- 修复评测请求级止损：缺少/无效 usage 或 Provider 传输错误后立即进入粘性终止状态；Legacy 吞异常、Deep 尝试 Graph fallback 都不能继续发送 HTTP 请求，不改变普通产品 runtime 的 fallback 策略。
+- 严格验证单次 usage 为非 bool 的非负整数，保留零 Token 和兼容字段；价格与预算必须是有限正数，拒绝 NaN、Infinity、负数和非数值，CLI 在创建快照/结果目录之前验证。
+- 同步 Provider 发出 typed、脱敏 HTTP/连接/超时错误且不自动重试；评测跨 runtime 保留原始 failure class、失败耗时与失败 fixture hash。
+- 评测结果 schema 1.1 分离 `usage_unknown` 与根因，记录 fallback 元数据；拒绝非有限历史成本，极端计费溢出仍记录尝试并止损，JSON 不输出 NaN/Infinity。
+- 将 21 条只读工具回合与六个安全 gate 纳入 Windows Python 3.11/3.12 CI；增加请求级保护、异常、恢复、计费及版本一致性回归。
+- 按仓库约定将英文入口放在 `README.md`，原中文全文保留在 `README_CN.md`，旧 `README_EN.md` 保留跳转。
+- 更新与测试报告：`docs/releases/v0.14.1.md`。这是 v0.15 前置安全修补，不宣称真实模型质量矩阵已经完成。
+
 ## v0.14.0 — 2026-09-22
 
 - 新增 10 场景确定性故障注入矩阵，覆盖 Provider 429/连接拒绝/读取超时/5xx/半开熔断、MCP 模糊断连与 schema 重连、慢 SSE 回放、服务重启 lease 收敛和命令超时清理；提交原始观察值、固定分母及失败原因字段，不冒充真实模型质量成绩。

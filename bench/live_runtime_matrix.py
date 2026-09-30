@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import subprocess
@@ -18,6 +19,7 @@ import tempfile
 from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -36,7 +38,35 @@ from doppel_agent.provider import (
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "bench" / "cases" / "runtime" / "manifest.json"
 CANARY_CASE_IDS = ("nav-01", "nav-02", "nav-03")
+RESULT_SCHEMA_VERSION = "1.1"
 _SAFE_KEY = re.compile(r"[a-z0-9-]+:(legacy|graph|deep):[123]\Z")
+
+
+class EvaluationProviderStopped(RuntimeError):
+    """Sticky evaluation-only stop; contains no transport text or credentials."""
+
+    def __init__(self, failure_class: str) -> None:
+        self.failure_class = failure_class
+        super().__init__(f"evaluation provider stopped: {failure_class}")
+
+
+def _is_token_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_finite_number(value: Any) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def validate_prices(input_price: Any, output_price: Any, max_cost_usd: Any) -> None:
+    if any(not _is_finite_number(value) or value <= 0
+           for value in (input_price, output_price, max_cost_usd)):
+        raise ValueError("positive finite input/output prices and max_cost_usd are required")
 
 
 def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
@@ -66,6 +96,8 @@ def select_runs(matrix: RuntimeMatrix, mode: str) -> tuple[MatrixRun, ...]:
 
 
 def classify_failure(error: BaseException) -> str:
+    if isinstance(error, EvaluationProviderStopped):
+        return error.failure_class
     if isinstance(error, ProviderCircuitOpen):
         return "provider_circuit_open"
     if isinstance(error, ProviderRequestError):
@@ -86,7 +118,7 @@ def classify_failure(error: BaseException) -> str:
 def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -125,7 +157,11 @@ class ResultStore:
 
 
 def _priced_cost(input_tokens: int, output_tokens: int, input_price: float, output_price: float) -> float:
-    return round((input_tokens * input_price + output_tokens * output_price) / 1_000_000, 9)
+    cost = float((Decimal(input_tokens) * Decimal(str(input_price))
+                  + Decimal(output_tokens) * Decimal(str(output_price))) / Decimal(1_000_000))
+    if not math.isfinite(cost):
+        raise ValueError("cost cannot be represented as a finite number")
+    return round(cost, 9)
 
 
 async def execute_runs(
@@ -142,8 +178,7 @@ async def execute_runs(
     The cost threshold is checked *between* runs. A single run can exceed it;
     it is not a provider-side hard spending cap.
     """
-    if min(input_price, output_price, max_cost_usd) <= 0:
-        raise ValueError("positive input/output prices and max_cost_usd are required")
+    validate_prices(input_price, output_price, max_cost_usd)
     results: list[dict[str, Any]] = []
     spent = 0.0
     for run in runs:
@@ -151,12 +186,16 @@ async def execute_runs(
         if previous is not None:
             results.append(previous)
             if previous.get("cost_usd") is None:
-                raise RuntimeError("usage unavailable for a prior run; paid execution stopped")
+                raise RuntimeError("usage or cost unavailable for a prior run; paid execution stopped")
+            if not _is_finite_number(previous["cost_usd"]) or previous["cost_usd"] < 0:
+                raise ValueError("invalid prior cost; paid execution stopped")
             spent += previous["cost_usd"]
             continue
         if spent >= max_cost_usd:
             break
         started = datetime.now(timezone.utc).isoformat()
+        timer = perf_counter()
+        observation: dict[str, Any] = {}
         try:
             observation = await runner(run)
             status = str(observation["status"])
@@ -173,20 +212,20 @@ async def execute_runs(
         except Exception as error:  # noqa: BLE001 - every paid attempt must be recorded
             status = "failed"
             failure_class = classify_failure(error)
-            answer, events, wall_seconds = "", [], None
+            answer, events = "", []
+            wall_seconds = round(perf_counter() - timer, 6)
             input_tokens = output_tokens = None
-        usage_known = (
-            isinstance(input_tokens, int) and not isinstance(input_tokens, bool)
-            and isinstance(output_tokens, int) and not isinstance(output_tokens, bool)
-            and input_tokens >= 0 and output_tokens >= 0
-        )
+        usage_known = _is_token_count(input_tokens) and _is_token_count(output_tokens)
         if not usage_known:
             failure_class = "usage_unavailable" if status == "completed" else failure_class
-        cost = (
-            _priced_cost(input_tokens, output_tokens, input_price, output_price)
-            if usage_known else None
-        )
+        cost = None
+        if usage_known:
+            try:
+                cost = _priced_cost(input_tokens, output_tokens, input_price, output_price)
+            except (ArithmeticError, ValueError):
+                failure_class = "cost_unavailable"
         record = {
+            "schema_version": RESULT_SCHEMA_VERSION,
             "run_key": run.run_key,
             "case_id": run.case_id,
             "runtime": run.runtime,
@@ -201,8 +240,10 @@ async def execute_runs(
             "wall_seconds": wall_seconds,
             "input_tokens": input_tokens if usage_known else None,
             "output_tokens": output_tokens if usage_known else None,
+            "usage_unknown": not usage_known,
             "cost_usd": cost,
-            "fixture_sha256": observation.get("fixture_sha256") if usage_known and status == "completed" else None,
+            "fixture_sha256": observation.get("fixture_sha256"),
+            "fallback_runtime": observation.get("fallback_runtime"),
             "validator_signal": (
                 run.validator["value"].lower() in answer.lower()
                 if run.validator["type"] == "answer_contains" else
@@ -213,20 +254,23 @@ async def execute_runs(
         store.save(run.run_key, record)
         results.append(record)
         if cost is None:
-            raise RuntimeError("usage unavailable; paid execution stopped after recording the run")
+            raise RuntimeError("usage or cost unavailable; paid execution stopped after recording the run")
         spent += cost
     return results
 
 
 def summarize(runs: Sequence[MatrixRun], results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    reported_cost = sum(item["cost_usd"] or 0 for item in results)
+    finite_cost = _is_finite_number(reported_cost)
     return {
-        "schema_version": "1.0",
+        "schema_version": RESULT_SCHEMA_VERSION,
         "planned_runs": len(runs),
         "recorded_runs": len(results),
         "complete_denominator": len(results) == len(runs),
         "statuses": dict(Counter(item["status"] for item in results)),
         "failure_classes": dict(Counter(item["failure_class"] for item in results if item["failure_class"])),
-        "reported_cost_usd": round(sum(item["cost_usd"] or 0 for item in results), 9),
+        "reported_cost_usd": round(reported_cost, 9) if finite_cost else None,
+        "aggregate_cost_unavailable": not finite_cost,
         "unknown_cost_runs": sum(item["cost_usd"] is None for item in results),
         "task_quality_scored": False,
         "human_review_pending": len(results),
@@ -240,7 +284,7 @@ def summarize(runs: Sequence[MatrixRun], results: Sequence[dict[str, Any]]) -> d
 def review_queue(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Keep adjudication separate from weak automatic keyword/event signals."""
     return {
-        "schema_version": "1.0",
+        "schema_version": RESULT_SCHEMA_VERSION,
         "items": [
             {
                 "run_key": item["run_key"],
@@ -262,19 +306,25 @@ class _UsageProvider:
         self.input_tokens = 0
         self.output_tokens = 0
         self.usage_complete = True
+        self.failure_class: str | None = None
 
     def next_turn(self, messages: Any, tools: Any) -> Any:
+        if self.failure_class is not None:
+            raise EvaluationProviderStopped(self.failure_class)
         try:
             turn = self.provider.next_turn(messages, tools)
-        except Exception:
+        except Exception as error:
             # A request may have been billed before the transport failed.
             self.usage_complete = False
-            raise
+            self.failure_class = classify_failure(error)
+            raise EvaluationProviderStopped(self.failure_class) from None
         usage = turn.usage or {}
         prompt = usage.get("prompt_tokens", usage.get("input_tokens"))
         completion = usage.get("completion_tokens", usage.get("output_tokens"))
-        if not isinstance(prompt, int) or not isinstance(completion, int):
+        if not _is_token_count(prompt) or not _is_token_count(completion):
             self.usage_complete = False
+            self.failure_class = "usage_unavailable"
+            raise EvaluationProviderStopped(self.failure_class)
         else:
             self.input_tokens += prompt
             self.output_tokens += completion
@@ -352,20 +402,31 @@ async def _run_prepared_case(
     sink = _EventSink()
     started = perf_counter()
     try:
-        result = await runtime.run(
-            RunRequest(run.prompt, run_id=run.deterministic_run_id,
-                       thread_id=run.deterministic_run_id), sink,
-        )
+        failure_class = None
+        fallback_runtime = None
+        answer = ""
+        status = "failed"
+        try:
+            result = await runtime.run(
+                RunRequest(run.prompt, run_id=run.deterministic_run_id,
+                           thread_id=run.deterministic_run_id), sink,
+            )
+            status, answer = result.status, result.answer
+            fallback_runtime = result.metadata.get("fallback_runtime")
+            failure_class = provider.failure_class or ("deep_fallback" if fallback_runtime else None)
+            if provider.failure_class:
+                status, answer = "failed", ""
+        except Exception as error:
+            failure_class = provider.failure_class or classify_failure(error)
         return {
-            "status": result.status,
-            "answer": result.answer,
+            "status": status,
+            "answer": answer,
             "event_types": sink.types,
             "wall_seconds": round(perf_counter() - started, 6),
             "input_tokens": provider.input_tokens if provider.usage_complete else None,
             "output_tokens": provider.output_tokens if provider.usage_complete else None,
-            "failure_class": (
-                "deep_fallback" if result.metadata.get("fallback_runtime") else None
-            ),
+            "failure_class": failure_class,
+            "fallback_runtime": fallback_runtime,
         }
     finally:
         if run.runtime == "deep":
@@ -396,9 +457,9 @@ def main() -> int:
         return 0
     try:
         runs = select_runs(matrix, args.mode)
-        if not all((args.base_url, args.model, args.input_price_per_million,
-                    args.output_price_per_million, args.max_cost_usd)):
-            raise ValueError("base URL, model, token prices and max cost are required")
+        validate_prices(args.input_price_per_million, args.output_price_per_million, args.max_cost_usd)
+        if not args.base_url or not args.model:
+            raise ValueError("base URL and model are required")
         parsed = urlparse(args.base_url)
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("base URL must not contain credentials, query or fragment")
@@ -411,7 +472,7 @@ def main() -> int:
             for case_id in REVIEW_CASE_IDS
         }
         config = {
-            "schema_version": "1.0",
+            "schema_version": RESULT_SCHEMA_VERSION,
             "protocol_sha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
             "commit": commit,
             "snapshot_sha256": hashlib.sha256(archive).hexdigest(),
