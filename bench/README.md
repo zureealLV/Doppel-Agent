@@ -189,3 +189,34 @@ These checks prove source-read evidence, not the correctness of an explanation:
 still diagnostic only. Live selection stays 9 navigation / 12 review paths;
 full mode stays blocked. Original Task 5B still has **12 remaining fixtures**,
 then Task 5C must freeze scoring, argv/edits and adjudication inputs.
+
+### Task 5B: tdd-01 (fixture 1.1 /audit 1.1)
+
+`tdd-01` now has an independently reproduced synthetic idempotency defect.
+Its source baseline is `dc0e6c5`, **not** a claim that production RunStore is
+broken or that these synthetic bytes came from that Git commit. Fixture 1.1
+explicitly records `source_kind=synthetic_seed` and freezes public and hidden
+file hashes. Only `service.py` and `test_public.py` enter the workspace;
+target/regression tests, reference source and scripted test stay external.
+
+The supported control uses **Graph RunService**, with its normal reviewed
+patch/command tools and four actual approvals: add candidate test → explicit
+failing command → source repair → explicit passing command. Project-configured
+post-patch verification also runs red/green. Source/test snapshots establish
+ordering and no early effects; the candidate test cannot be weakened after red.
+Both patch paths and exact command argv are checked before approval. Failed
+imports/syntax are not valid failing assertions, replayed tool IDs are invalid,
+and independent target/regression subprocesses must pass after repair.
+
+The existing task-audit command now runs three native `nav-04` factory paths
+plus this one supported service control. Audit schema is **1.1**, and every run
+records its own boundary; do not pool them into a model-quality rate. Manifest
+1.2 /capability 1.1 and their 180 original /81 direct /126 service denominators
+are unchanged. TDD Legacy/Deep are unsupported, not failures or omitted parity.
+Keep historical nav-only schema-1.0 reports unchanged. Live selection remains
+9/12 and full mode is blocked; **11 Task 5B fixtures remain**, starting tdd-02.
+
+These are trusted scripted controls, not a blind/paid model solving the defect.
+Hidden materialization and argv bounds do **not** provide strong OS sandboxing
+for arbitrary candidate Python code; Task 5C must retain that limitation and
+settle evaluation isolation before broader paid execution/quality claims.

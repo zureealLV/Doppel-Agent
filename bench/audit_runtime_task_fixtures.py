@@ -12,8 +12,9 @@ import re
 import subprocess
 import tempfile
 
-from bench.runtime_fixtures import TaskFixture, load_task_fixture, materialize_task_case
+from bench.runtime_fixtures import TASK_CASE_IDS, TaskFixture, load_task_fixture, materialize_task_case
 from bench.runtime_matrix import RuntimeMatrix
+from bench.runtime_tdd_harness import probe_tdd
 from bench.runtime_validators import ReadEvidenceProvider, validate_navigation_evidence
 from doppel_agent.provider import ModelTurn, ToolCall
 from doppel_agent.runtime.base import RunRequest
@@ -67,7 +68,7 @@ async def probe_navigation(fixture: TaskFixture, mode: str, workspace: Path) -> 
         validation = validate_navigation_evidence(fixture, workspace, provider.reads)
         fallback = result.metadata.get("fallback_runtime")
         return {
-            **validation, "runtime": mode, "actual_runtime": fallback or result.runtime,
+            **validation, "runtime": mode, "actual_runtime": fallback or result.runtime, "boundary": "direct_factory",
             "fallback_runtime": fallback, "status": result.status,
             "deterministic_pass": validation["deterministic_pass"] and result.status == "completed"
             and result.runtime == mode and not fallback,
@@ -82,23 +83,38 @@ async def probe_navigation(fixture: TaskFixture, mode: str, workspace: Path) -> 
 
 async def audit() -> dict:
     matrix = RuntimeMatrix.load(ROOT / "bench/cases/runtime/manifest.json")
-    fixture = load_task_fixture("nav-04")
+    fixtures = [load_task_fixture(case_id) for case_id in TASK_CASE_IDS]
+    capabilities = {boundary: matrix.capability_document(ROOT / "bench/cases/runtime/capabilities.json", boundary=boundary)
+                    for boundary in ("direct_factory", "run_service")}
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     dirty = bool(subprocess.check_output([
-        "git", "status", "--porcelain", "--", "src", "bench", "tests/test_runtime_task_fixtures.py",
+        "git", "status", "--porcelain", "--", "src", "bench", "tests",
     ], cwd=ROOT, text=True).strip())
     with tempfile.TemporaryDirectory(prefix="doppel-task-fixtures-") as temporary:
-        reports = [await probe_navigation(fixture, mode, Path(temporary) / mode) for mode in MODES]
+        reports = []
+        for fixture in fixtures:
+            boundary = "direct_factory" if fixture.category == "navigation" else "run_service"
+            modes = MODES if fixture.category == "navigation" else ("graph",)
+            for mode in modes:
+                key = f"{fixture.case_id}:{mode}:1"
+                if key not in capabilities[boundary]["supported_run_keys"]:
+                    raise ValueError("fixture probe is unsupported by its frozen production boundary")
+                workspace = Path(temporary) / fixture.case_id / mode
+                result = await probe_navigation(fixture, mode, workspace) if fixture.category == "navigation" else await probe_tdd(fixture, workspace)
+                reports.append({**result, "run_key": key})
     return {
-        "schema_version": "1.0", "recorded_at": datetime.now(UTC).isoformat(),
+        "schema_version": "1.1", "recorded_at": datetime.now(UTC).isoformat(),
         "source_commit": commit, "evaluation_source_dirty": dirty,
         "protocol_version": matrix.protocol_version, "manifest_sha256": matrix.manifest_sha256,
-        "provider": "local-scripted-no-network", "boundary": "direct_factory",
-        "fixture_source_commit": fixture.source_commit, "fixture_sha256": fixture.sha256,
-        "fixture_cases": [fixture.case_id], "runs": reports,
+        "provider": "local-scripted-reference-controls-no-network", "boundary": "explicit_per_run",
+        "fixture_contexts": {fixture.case_id: {"source_kind": fixture.source_kind, "source_baseline_commit": fixture.source_commit,
+                                                "fixture_version": fixture.version, "fixture_sha256": fixture.sha256} for fixture in fixtures},
+        "original_run_count": 180,
+        "eligible_denominators": {boundary: data["supported_run_count"] for boundary, data in capabilities.items()},
+        "fixture_cases": list(TASK_CASE_IDS), "runs": reports,
         "passed": all(report["deterministic_pass"] for report in reports),
         "full_matrix_ready": False, "task_quality_scored": False,
-        "scope_note": "nav-04 only; three native factory runs, one repeat. Live 9/12 canaries unchanged. Human explanation pending.",
+        "scope_note": "Ready fixture controls only, one repeat; per-run factory/service boundaries, not a pooled quality rate. Live 9/12 canaries unchanged; full mode blocked.",
     }
 
 
