@@ -1,0 +1,1531 @@
+{
+  "source_commit": "f2b45e6d44d3a8ae5072f0de8f76f7c13d0b1263",
+  "runtime_source_dirty": false,
+  "scope": "Capability eligibility only; not seeded-fixture readiness, paid execution or model quality. Original denominator retained.",
+  "boundaries": {
+    "direct_factory": {
+      "contract_version": "1.0",
+      "contract_sha256": "0a7c1a2eadd0529c1b51f88f4fb95165b8591a2eda835cf14a91435818e162ba",
+      "protocol_sha256": "8a1a6be085f767da74f78d7ec950652426afb032e299fcb3020e5a9f3e3c0f4d",
+      "boundary": "direct_factory",
+      "original_run_count": 180,
+      "supported_run_count": 81,
+      "excluded_run_count": 99,
+      "supported_run_keys": [
+        "nav-01:legacy:1",
+        "nav-01:legacy:2",
+        "nav-01:legacy:3",
+        "nav-01:graph:1",
+        "nav-01:graph:2",
+        "nav-01:graph:3",
+        "nav-01:deep:1",
+        "nav-01:deep:2",
+        "nav-01:deep:3",
+        "nav-02:legacy:1",
+        "nav-02:legacy:2",
+        "nav-02:legacy:3",
+        "nav-02:graph:1",
+        "nav-02:graph:2",
+        "nav-02:graph:3",
+        "nav-02:deep:1",
+        "nav-02:deep:2",
+        "nav-02:deep:3",
+        "nav-03:legacy:1",
+        "nav-03:legacy:2",
+        "nav-03:legacy:3",
+        "nav-03:graph:1",
+        "nav-03:graph:2",
+        "nav-03:graph:3",
+        "nav-03:deep:1",
+        "nav-03:deep:2",
+        "nav-03:deep:3",
+        "nav-04:legacy:1",
+        "nav-04:legacy:2",
+        "nav-04:legacy:3",
+        "nav-04:graph:1",
+        "nav-04:graph:2",
+        "nav-04:graph:3",
+        "nav-04:deep:1",
+        "nav-04:deep:2",
+        "nav-04:deep:3",
+        "review-01:legacy:1",
+        "review-01:legacy:2",
+        "review-01:legacy:3",
+        "review-01:graph:1",
+        "review-01:graph:2",
+        "review-01:graph:3",
+        "review-01:deep:1",
+        "review-01:deep:2",
+        "review-01:deep:3",
+        "review-02:legacy:1",
+        "review-02:legacy:2",
+        "review-02:legacy:3",
+        "review-02:graph:1",
+        "review-02:graph:2",
+        "review-02:graph:3",
+        "review-02:deep:1",
+        "review-02:deep:2",
+        "review-02:deep:3",
+        "review-03:legacy:1",
+        "review-03:legacy:2",
+        "review-03:legacy:3",
+        "review-03:graph:1",
+        "review-03:graph:2",
+        "review-03:graph:3",
+        "review-03:deep:1",
+        "review-03:deep:2",
+        "review-03:deep:3",
+        "review-04:legacy:1",
+        "review-04:legacy:2",
+        "review-04:legacy:3",
+        "review-04:graph:1",
+        "review-04:graph:2",
+        "review-04:graph:3",
+        "review-04:deep:1",
+        "review-04:deep:2",
+        "review-04:deep:3",
+        "patch-01:deep:1",
+        "patch-01:deep:2",
+        "patch-01:deep:3",
+        "patch-02:deep:1",
+        "patch-02:deep:2",
+        "patch-02:deep:3",
+        "patch-03:deep:1",
+        "patch-03:deep:2",
+        "patch-03:deep:3"
+      ],
+      "excluded_runs": [
+        {
+          "run_key": "tdd-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary.",
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-01:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-01:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-01:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-02:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-02:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-03:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "patch-03:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-01:graph:1",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-01:graph:2",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-01:graph:3",
+          "reasons": [
+            "reviewed_patch: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-01:deep:1",
+          "reasons": [
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "approval-01:deep:2",
+          "reasons": [
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "approval-01:deep:3",
+          "reasons": [
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:1",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:2",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:3",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:graph:1",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-02:graph:2",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-02:graph:3",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "durable_resume: SQLite state resumes, but reviewed patch metadata is only in memory; a reconstructed factory runtime cannot resume a reviewed patch without caller-persisted metadata. RunService persists it separately."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:1",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:2",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:3",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-01:graph:1",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-01:graph:2",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-01:graph:3",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-01:deep:1",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-01:deep:2",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-01:deep:3",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:1",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:2",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:3",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:graph:1",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:graph:2",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:graph:3",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:deep:1",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:deep:2",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "mcp-02:deep:3",
+          "reasons": [
+            "mcp_gateway: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:1",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:2",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:3",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:graph:1",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "cancellation: Not exposed by the production factory at this boundary.",
+            "process_tree_cleanup: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "cancel-01:graph:2",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "cancellation: Not exposed by the production factory at this boundary.",
+            "process_tree_cleanup: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "cancel-01:graph:3",
+          "reasons": [
+            "command_execute: Not exposed by the production factory at this boundary.",
+            "cancellation: Not exposed by the production factory at this boundary.",
+            "process_tree_cleanup: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        }
+      ],
+      "case_requirements": {
+        "nav-01": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-02": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-03": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-04": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Prompt asks to locate/explain source, not call MCP. Extra mcp_execute grant is retained as historical manifest data; resolve in Task 5B before live use."
+        },
+        "review-01": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-02": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-03": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-04": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "tdd-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-02": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-03": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-04": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "patch-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "patch-02": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "patch-03": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "approval-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "durable_resume"
+          ],
+          "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+        },
+        "approval-02": {
+          "requires": [
+            "workspace_read",
+            "command_execute",
+            "durable_resume"
+          ],
+          "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+        },
+        "mcp-01": {
+          "requires": [
+            "workspace_read",
+            "mcp_gateway"
+          ],
+          "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+        },
+        "mcp-02": {
+          "requires": [
+            "workspace_read",
+            "mcp_gateway"
+          ],
+          "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+        },
+        "cancel-01": {
+          "requires": [
+            "workspace_read",
+            "command_execute",
+            "cancellation",
+            "process_tree_cleanup"
+          ],
+          "note": "Requires a supervised command plus cancellation and OS child-death proof; fixture remains Task 5B."
+        }
+      },
+      "full_matrix_ready": false,
+      "task_quality_scored": false,
+      "note": "Capability eligibility only, not seeded-fixture or quality acceptance. Unsupported keys are not model failures."
+    },
+    "run_service": {
+      "contract_version": "1.0",
+      "contract_sha256": "0a7c1a2eadd0529c1b51f88f4fb95165b8591a2eda835cf14a91435818e162ba",
+      "protocol_sha256": "8a1a6be085f767da74f78d7ec950652426afb032e299fcb3020e5a9f3e3c0f4d",
+      "boundary": "run_service",
+      "original_run_count": 180,
+      "supported_run_count": 126,
+      "excluded_run_count": 54,
+      "supported_run_keys": [
+        "nav-01:legacy:1",
+        "nav-01:legacy:2",
+        "nav-01:legacy:3",
+        "nav-01:graph:1",
+        "nav-01:graph:2",
+        "nav-01:graph:3",
+        "nav-01:deep:1",
+        "nav-01:deep:2",
+        "nav-01:deep:3",
+        "nav-02:legacy:1",
+        "nav-02:legacy:2",
+        "nav-02:legacy:3",
+        "nav-02:graph:1",
+        "nav-02:graph:2",
+        "nav-02:graph:3",
+        "nav-02:deep:1",
+        "nav-02:deep:2",
+        "nav-02:deep:3",
+        "nav-03:legacy:1",
+        "nav-03:legacy:2",
+        "nav-03:legacy:3",
+        "nav-03:graph:1",
+        "nav-03:graph:2",
+        "nav-03:graph:3",
+        "nav-03:deep:1",
+        "nav-03:deep:2",
+        "nav-03:deep:3",
+        "nav-04:legacy:1",
+        "nav-04:legacy:2",
+        "nav-04:legacy:3",
+        "nav-04:graph:1",
+        "nav-04:graph:2",
+        "nav-04:graph:3",
+        "nav-04:deep:1",
+        "nav-04:deep:2",
+        "nav-04:deep:3",
+        "review-01:legacy:1",
+        "review-01:legacy:2",
+        "review-01:legacy:3",
+        "review-01:graph:1",
+        "review-01:graph:2",
+        "review-01:graph:3",
+        "review-01:deep:1",
+        "review-01:deep:2",
+        "review-01:deep:3",
+        "review-02:legacy:1",
+        "review-02:legacy:2",
+        "review-02:legacy:3",
+        "review-02:graph:1",
+        "review-02:graph:2",
+        "review-02:graph:3",
+        "review-02:deep:1",
+        "review-02:deep:2",
+        "review-02:deep:3",
+        "review-03:legacy:1",
+        "review-03:legacy:2",
+        "review-03:legacy:3",
+        "review-03:graph:1",
+        "review-03:graph:2",
+        "review-03:graph:3",
+        "review-03:deep:1",
+        "review-03:deep:2",
+        "review-03:deep:3",
+        "review-04:legacy:1",
+        "review-04:legacy:2",
+        "review-04:legacy:3",
+        "review-04:graph:1",
+        "review-04:graph:2",
+        "review-04:graph:3",
+        "review-04:deep:1",
+        "review-04:deep:2",
+        "review-04:deep:3",
+        "tdd-01:graph:1",
+        "tdd-01:graph:2",
+        "tdd-01:graph:3",
+        "tdd-02:graph:1",
+        "tdd-02:graph:2",
+        "tdd-02:graph:3",
+        "tdd-03:graph:1",
+        "tdd-03:graph:2",
+        "tdd-03:graph:3",
+        "tdd-04:graph:1",
+        "tdd-04:graph:2",
+        "tdd-04:graph:3",
+        "patch-01:graph:1",
+        "patch-01:graph:2",
+        "patch-01:graph:3",
+        "patch-01:deep:1",
+        "patch-01:deep:2",
+        "patch-01:deep:3",
+        "patch-02:graph:1",
+        "patch-02:graph:2",
+        "patch-02:graph:3",
+        "patch-02:deep:1",
+        "patch-02:deep:2",
+        "patch-02:deep:3",
+        "patch-03:graph:1",
+        "patch-03:graph:2",
+        "patch-03:graph:3",
+        "patch-03:deep:1",
+        "patch-03:deep:2",
+        "patch-03:deep:3",
+        "approval-01:graph:1",
+        "approval-01:graph:2",
+        "approval-01:graph:3",
+        "approval-01:deep:1",
+        "approval-01:deep:2",
+        "approval-01:deep:3",
+        "approval-02:graph:1",
+        "approval-02:graph:2",
+        "approval-02:graph:3",
+        "mcp-01:graph:1",
+        "mcp-01:graph:2",
+        "mcp-01:graph:3",
+        "mcp-01:deep:1",
+        "mcp-01:deep:2",
+        "mcp-01:deep:3",
+        "mcp-02:graph:1",
+        "mcp-02:graph:2",
+        "mcp-02:graph:3",
+        "mcp-02:deep:1",
+        "mcp-02:deep:2",
+        "mcp-02:deep:3",
+        "cancel-01:graph:1",
+        "cancel-01:graph:2",
+        "cancel-01:graph:3"
+      ],
+      "excluded_runs": [
+        {
+          "run_key": "tdd-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-01:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-02:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-03:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "post_patch_verification: Not exposed by the production factory at this boundary."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "tdd-04:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-02:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "patch-03:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:1",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:2",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-01:legacy:3",
+          "reasons": [
+            "reviewed_patch: Legacy write_file is not the reviewed multi-file patch protocol.",
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:1",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:2",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:legacy:3",
+          "reasons": [
+            "durable_resume: Legacy Core has synchronous approval only; no checkpoint resume."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "approval-02:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:1",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:2",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-01:legacy:3",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:1",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:2",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "mcp-02:legacy:3",
+          "reasons": [
+            "mcp_gateway: Legacy MCPBridge is not the RunService MCPToolExecutor gateway."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:1",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:2",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:legacy:3",
+          "reasons": [
+            "cancellation: Cancelling the async wrapper cannot stop its synchronous Core worker.",
+            "process_tree_cleanup: No runtime-owned cancellation path for the Core command supervisor."
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:1",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:2",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        },
+        {
+          "run_key": "cancel-01:deep:3",
+          "reasons": [
+            "command_execute: Deep harness excludes execute; allow_command only enables post-patch verification.",
+            "process_tree_cleanup: required grants absent: workspace_write"
+          ]
+        }
+      ],
+      "case_requirements": {
+        "nav-01": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-02": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-03": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "nav-04": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Prompt asks to locate/explain source, not call MCP. Extra mcp_execute grant is retained as historical manifest data; resolve in Task 5B before live use."
+        },
+        "review-01": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-02": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-03": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "review-04": {
+          "requires": [
+            "workspace_read"
+          ],
+          "note": "Source reading only; keyword/event validator is not a quality oracle."
+        },
+        "tdd-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-02": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-03": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "tdd-04": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "command_execute",
+            "post_patch_verification"
+          ],
+          "note": "TDD requires an explicit failing-test command before the patch, not only post-patch verification."
+        },
+        "patch-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "patch-02": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "patch-03": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch"
+          ],
+          "note": "Requires a reviewed multi-file proposal; rollback/conflict oracles remain Task 5B."
+        },
+        "approval-01": {
+          "requires": [
+            "workspace_read",
+            "reviewed_patch",
+            "durable_resume"
+          ],
+          "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+        },
+        "approval-02": {
+          "requires": [
+            "workspace_read",
+            "command_execute",
+            "durable_resume"
+          ],
+          "note": "Checkpoint-based approval/resume; exactly-once fixture/oracle remains Task 5B."
+        },
+        "mcp-01": {
+          "requires": [
+            "workspace_read",
+            "mcp_gateway"
+          ],
+          "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+        },
+        "mcp-02": {
+          "requires": [
+            "workspace_read",
+            "mcp_gateway"
+          ],
+          "note": "Requires the production policy gateway, not Legacy MCPBridge or a custom test tool."
+        },
+        "cancel-01": {
+          "requires": [
+            "workspace_read",
+            "command_execute",
+            "cancellation",
+            "process_tree_cleanup"
+          ],
+          "note": "Requires a supervised command plus cancellation and OS child-death proof; fixture remains Task 5B."
+        }
+      },
+      "full_matrix_ready": false,
+      "task_quality_scored": false,
+      "note": "Capability eligibility only, not seeded-fixture or quality acceptance. Unsupported keys are not model failures."
+    }
+  }
+}

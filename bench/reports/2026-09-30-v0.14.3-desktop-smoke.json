@@ -1,0 +1,58 @@
+{
+  "version": "0.14.3",
+  "scope": "Fresh isolated EXE, explicit Mock then loopback scripted Provider and local stdio MCP; no external provider, credentials, paid quality or visual QA",
+  "mock_runs": [
+    {
+      "mode": "legacy",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "graph",
+      "status": "completed",
+      "read_fixture_confirmed": true,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "deep",
+      "status": "completed",
+      "read_fixture_confirmed": false,
+      "native_no_fallback": true
+    }
+  ],
+  "mcp_runs": [
+    {
+      "mode": "graph",
+      "approved": true,
+      "completed": true,
+      "gateway_calls": 1,
+      "native_no_fallback": true
+    },
+    {
+      "mode": "deep",
+      "approved": true,
+      "completed": true,
+      "gateway_calls": 1,
+      "native_no_fallback": true
+    }
+  ],
+  "health_openapi_runtime_page": true,
+  "normal_close_owned_exe_and_mcp_children_exited": true,
+  "observed_mcp_child_count": 1,
+  "checkpoint_physically_deleted": true,
+  "artifacts": {
+    "DoppelAgent.exe": {
+      "sha256": "075f9cfd42ea6151e668e7929aee6c9518396530b31c0f202b064e613e0f2004",
+      "bytes": 21242899
+    },
+    "doppel_agent-0.14.3-py3-none-any.whl": {
+      "sha256": "9f95a2daa0bb4501c9d56b34eb0788c8b343fc98649cab8efaf71ceae9f7df29",
+      "bytes": 176114
+    },
+    "doppel_agent-0.14.3.tar.gz": {
+      "sha256": "f249ba517e640bf11e6cc8ad5f6b62de56e3bda666bb9bd72ad0b1d4a1795dd8",
+      "bytes": 176349
+    }
+  }
+}
