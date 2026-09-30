@@ -11,7 +11,7 @@ import re
 
 REVIEW_CASE_IDS = ("review-01", "review-02", "review-03", "review-04")
 FIXTURE_ROOT = Path(__file__).resolve().parent / "cases" / "runtime" / "fixtures"
-TASK_CASE_IDS = ("nav-04", "tdd-01", "tdd-02", "tdd-03")
+TASK_CASE_IDS = ("nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04")
 TDD_ARGV = ("{python}", "-B", "-m", "unittest", "-q", "test_candidate", "test_public")
 
 

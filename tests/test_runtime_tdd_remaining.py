@@ -10,7 +10,7 @@ from bench.runtime_fixtures import FIXTURE_ROOT, load_task_fixture, materialize_
 from bench.runtime_tdd_harness import probe_tdd
 
 
-CASES = ("tdd-02", "tdd-03")
+CASES = ("tdd-02", "tdd-03", "tdd-04")
 
 
 def oracle(workspace, case_id, name):
@@ -106,4 +106,21 @@ def test_stale_patch_candidate_green_cannot_mask_write_before_conflict_check(tmp
     assert report["status"] == "completed"
     assert report["command_exit_codes"] == report["patch_verification_exit_codes"] == [1, 0]
     assert report["external_target_after"]["failures"] == 2
+    assert not report["deterministic_pass"]
+
+
+def test_cancel_candidate_green_cannot_mask_discarding_other_queued_work(tmp_path, monkeypatch):
+    import bench.runtime_tdd_harness as harness
+
+    fixture = load_task_fixture("tdd-04")
+    original = harness.ScriptedTddProvider
+    golden = dict(fixture.hidden_files)["reference_source.py"]
+    partial = golden.replace(b'if future.cancelled():',
+                             b'if any(item.cancelled() for item in self.futures.values()):')
+    assert partial != golden
+    monkeypatch.setattr(harness, "ScriptedTddProvider", lambda test, _: original(test, partial))
+    report = asyncio.run(harness.probe_tdd(fixture, tmp_path / "agent"))
+    assert report["status"] == "completed"
+    assert report["command_exit_codes"] == report["patch_verification_exit_codes"] == [1, 0]
+    assert report["external_target_after"]["failures"] == 1
     assert not report["deterministic_pass"]
