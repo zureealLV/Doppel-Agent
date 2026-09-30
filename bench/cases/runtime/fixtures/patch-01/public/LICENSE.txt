@@ -1,0 +1,1 @@
+Protected fixture attribution: synthetic benchmark control, not application code.

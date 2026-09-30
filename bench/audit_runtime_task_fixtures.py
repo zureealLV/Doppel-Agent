@@ -15,6 +15,7 @@ import tempfile
 from bench.runtime_fixtures import TASK_CASE_IDS, TaskFixture, load_task_fixture, materialize_task_case
 from bench.runtime_matrix import RuntimeMatrix
 from bench.runtime_tdd_harness import probe_tdd
+from bench.runtime_patch_harness import probe_patch
 from bench.runtime_validators import ReadEvidenceProvider, validate_navigation_evidence
 from doppel_agent.provider import ModelTurn, ToolCall
 from doppel_agent.runtime.base import RunRequest
@@ -94,16 +95,21 @@ async def audit() -> dict:
         reports = []
         for fixture in fixtures:
             boundary = "direct_factory" if fixture.category == "navigation" else "run_service"
-            modes = MODES if fixture.category == "navigation" else ("graph",)
+            modes = MODES if fixture.category == "navigation" else (("graph", "deep") if fixture.category == "multi_file_patch" else ("graph",))
             for mode in modes:
                 key = f"{fixture.case_id}:{mode}:1"
                 if key not in capabilities[boundary]["supported_run_keys"]:
                     raise ValueError("fixture probe is unsupported by its frozen production boundary")
                 workspace = Path(temporary) / fixture.case_id / mode
-                result = await probe_navigation(fixture, mode, workspace) if fixture.category == "navigation" else await probe_tdd(fixture, workspace)
+                if fixture.category == "navigation":
+                    result = await probe_navigation(fixture, mode, workspace)
+                elif fixture.category == "multi_file_patch":
+                    result = await probe_patch(fixture, mode, workspace)
+                else:
+                    result = await probe_tdd(fixture, workspace)
                 reports.append({**result, "run_key": key})
     return {
-        "schema_version": "1.1", "recorded_at": datetime.now(UTC).isoformat(),
+        "schema_version": "1.2", "recorded_at": datetime.now(UTC).isoformat(),
         "source_commit": commit, "evaluation_source_dirty": dirty,
         "protocol_version": matrix.protocol_version, "manifest_sha256": matrix.manifest_sha256,
         "provider": "local-scripted-reference-controls-no-network", "boundary": "explicit_per_run",

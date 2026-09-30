@@ -11,7 +11,7 @@ import re
 
 REVIEW_CASE_IDS = ("review-01", "review-02", "review-03", "review-04")
 FIXTURE_ROOT = Path(__file__).resolve().parent / "cases" / "runtime" / "fixtures"
-TASK_CASE_IDS = ("nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04")
+TASK_CASE_IDS = ("nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04", "patch-01")
 TDD_ARGV = ("{python}", "-B", "-m", "unittest", "-q", "test_candidate", "test_public")
 
 
@@ -54,11 +54,11 @@ def load_task_fixture(case_id: str, *, root: Path = FIXTURE_ROOT) -> TaskFixture
     fields = {
         "case_id", "fixture_version", "category", "source_commit", "public_files", "allowed_edits", "oracle",
     }
-    if isinstance(data, dict) and data.get("fixture_version") == "1.1":
+    if isinstance(data, dict) and data.get("fixture_version") in {"1.1", "1.2"}:
         fields.add("source_kind")
-    if not isinstance(data, dict) or set(data) != fields or data["case_id"] != case_id or data["fixture_version"] not in {"1.0", "1.1"}:
+    if not isinstance(data, dict) or set(data) != fields or data["case_id"] != case_id or data["fixture_version"] not in {"1.0", "1.1", "1.2"}:
         raise ValueError("invalid task fixture metadata")
-    if data["category"] not in {"navigation", "tdd_fix"} or not isinstance(data["oracle"], dict):
+    if data["category"] not in {"navigation", "tdd_fix", "multi_file_patch"} or not isinstance(data["oracle"], dict):
         raise ValueError("invalid task fixture category/oracle")
     if not isinstance(data["source_commit"], str) or not re.fullmatch(r"[0-9a-f]{40}", data["source_commit"]):
         raise ValueError("fixture source must identify an exact commit")
@@ -81,6 +81,30 @@ def load_task_fixture(case_id: str, *, root: Path = FIXTURE_ROOT) -> TaskFixture
         ) or not isinstance(rubric, list) or not rubric or any(not isinstance(item, str) or not item for item in rubric):
             raise ValueError("invalid navigation oracle")
     hidden = []
+    if data["category"] == "multi_file_patch":
+        oracle = data["oracle"]
+        if data["fixture_version"] != "1.2" or data.get("source_kind") != "synthetic_seed" or set(oracle) != {
+            "kind", "required_paths", "allowed_argv", "hidden_files", "expected_seed_target_failures",
+        } or oracle["kind"] != "reviewed_multi_file" or set(manifest) != {
+            "service.py", "test_public.py", "README.md", "LICENSE.txt",
+        } or set(edits) != {"service.py", "test_public.py", "README.md"} or oracle["required_paths"] != edits or (
+            oracle["allowed_argv"] != [] or type(oracle["expected_seed_target_failures"]) is not int
+            or oracle["expected_seed_target_failures"] != 2
+        ):
+            raise ValueError("invalid multi-file patch bounds/oracle")
+        expected = oracle["hidden_files"]
+        if not isinstance(expected, dict) or set(expected) != {
+            "reference_changes.json", "target_tests.py", "regression_tests.py", "public_check.py",
+        }:
+            raise ValueError("invalid patch hidden inventory")
+        for path, hash_value in sorted(expected.items()):
+            payload = fixture_path(folder / "oracle", path).read_bytes()
+            if sha256(payload).hexdigest() != hash_value:
+                raise ValueError("hidden fixture hash mismatch")
+            hidden.append((path, payload))
+        changes = json.loads(dict(hidden)["reference_changes.json"])
+        if not isinstance(changes, dict) or set(changes) != set(edits) or any(not isinstance(v, str) for v in changes.values()):
+            raise ValueError("invalid reference patch bounds")
     if data["category"] == "tdd_fix":
         oracle = data["oracle"]
         if data["fixture_version"] != "1.1" or data.get("source_kind") != "synthetic_seed" or set(oracle) != {

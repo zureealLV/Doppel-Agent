@@ -138,3 +138,67 @@ def validate_tdd_evidence(fixture: TaskFixture, workspace: Path, evidence: dict,
                           ("external_regression_before", "regression_tests.py"), ("external_regression_after", "regression_tests.py"))
     )
     return checks
+
+
+def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dict) -> dict[str, bool]:
+    """Validate trusted native receipts plus external oracles; not agent claims."""
+    if fixture.category != "multi_file_patch":
+        raise ValueError("patch evidence requires a multi-file fixture")
+    rows = evidence.get("receipts", [])
+    chronology = [row.get("tool") for row in rows] == ["read_file"] * len(fixture.public_files) + ["propose_patch"]
+    checks = {
+        "native_completion": evidence.get("status") == "completed" and evidence.get("actual_runtime") == evidence.get("runtime")
+        and evidence.get("runtime") in {"graph", "deep"} and not evidence.get("paused_fallback_runtime"),
+        "executor_chronology": chronology,
+    }
+    ids = [row.get("tool_call_id") for row in rows]
+    checks["unique_receipts"] = all(isinstance(value, str) and value for value in ids) and len(ids) == len(set(ids))
+    if not chronology:
+        return checks
+    base = {p: sha256(b).hexdigest() for p, b in fixture.public_files}
+    initial = evidence.get("initial", {})
+    required = set(fixture.allowed_edits)
+    current = {p.relative_to(workspace).as_posix(): "symlink" if p.is_symlink() else sha256(p.read_bytes()).hexdigest()
+               for p in workspace.rglob("*") if p.is_file() and p.relative_to(workspace).parts[0] != ".doppel-agent"}
+    checks["frozen_public_base"] = initial == base
+    checks["executed_snapshot_matches_disk"] = evidence.get("current") == rows[-1].get("snapshot") == current
+    checks["successful_frozen_reads"] = {r.get("path") for r in rows[:-1]} == set(base) and all(
+        r.get("success") is True and r.get("source_lines_present") is True and r.get("snapshot") == base
+        and isinstance(r.get("response_sha256"), str) and len(r["response_sha256"]) == 64 for r in rows[:-1]
+    )
+    approval = evidence.get("approval", {})
+    checks["reviewed_base_integrity"] = approval.get("integrity") is True and approval.get("visible_match") is True and (
+        approval.get("base_sha256") == {p: "sha256:" + base[p] for p in required}
+        and approval.get("content_sha256") == {p: current.get(p) for p in required}
+    )
+    checks["no_unapproved_effects"] = approval.get("bounds_pass") is True and approval.get("no_unapproved_effects") is True and (
+        evidence.get("reconstructed_service") is True and evidence.get("approval_count") == 1
+    )
+    checks["required_multi_file_paths"] = set(rows[-1].get("requested_paths", [])) == set(rows[-1].get("changed_paths", [])) == required
+    checks["reviewed_identity_executed"] = isinstance(approval.get("patch_id"), str) and rows[-1].get("patch_id") == approval["patch_id"]
+    checks["edit_bounds"] = set(current) == set(base) and all(current.get(p) == base[p] for p in base if p not in required)
+    checks["all_required_files_changed"] = all(current.get(p) not in {None, base[p]} for p in required)
+    checks["no_native_verification_grant"] = rows[-1].get("native_verification_present") is False and not evidence.get("permissions", {}).get("command_execute")
+
+    def green(row, minimum):
+        return row.get("exit_code") == 0 and row.get("tests_run", 0) >= minimum and row.get("errors") == row.get("failures") == 0
+
+    before = evidence.get("external_target_before", {})
+    checks["independent_seed_failures"] = before.get("exit_code") == 1 and before.get("failures") == fixture.oracle["expected_seed_target_failures"] and (
+        before.get("errors") == 0 and before.get("tests_run", 0) >= before["failures"]
+    )
+    checks["external_targets_and_regressions"] = green(evidence.get("external_target_after", {}), 2) and all(
+        green(evidence.get(key, {}), 3) for key in ("external_regression_before", "external_regression_after")
+    )
+    mutation = evidence.get("candidate_on_seed", {})
+    checks["new_tests_are_sensitive"] = green(evidence.get("public_after", {}), 2) and mutation.get("exit_code") == 1 and (
+        mutation.get("failures", 0) >= 1 and mutation.get("errors") == 0
+    )
+    hidden = dict(fixture.hidden_files)
+    checks["frozen_external_oracles"] = all(
+        evidence.get(key, {}).get("oracle_sha256") == sha256(hidden[path]).hexdigest()
+        for key, path in (("external_target_before", "target_tests.py"), ("external_target_after", "target_tests.py"),
+                          ("external_regression_before", "regression_tests.py"), ("external_regression_after", "regression_tests.py"),
+                          ("public_after", "public_check.py"), ("candidate_on_seed", "public_check.py"))
+    )
+    return checks

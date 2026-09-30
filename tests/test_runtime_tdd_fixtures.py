@@ -167,14 +167,15 @@ def test_offline_task_audit_separates_factory_navigation_from_supported_service_
     from bench.audit_runtime_task_fixtures import audit
 
     report = asyncio.run(audit())
-    assert report["schema_version"] == "1.1"
-    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04"]
+    assert report["schema_version"] == "1.2"
+    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04", "patch-01"]
     assert report["passed"] is True
-    assert len(report["runs"]) == 7
+    assert len(report["runs"]) == 9
     assert [(row["case_id"], row["runtime"], row["boundary"]) for row in report["runs"]] == [
         ("nav-04", "legacy", "direct_factory"), ("nav-04", "graph", "direct_factory"),
         ("nav-04", "deep", "direct_factory"), ("tdd-01", "graph", "run_service"),
         ("tdd-02", "graph", "run_service"), ("tdd-03", "graph", "run_service"), ("tdd-04", "graph", "run_service"),
+        ("patch-01", "graph", "run_service"), ("patch-01", "deep", "run_service"),
     ]
     assert report["full_matrix_ready"] is False
     assert report["task_quality_scored"] is False

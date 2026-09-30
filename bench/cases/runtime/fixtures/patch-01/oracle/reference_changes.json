@@ -1,0 +1,5 @@
+{
+  "service.py": "def normalize_name(name):\n    if not isinstance(name, str):\n        raise TypeError(\"name must be text\")\n    return name.strip().casefold()\n",
+  "test_public.py": "import unittest\nfrom service import normalize_name\n\n\nclass PublicTests(unittest.TestCase):\n    def test_trim(self):\n        self.assertEqual(normalize_name(\" alice \"), \"alice\")\n\n    def test_unicode_canonical(self):\n        self.assertEqual(normalize_name(\" Straße \"), \"strasse\")\n",
+  "README.md": "# Name normalization\n\nnormalize_name trims surrounding whitespace then Unicode-casefolds text.\nEmpty text is valid; nontext raises TypeError.\n\n```json\n[{\"input\": \" Alice \", \"output\": \"alice\"}, {\"input\": \" Straße \", \"output\": \"strasse\"}]\n```\n"
+}

@@ -1,0 +1,34 @@
+{
+  "case_id": "patch-01",
+  "fixture_version": "1.2",
+  "category": "multi_file_patch",
+  "source_kind": "synthetic_seed",
+  "source_commit": "a03994dff476c11d70b1bcedb54ef806b282d741",
+  "public_files": {
+    "LICENSE.txt": "4084bb96f55a51e1c89d54430e6a0b052e757204def940902923564175abd056",
+    "README.md": "e886e1b0fe558f48db6606f129a369865f6a574440039651a8326c9aa905b82c",
+    "service.py": "b280e167e7452e99d4df50cfc02c8dee43ca134072dbe3d527e3e60d8b3d6188",
+    "test_public.py": "bf66503d78d0719d96acd9b6030cef8704416d1ba2650249a1561ac49e6566c1"
+  },
+  "allowed_edits": [
+    "service.py",
+    "test_public.py",
+    "README.md"
+  ],
+  "oracle": {
+    "kind": "reviewed_multi_file",
+    "required_paths": [
+      "service.py",
+      "test_public.py",
+      "README.md"
+    ],
+    "allowed_argv": [],
+    "hidden_files": {
+      "public_check.py": "ccd841694aa7862235055c4a3cc174c7887e7e26503a31c30f0569c5c542a516",
+      "reference_changes.json": "a3bdccb62e35e1263cbc28cc4e304212a715367cc3fae1bc81ffb3ebb8fa97b2",
+      "regression_tests.py": "6c27926742c69cbf4576d6b5b12c1c50c82766bca0f65761f1b963dc1905ebc0",
+      "target_tests.py": "1a81238cad76b0dcb756ea84cb2d5bc38b8ea6ba21d4d5f904989c5f0b986ba4"
+    },
+    "expected_seed_target_failures": 2
+  }
+}
