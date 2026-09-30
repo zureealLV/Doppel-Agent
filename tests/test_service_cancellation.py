@@ -10,6 +10,20 @@ from doppel_agent.runtime.base import RuntimeResult
 from doppel_agent.runtime.service import RunService
 
 
+CANCELLATION_DRAIN_WATCHDOG_SECONDS = 30
+
+
+async def wait_for_cancelled(scheduler, run_id, *, timeout=CANCELLATION_DRAIN_WATCHDOG_SECONDS):
+    """Finite deadlock guard, not a cancellation latency or persistence SLA.
+
+    Scheduler completion intentionally waits for owned SQLite IO. Correctness
+    below still requires a cancelled future, durable state, one terminal event
+    and no remaining jobs; a timeout or successful completion is a failure.
+    """
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(scheduler.wait(run_id), timeout)
+
+
 @pytest.mark.parametrize(("operation", "phase"), [
     ("create", "running_update"), ("resume", "running_update"),
     ("create", "running_event"),
@@ -77,8 +91,7 @@ def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch
                 assert not service.scheduler._jobs[run_id].future.done()
             release_thread.set()
             release_async.set()
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(service.scheduler.wait(run_id), 3)
+            await wait_for_cancelled(service.scheduler, run_id)
             # The scheduler future is not done until owned setup writes have
             # drained, so no background write can restore "running" afterwards.
             terminal = await service.get(run_id)
@@ -122,8 +135,7 @@ def test_scheduler_cancel_before_operation_entry_still_runs_service_cleanup(tmp_
                 record, _ = service.runs.create("resume-run", "resume-thread", "graph", request, None)
                 service.runs.update(record["run_id"], "interrupted", metadata={"interrupts": [{"id": "approval"}]})
                 await service.resume(record["run_id"], "approval", {"approved": True})
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(service.scheduler.wait(record["run_id"]), 3)
+            await wait_for_cancelled(service.scheduler, record["run_id"])
             assert await asyncio.gather(*cancellation_tasks) == ([True] if action == "cancel" else [None])
             assert (await service.get(record["run_id"]))["status"] == "cancelled"
             events = await service.list_events(record["run_id"])
@@ -171,12 +183,75 @@ def test_repeated_cancel_drains_terminal_write_before_scheduler_finishes(tmp_pat
             assert not service.scheduler._jobs[run_id].future.done()
             assert (await service.get(run_id))["status"] == "running"
             release.set()
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(service.scheduler.wait(run_id), 3)
+            await wait_for_cancelled(service.scheduler, run_id)
             assert (await service.get(run_id))["status"] == "cancelled"
             assert sum(event["type"] == "run.cancelled" for event in await service.list_events(run_id)) == 1
         finally:
             release.set()
             await service.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("case", ["resume_completion_event", "pre_entry_create"])
+def test_cancellation_watchdog_allows_slow_owned_terminal_io(tmp_path, monkeypatch, case):
+    """Inject > old 3s watchdog IO, not a sleep-based scheduling assumption."""
+    import time
+    real_service = RunService
+    observed = []
+
+    def slow_service(*args, **kwargs):
+        service = real_service(*args, **kwargs)
+        original = service.runs.update
+
+        def update(run_id, status, **fields):
+            if status == "cancelled":
+                # Explicit fault latency: cancellation must drain this owned IO.
+                # No production cancellation latency SLA is asserted by these tests.
+                time.sleep(4)
+                observed.append((service, run_id))
+            return original(run_id, status, **fields)
+
+        service.runs.update = update
+        return service
+
+    monkeypatch.setitem(globals(), "RunService", slow_service)
+    try:
+        if case == "resume_completion_event":
+            test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch, "resume", "completion_event")
+        else:
+            test_scheduler_cancel_before_operation_entry_still_runs_service_cleanup(tmp_path, monkeypatch, "create", "cancel")
+    finally:
+        # This proof runs even on the old watchdog's TimeoutError: the real
+        # service still drained IO and reached one durable cancelled state.
+        assert len(observed) == 1
+        service, run_id = observed[0]
+        assert service.runs.get(run_id)["status"] == "cancelled"
+        assert sum(row["type"] == "run.cancelled" for row in service.events.list(run_id)) == 1
+        assert service.scheduler._jobs[run_id].future.cancelled()
+        assert service.scheduler.active_count == 0
+        print("slow-IO proof: durable cancelled, exactly one event, drained future, zero active jobs")
+
+
+def test_cancellation_watchdog_still_rejects_a_stuck_wait():
+    class StuckScheduler:
+        async def wait(self, _run_id):
+            await asyncio.Event().wait()
+
+    async def scenario():
+        with pytest.raises(TimeoutError):
+            await wait_for_cancelled(StuckScheduler(), "stuck", timeout=0.02)
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_watchdog_rejects_successful_non_cancelled_completion():
+    class SuccessfulScheduler:
+        async def wait(self, _run_id):
+            return "completed"
+
+    async def scenario():
+        with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+            await wait_for_cancelled(SuccessfulScheduler(), "not-cancelled", timeout=0.02)
 
     asyncio.run(scenario())
