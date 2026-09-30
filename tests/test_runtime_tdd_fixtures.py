@@ -168,13 +168,13 @@ def test_offline_task_audit_separates_factory_navigation_from_supported_service_
 
     report = asyncio.run(audit())
     assert report["schema_version"] == "1.1"
-    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02"]
+    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02", "tdd-03"]
     assert report["passed"] is True
-    assert len(report["runs"]) == 5
+    assert len(report["runs"]) == 6
     assert [(row["case_id"], row["runtime"], row["boundary"]) for row in report["runs"]] == [
         ("nav-04", "legacy", "direct_factory"), ("nav-04", "graph", "direct_factory"),
         ("nav-04", "deep", "direct_factory"), ("tdd-01", "graph", "run_service"),
-        ("tdd-02", "graph", "run_service"),
+        ("tdd-02", "graph", "run_service"), ("tdd-03", "graph", "run_service"),
     ]
     assert report["full_matrix_ready"] is False
     assert report["task_quality_scored"] is False
