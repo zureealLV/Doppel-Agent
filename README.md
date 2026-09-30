@@ -6,9 +6,9 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 ## Current release: v0.14.4
 
-This patch repairs cancellation during RunService initialization/finalization, drains owned SQLite writes before publishing a cancelled terminal state, and preserves operation cleanup when cancellation precedes coroutine entry. Deterministic scripted nav-04/tdd-01..04 fixtures are grounded, not paid model-quality results. Capability eligibility remains 81 direct-factory /126 service paths out of the original 180; full mode remains blocked. See [update and test evidence](docs/releases/v0.14.4.md). Historical failed CI/tags are not rewritten.
+This patch repairs cancellation during RunService initialization/finalization, drains owned SQLite writes before publishing a cancelled terminal state, and preserves operation cleanup when cancellation precedes coroutine entry. Deterministic scripted nav-04/tdd-01..04/patch-01 fixtures are grounded, not paid model-quality results. Capability eligibility remains 81 direct-factory /126 service paths out of the original 180; full mode remains blocked. See [update and test evidence](docs/releases/v0.14.4.md). Historical failed CI/tags are not rewritten.
 
-Latest evaluation-only update: [tdd-03/04 controls and test evidence](bench/reports/2026-09-30-protocol-1.2-tdd03-04.md). Original Task 5B is 5/13; next are the three reviewed multi-file patch fixtures. No new desktop version or model-quality score is implied.
+Latest evaluation-only update: [patch-01 Graph/Deep reviewed multi-file controls and test evidence](bench/reports/2026-09-30-protocol-1.2-patch01.md). Original Task 5B is 6/13; next are the behavior-preserving patch-02 refactor and patch-03 rollback/stale-base controls. No new desktop version or model-quality score is implied.
 
 ![Doppel Agent v0.8.2 desktop workspace](docs/images/doppel-agent-v082.png)
 
