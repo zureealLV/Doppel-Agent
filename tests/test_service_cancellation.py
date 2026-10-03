@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+import time
 
 import pytest
 
@@ -11,6 +12,7 @@ from doppel_agent.runtime.service import RunService
 
 
 CANCELLATION_DRAIN_WATCHDOG_SECONDS = 30
+CANCELLATION_FIXTURE_WATCHDOG_SECONDS = 30
 
 
 async def wait_for_cancelled(scheduler, run_id, *, timeout=CANCELLATION_DRAIN_WATCHDOG_SECONDS):
@@ -24,14 +26,15 @@ async def wait_for_cancelled(scheduler, run_id, *, timeout=CANCELLATION_DRAIN_WA
         await asyncio.wait_for(scheduler.wait(run_id), timeout)
 
 
-@pytest.mark.parametrize(("operation", "phase"), [
-    ("create", "running_update"), ("resume", "running_update"),
-    ("create", "running_event"),
-    ("create", "runtime_setup"), ("resume", "runtime_setup"),
-    ("create", "completion_update"), ("resume", "completion_update"),
-    ("create", "completion_event"), ("resume", "completion_event"),
+@pytest.mark.parametrize(("operation", "phase", "setup_delay_seconds"), [
+    ("create", "running_update", 0), ("resume", "running_update", 0),
+    ("create", "running_event", 0),
+    ("create", "runtime_setup", 0), ("resume", "runtime_setup", 0),
+    ("create", "completion_update", 0), ("resume", "completion_update", 0),
+    ("create", "completion_event", 0), ("resume", "completion_event", 0),
+    ("create", "completion_event", 2.2),
 ])
-def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch, operation, phase):
+def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch, operation, phase, setup_delay_seconds):
     async def scenario():
         service = RunService(tmp_path, provider=MockProvider())
         await service.start()
@@ -45,16 +48,20 @@ def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch
         def update(*args, **kwargs):
             if (phase, args[1]) in {("running_update", "running"), ("completion_update", "completed")}:
                 entered.set()
-                if not release_thread.wait(3):
+                if not release_thread.wait(CANCELLATION_FIXTURE_WATCHDOG_SECONDS):
                     raise TimeoutError("running update gate not released")
             return original_update(*args, **kwargs)
 
         def append(*args, **kwargs):
+            if setup_delay_seconds and args[2] == "run.status_changed" and args[3].get("status") == "running":
+                # Real owned event IO precedes the selected cancellation gate.
+                # Delaying entry must not be confused with cancellation latency.
+                time.sleep(setup_delay_seconds)
             if args[2] == "run.status_changed" and (phase, args[3].get("status")) in {
                 ("running_event", "running"), ("completion_event", "completed"),
             }:
                 entered.set()
-                if not release_thread.wait(3):
+                if not release_thread.wait(CANCELLATION_FIXTURE_WATCHDOG_SECONDS):
                     raise TimeoutError("running event gate not released")
             return original_append(*args, **kwargs)
 
@@ -84,7 +91,9 @@ def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch
                 service.runs.update(record["run_id"], "interrupted", metadata={"interrupts": [{"id": "approval", "value": {}}]})
                 await service.resume(record["run_id"], "approval", {"approved": True})
             run_id = record["run_id"]
-            assert await asyncio.to_thread(entered.wait, 2), phase
+            # Entry/hold watchdogs protect the test from a deadlock; no 2s
+            # persistence/phase-entry SLA is part of the cancellation contract.
+            assert await asyncio.to_thread(entered.wait, CANCELLATION_FIXTURE_WATCHDOG_SECONDS), phase
             assert await service.cancel(run_id)
             if phase.endswith("_update") or phase == "running_event":
                 assert (await service.get(run_id))["status"] != "cancelled"
@@ -218,7 +227,7 @@ def test_cancellation_watchdog_allows_slow_owned_terminal_io(tmp_path, monkeypat
     monkeypatch.setitem(globals(), "RunService", slow_service)
     try:
         if case == "resume_completion_event":
-            test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch, "resume", "completion_event")
+            test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch, "resume", "completion_event", 0)
         else:
             test_scheduler_cancel_before_operation_entry_still_runs_service_cleanup(tmp_path, monkeypatch, "create", "cancel")
     finally:
