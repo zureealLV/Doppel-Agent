@@ -1,0 +1,676 @@
+{
+  "schema_version": "1.0",
+  "date": "2026-10-02",
+  "release_status": "offline candidate accepted only; v0.15 release pending",
+  "source_commit_base": "e3e499566e52548399950143618c732299c64b2a",
+  "source_dirty_at_validation": true,
+  "validation_source_files_sha256": "116a522797680a844823e9bdca95434478c177c7c938da70d015d88e198810fc",
+  "source_unchanged_during_validation": true,
+  "application_version": "0.14.4",
+  "protocol_version": "1.2",
+  "capability_version": "1.1",
+  "external_paid_requests": 0,
+  "dependencies": {
+    "doppel-agent": "0.14.4",
+    "pytest": "8.4.2",
+    "ruff": "0.16.8",
+    "langgraph": "1.2.11",
+    "deepagents": "0.7.15",
+    "mcp": "2.2.0",
+    "fastapi": "0.141.1",
+    "aiosqlite": "0.22.1"
+  },
+  "gates": [
+    {
+      "gate": "python-suite",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-ra"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 316.001
+    },
+    {
+      "gate": "ruff",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "src",
+        "tests",
+        "bench",
+        "spikes"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 0.949
+    },
+    {
+      "gate": "compile",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests",
+        "bench",
+        "spikes"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 0.77
+    },
+    {
+      "gate": "lock",
+      "command": [
+        "uv",
+        "lock",
+        "--check"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 1.009
+    },
+    {
+      "gate": "lifecycle-1",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_service_cancellation.py",
+        "tests/test_checkpoint_cancellation.py",
+        "tests/test_service_approval_concurrency.py",
+        "tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 20.803
+    },
+    {
+      "gate": "lifecycle-2",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_service_cancellation.py",
+        "tests/test_checkpoint_cancellation.py",
+        "tests/test_service_approval_concurrency.py",
+        "tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 19.378
+    },
+    {
+      "gate": "lifecycle-3",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_service_cancellation.py",
+        "tests/test_checkpoint_cancellation.py",
+        "tests/test_service_approval_concurrency.py",
+        "tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 19.388
+    },
+    {
+      "gate": "lifecycle-4",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_service_cancellation.py",
+        "tests/test_checkpoint_cancellation.py",
+        "tests/test_service_approval_concurrency.py",
+        "tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 17.583
+    },
+    {
+      "gate": "lifecycle-5",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_service_cancellation.py",
+        "tests/test_checkpoint_cancellation.py",
+        "tests/test_service_approval_concurrency.py",
+        "tests/api/test_runs_api.py::RunsApiTests::test_cancel_running_async_provider_emits_one_terminal_event"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 18.875
+    },
+    {
+      "gate": "mcp-lifecycle-1",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/mcp/test_client_manager.py",
+        "tests/test_runtime_capabilities.py",
+        "-k",
+        "MCPClientManager or real_local_mcp or actual_parent"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 10.242
+    },
+    {
+      "gate": "mcp-lifecycle-2",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/mcp/test_client_manager.py",
+        "tests/test_runtime_capabilities.py",
+        "-k",
+        "MCPClientManager or real_local_mcp or actual_parent"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 11.382
+    },
+    {
+      "gate": "mcp-lifecycle-3",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/mcp/test_client_manager.py",
+        "tests/test_runtime_capabilities.py",
+        "-k",
+        "MCPClientManager or real_local_mcp or actual_parent"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 10.013
+    },
+    {
+      "gate": "safety-audit",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.audit_live_runtime_matrix",
+        "--output",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\safety-audit.json"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 20.766
+    },
+    {
+      "gate": "task-fixture-audit",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.audit_runtime_task_fixtures",
+        "--output",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\task-fixtures.json"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 50.539
+    },
+    {
+      "gate": "supported-factory",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.run_supported_runtime_matrix",
+        "--boundary",
+        "direct_factory",
+        "--output-dir",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\supported-factory"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 54.944
+    },
+    {
+      "gate": "supported-service",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.run_supported_runtime_matrix",
+        "--boundary",
+        "run_service",
+        "--output-dir",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\supported-service"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 188.922
+    },
+    {
+      "gate": "fault-matrix",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.fault_matrix",
+        "--output",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\fault-matrix.json"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 4.475
+    },
+    {
+      "gate": "load",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.run_load",
+        "--jobs",
+        "100",
+        "--output",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\load.json"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 0.851
+    },
+    {
+      "gate": "mock-smoke",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.runtime_matrix",
+        "--offline-smoke",
+        "--output",
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.bench-results\\v015-acceptance-20261002-144000\\mock-smoke.json"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 7.282
+    },
+    {
+      "gate": "preflight",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.live_runtime_matrix",
+        "--preflight"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 0.38
+    },
+    {
+      "gate": "full-guard",
+      "command": [
+        "D:\\Codex Program files\\Agent\\Doppel-Agent\\.venv\\Scripts\\python.exe",
+        "-m",
+        "bench.live_runtime_matrix",
+        "--mode",
+        "full"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "passed": true,
+      "seconds": 0.36
+    },
+    {
+      "gate": "frontend-tests",
+      "command": [
+        "npm.cmd",
+        "test"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent\\frontend",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 4.286
+    },
+    {
+      "gate": "frontend-types",
+      "command": [
+        "npm.cmd",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent\\frontend",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 4.992
+    },
+    {
+      "gate": "frontend-build",
+      "command": [
+        "npm.cmd",
+        "run",
+        "build"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent\\frontend",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 8.167
+    },
+    {
+      "gate": "diff-hygiene",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "cwd": "D:\\Codex Program files\\Agent\\Doppel-Agent",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "passed": true,
+      "seconds": 0.102
+    }
+  ],
+  "python": {
+    "passed": 591,
+    "skipped": 2,
+    "warnings": 1,
+    "seconds": 313.83
+  },
+  "native_lifecycle_repeated": {
+    "tests_per_repeat": 35,
+    "repeats": 5,
+    "passed": 175
+  },
+  "mcp_lifecycle_repeated": {
+    "tests_per_repeat": 11,
+    "repeats": 3,
+    "passed": 33
+  },
+  "task_fixture_audit": {
+    "schema_version": "1.8",
+    "cases": [
+      "nav-04",
+      "tdd-01",
+      "tdd-02",
+      "tdd-03",
+      "tdd-04",
+      "patch-01",
+      "patch-02",
+      "patch-03",
+      "approval-01",
+      "approval-02",
+      "mcp-01",
+      "mcp-02",
+      "cancel-01"
+    ],
+    "planned_paths": 21,
+    "deterministic_pass_count": 21,
+    "inputs_sha256": "374abe27ba9208ac3ca8fbea16d0910aa07e34abcfa8cde9221150d2f4d3babf",
+    "source_dirty": true,
+    "model_quality_scored": false
+  },
+  "supported_boundaries": {
+    "direct_factory": {
+      "inputs_sha256": "eb0b0913078374c5bb13d3133b57b29d71af1a50a3709b5dbdde47838da402c6",
+      "original_run_count": 180,
+      "supported_run_count": 81,
+      "excluded_run_count": 99,
+      "recorded_run_count": 81,
+      "deterministic_pass_count": 81,
+      "source_unchanged_during_audit": true,
+      "infrastructure_failure_count": 0,
+      "full_matrix_ready": false,
+      "task_quality_scored": false
+    },
+    "run_service": {
+      "inputs_sha256": "f090311b6538361b646a9ec48a388d845b88dc766243d83d8ab2dd16a578b853",
+      "original_run_count": 180,
+      "supported_run_count": 126,
+      "excluded_run_count": 54,
+      "recorded_run_count": 126,
+      "deterministic_pass_count": 126,
+      "source_unchanged_during_audit": true,
+      "infrastructure_failure_count": 0,
+      "full_matrix_ready": false,
+      "task_quality_scored": false
+    }
+  },
+  "safety_audit": {
+    "passed": true,
+    "gates": {
+      "all_21_tool_round_trips": true,
+      "unknown_usage_blocks_next_http_call": true,
+      "auth_failure_blocks_fallback_http_call": true,
+      "auth_failure_has_stable_taxonomy": true,
+      "invalid_per_call_usage_rejected": true,
+      "non_finite_prices_and_budget_rejected": true
+    }
+  },
+  "fault": {
+    "denominator": 10,
+    "passed_count": 10,
+    "failed_count": 0,
+    "passed": true
+  },
+  "load": {
+    "schema_version": "1.0",
+    "recorded_at": "2026-10-02T06:52:08.650672+00:00",
+    "environment": {
+      "platform": "Windows-10-10.0.22631-SP0",
+      "python": "3.11.15"
+    },
+    "configuration": {
+      "burst_jobs": 100,
+      "max_active": 4,
+      "queue_capacity": 100
+    },
+    "scenarios": {
+      "bounded_burst": {
+        "submitted": 100,
+        "completed": 100,
+        "configured_max_active": 4,
+        "observed_peak_active": 4,
+        "scheduler_peak_active": 4,
+        "wall_seconds": 0.384265,
+        "passed": true
+      },
+      "queue_rejection": {
+        "accepted": 2,
+        "rejected": 1,
+        "explicit_queue_full": true,
+        "passed": true
+      },
+      "workspace_contention": {
+        "read_operations": 20,
+        "write_operations": 5,
+        "peak_readers": 20,
+        "peak_writers": 1,
+        "read_write_overlap_violations": 0,
+        "passed": true
+      },
+      "running_cancellation": {
+        "cancel_accepted": true,
+        "final_status": "cancelled",
+        "latency_seconds": 9.8e-05,
+        "passed": true
+      }
+    },
+    "passed": true,
+    "scope_note": "Local deterministic scheduler/lock probe; it is not a provider throughput or model-quality benchmark."
+  },
+  "mock_smoke": {
+    "planned_runs": 180,
+    "completed_runtime_paths": 180,
+    "failed_runtime_paths": 0,
+    "task_quality_scored": false
+  },
+  "frontend": {
+    "unit_tests_passed": 19,
+    "typecheck": true,
+    "production_build": true
+  },
+  "browser_ui": {
+    "legacy_run_count": 1,
+    "not_claimed": [
+      "native desktop visual QA",
+      "Graph Deep conversation history",
+      "model task quality",
+      "full parity replacement",
+      "permanent deletion UI"
+    ],
+    "paid_calls": 0,
+    "native_ui_run_id": "6ca6b02dde4649888ff86b43dc4221ac",
+    "message_counts": [
+      2
+    ],
+    "browser_checks": [
+      "review draft reused without autorun",
+      "explicit legacy Mock submit",
+      "two durable messages",
+      "group creation",
+      "rename and group association",
+      "archive read-only",
+      "Ctrl K and message search including archived",
+      "ArrowDown and Enter navigation",
+      "explicit Mock probe",
+      "native Graph completion",
+      "reload restores run and events",
+      "reload restores persistent history"
+    ],
+    "legacy_status": [
+      "completed"
+    ],
+    "provider": "explicit Mock only",
+    "archived_count": 1,
+    "date": "2026-10-02"
+  },
+  "browser_ui_shutdown": {
+    "api_thread_exited": true,
+    "legacy_thread_exited": true,
+    "native_accepted": 1
+  },
+  "wheel": {
+    "date": "2026-10-02",
+    "status": "candidate only, not v0.15 release",
+    "metadata_version": "0.14.4",
+    "import_path": "D:\\Codex Program files\\Agent\\Doppel-Agent\\.artifacts\\v015-acceptance-20261002\\wheel-check\\Lib\\site-packages\\doppel_agent\\__init__.py",
+    "source_files_checked": 87,
+    "wheel_sha256": "1b52140c151fda52f153e426b2e23e8f336e3f8f5f4d98e00c95d3ee8446f862",
+    "sdist_sha256": "c8a71aaddcb1f8572fc9de81c591d078f290e91596094a90295a0be89641c42c",
+    "package_bytes_match_dirty_candidate": true,
+    "native_desktop_visual": false,
+    "paid_calls": 0,
+    "tests_passed": 59,
+    "test_warnings": 1,
+    "test_seconds": 54.42
+  },
+  "desktop_content": {
+    "date": "2026-10-02",
+    "status": "unreleased dirty candidate; application still 0.14.4",
+    "exe_sha256": "c3e6eec222f29a1f56431dcd0e275575bff97cce0714c4f9aa0d05581e3b47c7",
+    "exe_bytes": 21246017,
+    "embedded_modules_match_candidate_source": {
+      "doppel_agent.api.app": "1e301f394fe1f50f853ad50d81ca2f8f5b5889d53ccfb9ab987c99480b76894b",
+      "doppel_agent.runtime.service": "297566ee0d2f9c2e98bcfeda60634f38b0bd2ff4e8d1d2498a46d667f9a6033a",
+      "doppel_agent.persistence.runs": "3982c63ecc1166d3771f7fb146ef4b4c46b2b3493cda17d98aa6528b1294a500",
+      "doppel_agent.provider": "5b07779d7277a94f300d396a8c8b3afd3d255c2ab24ba33117ab657874b0c58f",
+      "doppel_agent.desktop": "2f769a9dabc2e4f860c577ad3c6a105c493ced7a1683f7b5982c3a5a06edb298"
+    },
+    "bundle_files_match_candidate": [
+      "index.html",
+      "assets\\index-C3GFi3Kh.css",
+      "assets\\index-dUNyJL8n.js"
+    ],
+    "desktop_runtime_tested": false,
+    "native_window_visual_tested": false,
+    "daily_exe_replaced": false
+  },
+  "live_configuration_intent": {
+    "provider": "DeepSeek official direct API",
+    "base_url": "https://api.deepseek.com",
+    "requested_model": "deepseek-v4-flash",
+    "official_current_routed_model": "DeepSeek-V4.1-Flash",
+    "total_budget_cny": 10,
+    "price_source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "input_miss_cny_per_million": {
+      "off_peak": 1,
+      "peak": 2
+    },
+    "input_hit_cny_per_million": {
+      "off_peak": 0.02,
+      "peak": 0.04
+    },
+    "output_cny_per_million": {
+      "off_peak": 4,
+      "peak": 8
+    },
+    "budget_shared_across_navigation_and_review": true,
+    "credentials_in_report": false,
+    "paid_execution_started": false,
+    "provider_cap_confirmed": false
+  },
+  "pending": [
+    "dedicated key visible to execution process",
+    "provider-side 10 CNY cap confirmation",
+    "DeepSeek thinking/tool-call compatibility and frozen cost configuration",
+    "clean exact-commit source evidence",
+    "paid navigation 9 then blind-review 12 with separate human adjudication",
+    "full 180 parity decision",
+    "new EXE runtime and native visual acceptance",
+    "complete Vue replacement parity",
+    "version-scoped commit/push exact CI and release gates"
+  ],
+  "scope_note": "All scripted results measure bounded native correctness/plumbing, not external model coding quality. Dirty source observations are not clean published evidence; the 81 and 126 denominators are separate boundaries."
+}

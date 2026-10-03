@@ -1,0 +1,2 @@
+Synthetic benchmark fixture authored for Doppel Agent runtime evaluation.
+No third-party source or production defect is represented by this seed.

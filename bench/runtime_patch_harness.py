@@ -6,7 +6,8 @@ from pathlib import Path
 import tempfile
 
 from bench.runtime_fixtures import materialize_task_case
-from bench.runtime_matrix import RuntimeMatrix
+from bench.runtime_contract import NativeTaskContract, native_approval_decisions
+from bench.runtime_patch_controls import ScopedPatchFault, validate_atomic_control
 from bench.runtime_tdd_harness import external_oracle, workspace_snapshot
 from bench.runtime_validators import validate_patch_evidence
 from doppel_agent.provider import ModelTurn, ToolCall
@@ -61,20 +62,22 @@ class ScriptedPatchProvider:
         return ModelTurn(tool_calls=(call,))
 
 
-async def probe_patch(fixture, mode, workspace, *, changes=None):
+async def probe_patch(fixture, mode, workspace, *, changes=None, _control=None, _contract=None):
     if fixture.category != "multi_file_patch" or mode not in {"graph", "deep"}:
         raise ValueError("unsupported patch probe")
-    matrix = RuntimeMatrix.load(Path(__file__).parent / "cases/runtime/manifest.json")
-    case = next(c for c in matrix.cases if c.case_id == fixture.case_id)
-    capability = matrix.capability_document(Path(__file__).parent / "cases/runtime/capabilities.json", boundary="run_service")
-    if f"{fixture.case_id}:{mode}:1" not in capability["supported_run_keys"]:
-        raise ValueError("patch probe is unsupported by frozen capability contract")
+    atomic = fixture.oracle["kind"] == "atomic_config_patch"
+    if _control is not None and (not atomic or _control not in fixture.oracle["atomic_controls"]):
+        raise ValueError("failure controls require the frozen atomic fixture")
+    contract = _contract if _contract is not None else NativeTaskContract.load()
+    case = contract.case(fixture, mode)
     materialize_task_case(fixture, workspace)
     hidden = dict(fixture.hidden_files)
     changes = json.loads(hidden["reference_changes.json"]) if changes is None else changes
     initial = workspace_snapshot(workspace)
     target_before = await external_oracle(workspace, hidden["target_tests.py"])
     regression_before = await external_oracle(workspace, hidden["regression_tests.py"])
+    behavior_profile = fixture.oracle["kind"] in {"behavior_preserving_refactor", "atomic_config_patch"}
+    public_before = await external_oracle(workspace, hidden["public_check.py"]) if behavior_profile else None
     provider = ScriptedPatchProvider(fixture, mode, workspace, changes)
     service = RunService(workspace, provider=provider)
     await service.start()
@@ -107,22 +110,42 @@ async def probe_patch(fixture, mode, workspace, *, changes=None):
         service = RunService(workspace, provider=provider)
         await service.start()
         reconstructed = workspace_snapshot(workspace) == initial
-        await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
-        await service.scheduler.wait(run_id)
+        if _control == "stale_base":
+            (workspace / "settings.json").write_bytes(dict(fixture.public_files)["settings.json"] + b"\n")
+        pre_resume = workspace_snapshot(workspace)
+        fault, resume_error = None, None
+        if _control is None:
+            await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
+            await service.scheduler.wait(run_id)
+        else:
+            with ScopedPatchFault(workspace, _control) as instrumentation:
+                try:
+                    await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
+                    await service.scheduler.wait(run_id)
+                except (OSError, RuntimeError) as exc:
+                    # Deep propagates native patch errors, Graph returns a tool
+                    # error to its provider. The native trace, not this catch,
+                    # proves the intended operation actually failed.
+                    resume_error = type(exc).__name__
+                fault = instrumentation.trace
         completed = await service.get(run_id)
         target_after = await external_oracle(workspace, hidden["target_tests.py"])
         regression_after = await external_oracle(workspace, hidden["regression_tests.py"])
         public_after = await external_oracle(workspace, hidden["public_check.py"])
         current = workspace_snapshot(workspace)
-        with tempfile.TemporaryDirectory(prefix="doppel-patch-mutation-") as temp:
-            mutation = Path(temp) / "agent"
-            materialize_task_case(fixture, mutation)
-            (mutation / "test_public.py").write_bytes((workspace / "test_public.py").read_bytes())
-            candidate_on_seed = await external_oracle(mutation, hidden["public_check.py"])
+        public_evidence = {"public_before": public_before}
+        if not behavior_profile:
+            with tempfile.TemporaryDirectory(prefix="doppel-patch-mutation-") as temp:
+                mutation = Path(temp) / "agent"
+                materialize_task_case(fixture, mutation)
+                (mutation / "test_public.py").write_bytes((workspace / "test_public.py").read_bytes())
+                public_evidence = {"candidate_on_seed": await external_oracle(mutation, hidden["public_check.py"])}
         rows = provider.receipts
+        decisions = native_approval_decisions(await service.list_events(run_id))
         evidence = {"case_id": fixture.case_id, "runtime": mode, "actual_runtime": completed["metadata"].get("fallback_runtime") or mode,
                 "boundary": "run_service", "status": completed["status"], "prompt": case.prompt, "permissions": dict(case.permissions),
                 "fixture_version": fixture.version, "fixture_sha256": fixture.sha256, "receipts": rows, "approval_count": 1,
+                "approval_decisions": decisions,
                 "reconstructed_service": reconstructed, "initial": initial, "current": current,
                 "paused_fallback_runtime": paused["metadata"].get("fallback_runtime"),
                 "approval": {"patch_id": proposal["patch_id"], "integrity": integrity, "visible_match": visible_match,
@@ -131,9 +154,21 @@ async def probe_patch(fixture, mode, workspace, *, changes=None):
                              "content_sha256": {v["path"]: sha256(v["content"].encode()).hexdigest() for v in proposed}},
                 "external_target_before": target_before, "external_target_after": target_after,
                 "external_regression_before": regression_before, "external_regression_after": regression_after,
-                "public_after": public_after, "candidate_on_seed": candidate_on_seed,
+                "public_after": public_after, **public_evidence,
                 "human_review": "pending", "quality_scored": False, "task_quality_scored": False,
-                "scope_note": "Trusted scripted reference, external behavior/docs examples/test mutation; not model quality or strong OS isolation."}
+                "scope_note": ("Trusted scripted reference; frozen finite public/regression behavior plus dynamic delegation controls, "
+                               "not universal compatibility, model quality or strong OS isolation." if behavior_profile else
+                               "Trusted scripted reference, external behavior/docs examples/test mutation; not model quality or strong OS isolation.")}
+        if _control is not None:
+            evidence.update(control=_control, fault=fault, pre_resume=pre_resume, resume_error=resume_error)
+            checks = validate_atomic_control(fixture, evidence, runtime=mode)
+            return {**evidence, "checks": checks, "deterministic_pass": all(checks.values())}
+        if atomic:
+            controls = []
+            with tempfile.TemporaryDirectory(prefix="doppel-native-patch-faults-") as temp:
+                for control in fixture.oracle["atomic_controls"]:
+                    controls.append(await probe_patch(fixture, mode, Path(temp) / control, _control=control, _contract=contract))
+            evidence["atomic_controls"] = controls
         checks = validate_patch_evidence(fixture, workspace, evidence)
         return {**evidence, "checks": checks, "deterministic_pass": all(checks.values())}
     finally:

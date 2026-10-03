@@ -1,0 +1,34 @@
+{
+  "case_id": "patch-02",
+  "fixture_version": "1.3",
+  "category": "multi_file_patch",
+  "source_kind": "synthetic_refactor",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "helpers.py": "53061192f40f3cff154aca91843003e3714cf00b9e84bdd46125f893ea59699b",
+    "LICENSE.txt": "95851b8859c3dc706dcf510399b935acb7177da7c28aac5655a3826ae06d8204",
+    "service.py": "f7144da5abc91d7f6d667c9726919777a64e01b39d2271c21f22a1fa259922b1",
+    "test_public.py": "c06d974e4057e77dde65932a598a1b36587f624e8c593a86fc29824973907d55"
+  },
+  "allowed_edits": [
+    "service.py",
+    "helpers.py"
+  ],
+  "oracle": {
+    "kind": "behavior_preserving_refactor",
+    "required_paths": [
+      "service.py",
+      "helpers.py"
+    ],
+    "allowed_argv": [],
+    "hidden_files": {
+      "public_check.py": "edac59a9f4c531df78fea9049f2dab19873f3e084f62ce3466c664662a830014",
+      "reference_changes.json": "925234ed3d90f44d0740a660d8d6fac0e5e8656b39eae931098f472f9880411f",
+      "regression_tests.py": "d5142b1a314e1a726c3493ba14ee0a09e8809752b8906f4853c8bc99f3024e93",
+      "target_tests.py": "0ef1572ecfaf58c4227ed0360b9df41d34891a7819ebf65c7011f985461c4f92"
+    },
+    "expected_seed_target_failures": 2,
+    "expected_public_tests": 5,
+    "expected_regression_tests": 5
+  }
+}

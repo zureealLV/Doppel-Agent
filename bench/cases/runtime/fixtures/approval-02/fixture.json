@@ -1,0 +1,27 @@
+{
+  "case_id": "approval-02",
+  "fixture_version": "1.5",
+  "category": "approval_resume",
+  "source_kind": "synthetic_control",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "command.py": "89ea2c1be2207532c98ae9829b1748ac69c02b4ce9d1b3e903ff9b6dd0971121",
+    "LICENSE.txt": "74cff141b3b0726f91e9e1eef1491a78f5fe4e2ac07d7230a0e1f3f45458d151",
+    "README.md": "6e4e5268af0f464b06875ea81db18568f6a4db27fc493e420ac51cb7203ec9ce"
+  },
+  "allowed_edits": [],
+  "oracle": {
+    "kind": "command_rejection",
+    "decision": "reject",
+    "allowed_argv": [
+      [
+        "{python}",
+        "-B",
+        "command.py"
+      ]
+    ],
+    "hidden_files": {
+      "expected_outcome.json": "b432ebad2716d48f037cd57944a20e890524ca8908aebc69d0ef06899801dd4b"
+    }
+  }
+}

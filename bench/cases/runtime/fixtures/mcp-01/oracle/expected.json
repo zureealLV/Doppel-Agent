@@ -1,0 +1,19 @@
+[
+  {
+    "name": "echo",
+    "arguments": {
+      "text": "matrix-canary"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "matrix-canary"
+      }
+    ],
+    "structured_content": {
+      "echo": "matrix-canary"
+    },
+    "is_error": false,
+    "model_view": "matrix-canary"
+  }
+]

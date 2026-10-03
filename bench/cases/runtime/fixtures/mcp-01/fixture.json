@@ -1,0 +1,21 @@
+{
+  "case_id": "mcp-01",
+  "fixture_version": "1.6",
+  "category": "mcp_workflow",
+  "source_kind": "synthetic_control",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "LICENSE.txt": "ad5a074d02453ed91f9421588e8ea5315e0f2fa99c30ba073f547a365b4dfaf5",
+    "README.md": "215fb3365a6a12f323fd0f89db6553e612715ee3af287f1cc51baf9b811807dd",
+    "server.py": "84b9a12b80ebd906038bd122568526ba74fa9ed482e7304bdf59a598422e7066"
+  },
+  "allowed_edits": [],
+  "oracle": {
+    "kind": "local_mcp_gateway",
+    "allowed_argv": [],
+    "hidden_files": {
+      "expected.json": "297c172d4c23acf6948f60a5f3d350a94c07eb3ef9b4a892954705d6a4231891"
+    },
+    "expected_remote_calls": 1
+  }
+}

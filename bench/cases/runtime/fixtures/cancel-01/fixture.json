@@ -1,0 +1,29 @@
+{
+  "case_id": "cancel-01",
+  "fixture_version": "1.7",
+  "category": "concurrent_cancel",
+  "source_kind": "synthetic_control",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "child.py": "0e4428b66d0c84a966a316bc95d4676063bd3016d7a566ea5a62836a8cf6c22e",
+    "LICENSE.txt": "733a083e48a6ad383096e1b386f1117f74bc9057b22d1ed2b3b2d3f0ab291f5d",
+    "parent.py": "2dd05a5e2dd0cb6896a0938377027151092169531d00ecd6f8809643ed543081",
+    "README.md": "e7839aa5f9e38a685ad4382f5d868cef77e6e92913c72c973f8396a6302d85ea"
+  },
+  "allowed_edits": [],
+  "oracle": {
+    "kind": "supervised_process_tree",
+    "allowed_argv": [
+      [
+        "{python}",
+        "-B",
+        "parent.py",
+        "{external_trace}"
+      ]
+    ],
+    "deadline_seconds": 10,
+    "hidden_files": {
+      "termination_contract.json": "cf05e798a4fc2517708abe4519b614fd7faa31f1db39552f9793f734a2ad6804"
+    }
+  }
+}

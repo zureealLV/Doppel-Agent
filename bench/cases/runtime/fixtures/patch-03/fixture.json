@@ -1,0 +1,38 @@
+{
+  "case_id": "patch-03",
+  "fixture_version": "1.4",
+  "category": "multi_file_patch",
+  "source_kind": "synthetic_seed",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "LICENSE.txt": "37eb754f2382a118f6c54d40283fda789c197583aa0296badd8813a2442989a2",
+    "service.py": "14f1d9cfc40cc026dd2e57403de53ec915f23db4587c4975e7a78064769fba39",
+    "settings.json": "ff1d1e975260a07cda1014a817698177dc82990cd4bd11177d8da7a10dad094a",
+    "test_public.py": "4ec448d84a9a781d58f740013f46ee0915f49c3eddc6e4e970aab1aca5ee403a"
+  },
+  "allowed_edits": [
+    "service.py",
+    "settings.json"
+  ],
+  "oracle": {
+    "kind": "atomic_config_patch",
+    "required_paths": [
+      "service.py",
+      "settings.json"
+    ],
+    "allowed_argv": [],
+    "hidden_files": {
+      "public_check.py": "c36a6057c6fac6fb4dd66ce636c54f059384f8003abe98c80a37528db79437ce",
+      "reference_changes.json": "dcff55781eeca4373e824f01c6aac175487b9b82df3105c9287fe0cdd415f8c6",
+      "regression_tests.py": "c2b00455adba0b5c63f70d5774e5bd1d3fdd85d73aa651307f231ed1912d880c",
+      "target_tests.py": "f7b6aaa825212da8178c5b272077df41690f43d5b65a9edd6691fbcbb5ad566c"
+    },
+    "expected_seed_target_failures": 2,
+    "expected_public_tests": 4,
+    "expected_regression_tests": 3,
+    "atomic_controls": [
+      "second_replace_failure",
+      "stale_base"
+    ]
+  }
+}

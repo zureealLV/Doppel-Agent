@@ -167,15 +167,26 @@ def test_offline_task_audit_separates_factory_navigation_from_supported_service_
     from bench.audit_runtime_task_fixtures import audit
 
     report = asyncio.run(audit())
-    assert report["schema_version"] == "1.2"
-    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04", "patch-01"]
+    assert report["schema_version"] == "1.8"
+    assert report["fixture_cases"] == ["nav-04", "tdd-01", "tdd-02", "tdd-03", "tdd-04", "patch-01", "patch-02", "patch-03", "approval-01", "approval-02", "mcp-01", "mcp-02", "cancel-01"]
     assert report["passed"] is True
-    assert len(report["runs"]) == 9
+    assert len(report["runs"]) == 21
     assert [(row["case_id"], row["runtime"], row["boundary"]) for row in report["runs"]] == [
         ("nav-04", "legacy", "direct_factory"), ("nav-04", "graph", "direct_factory"),
         ("nav-04", "deep", "direct_factory"), ("tdd-01", "graph", "run_service"),
         ("tdd-02", "graph", "run_service"), ("tdd-03", "graph", "run_service"), ("tdd-04", "graph", "run_service"),
         ("patch-01", "graph", "run_service"), ("patch-01", "deep", "run_service"),
+        ("patch-02", "graph", "run_service"), ("patch-02", "deep", "run_service"),
+        ("patch-03", "graph", "run_service"), ("patch-03", "deep", "run_service"),
+        ("approval-01", "graph", "run_service"), ("approval-01", "deep", "run_service"),
+        ("approval-02", "graph", "run_service"),
+        ("mcp-01", "graph", "run_service"), ("mcp-01", "deep", "run_service"),
+        ("mcp-02", "graph", "run_service"), ("mcp-02", "deep", "run_service"),
+        ("cancel-01", "graph", "run_service"),
     ]
     assert report["full_matrix_ready"] is False
     assert report["task_quality_scored"] is False
+    assert report["source_unchanged_during_audit"] is True
+    assert len(report["normalized_evidence"]) == 21
+    assert report["adjudication_forms"]["boundaries"]["run_service"]["supported_run_count"] == 126
+    assert all(row["human_review"] == "pending" and row["task_quality_score"] is None for row in report["normalized_evidence"])

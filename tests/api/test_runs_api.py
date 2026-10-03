@@ -298,12 +298,89 @@ class RunsApiTests(unittest.TestCase):
             legacy_base_url=f"http://127.0.0.1:{legacy.server_port}",
         )
         try:
-            with TestClient(app) as client:
+            with TestClient(app, base_url="http://127.0.0.1:8765") as client:
                 page = client.get("/")
                 self.assertEqual(page.status_code, 200)
                 self.assertIn("run-form", page.text)
                 self.assertEqual(client.get("/api/health").json()["status"], "ok")
                 self.assertEqual(client.get("/api/v1/health").json()["status"], "ok")
+        finally:
+            legacy.shutdown()
+            worker.join(timeout=3)
+            legacy.server_close()
+
+    def test_vue_workspace_contract_keeps_persistent_chat_and_native_runs_separate(self):
+        """Real loopback/proxy/storage integration, not frontend visual proof."""
+        legacy = ConsoleServer(("127.0.0.1", 0), self.root)
+        worker = threading.Thread(target=legacy.serve_forever, daemon=True)
+        worker.start()
+        app = create_app(self.root, provider=MockProvider(), legacy_base_url=f"http://127.0.0.1:{legacy.server_port}")
+        headers = {"X-Doppel-UI": "1", "Origin": "http://127.0.0.1:8765"}
+        try:
+            with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+                settings_response = client.post("/api/settings", headers=headers, json={"profile_id": "__new__", "config": {
+                    "provider": "mock", "preset": "mock", "name": "Vue offline control", "model": "mock", "base_url": "",
+                    "input_price": 0, "output_price": 0, "api_key": "",
+                }})
+                self.assertEqual(settings_response.status_code, 200, settings_response.text)
+                settings = settings_response.json()
+                self.assertTrue(all("api_key" not in profile and "api_key_dpapi" not in profile for profile in settings["profiles"]))
+                profile_id = settings["active_profile_id"]
+                first = client.post("/api/conversations/review-draft", headers=headers, json={}).json()
+                second = client.post("/api/conversations/review-draft", headers=headers, json={}).json()
+                self.assertEqual(first["id"], second["id"])
+                self.assertEqual(legacy.manager.recent(), [])
+                self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
+                group = client.post("/api/groups", headers=headers, json={"name": "Vue migration"}).json()
+                conversation_id = first["id"]
+                self.assertEqual(client.post(f"/api/conversations/{conversation_id}/group", headers=headers,
+                                             json={"group_id": group["id"]}).status_code, 200)
+                accepted = client.post("/api/runs", headers=headers, json={"prompt": "vue-persistent-context", "mode": "review",
+                    "effort": "quick", "conversation_id": conversation_id, "config": {"profile_id": profile_id},
+                    "allow_write": False, "allow_command": False, "allow_mcp": False, "allow_delegate": False})
+                self.assertEqual(accepted.status_code, 202, accepted.text)
+                run_id = accepted.json()["run_id"]
+                for _ in range(100):
+                    record = client.get(f"/api/runs/{run_id}").json()
+                    if record["status"] in {"completed", "failed"}:
+                        break
+                    time.sleep(0.03)
+                self.assertEqual(record["status"], "completed")
+                saved = client.get(f"/api/conversations/{conversation_id}").json()
+                self.assertEqual([message["role"] for message in saved["messages"]], ["user", "assistant"])
+                self.assertEqual(saved["profile_id"], profile_id)
+                client.post(f"/api/conversations/{conversation_id}/archive", headers=headers, json={"archived": True})
+                found = client.get("/api/conversations/search", params={"q": "vue-persistent-context"}).json()
+                self.assertEqual(found[0]["id"], conversation_id)
+                self.assertEqual(found[0]["archived"], 1)
+                self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
+        finally:
+            legacy.shutdown()
+            worker.join(timeout=3)
+            legacy.server_close()
+
+    def test_same_origin_proxy_rejects_foreign_origin_or_host_before_legacy_effects(self):
+        legacy = ConsoleServer(("127.0.0.1", 0), self.root)
+        worker = threading.Thread(target=legacy.serve_forever, daemon=True)
+        worker.start()
+        app = create_app(self.root, provider=MockProvider(), legacy_base_url=f"http://127.0.0.1:{legacy.server_port}")
+        try:
+            with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+                for origin in ("https://attacker.invalid", "http://127.0.0.1:9999", "null"):
+                    response = client.post("/api/conversations/review-draft", json={},
+                                           headers={"X-Doppel-UI": "1", "Origin": origin})
+                    self.assertEqual(response.status_code, 403, response.text)
+                forged = client.post("/api/conversations/review-draft", json={}, headers={
+                    "X-Doppel-UI": "1", "Host": "attacker.invalid", "Origin": "http://attacker.invalid",
+                    "X-Forwarded-Host": "127.0.0.1:8765", "X-Forwarded-Proto": "http",
+                })
+                self.assertEqual(forged.status_code, 403, forged.text)
+                self.assertEqual(client.post("/api/conversations/review-draft", json={},
+                                             headers={"X-Doppel-UI": "1", "Host": "attacker.invalid"}).status_code, 403)
+                self.assertEqual(client.get("/", headers={"Host": "attacker.invalid"}).status_code, 403)
+                self.assertEqual(legacy.manager.conversations.list(), [])
+                self.assertEqual(legacy.manager.recent(), [])
+                self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
         finally:
             legacy.shutdown()
             worker.join(timeout=3)

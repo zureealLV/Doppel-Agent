@@ -31,6 +31,10 @@ jobs:
         run: python -m bench.audit_live_runtime_matrix --output .bench-results/live-runner-audit.json
       - name: Offline task fixture production-path gates
         run: python -m bench.audit_runtime_task_fixtures --output .bench-results/task-fixtures-audit.json
+      - name: Complete direct-factory supported scripted matrix (81 keys)
+        run: python -m bench.run_supported_runtime_matrix --boundary direct_factory --output-dir .bench-results/supported-factory
+      - name: Complete RunService supported scripted matrix (126 keys)
+        run: python -m bench.run_supported_runtime_matrix --boundary run_service --output-dir .bench-results/supported-service
       - name: Repeat production MCP lifecycle and process-death gates
         run: |
           $env:PYTHONPATH = "$PWD;$PWD/tests"
@@ -40,6 +44,14 @@ jobs:
           }
       - name: Compile sources
         run: python -m compileall -q src tests bench spikes
+      - name: Preserve offline acceptance evidence including failed attempts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-runtime-evidence-python-${{ matrix.python-version }}
+          path: .bench-results/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   frontend:
     runs-on: windows-latest

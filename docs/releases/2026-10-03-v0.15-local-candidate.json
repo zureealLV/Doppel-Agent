@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "date": "2026-10-03",
+  "status": "unreleased local candidate; paid/review/clean-commit/remote-CI/release pending",
+  "application_version": "0.14.4",
+  "base_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "source_dirty": true,
+  "supported_matrix_source_files_sha256": "c42ef21cf8ac102e86aa000bbb6cf39e8d3f42c4bd0fb5820f32c05ac8403a7a",
+  "external_paid_model_requests": 0,
+  "task_quality_scored": false,
+  "full_matrix_ready": false,
+  "python_full": {
+    "passed": 637,
+    "skipped": 2,
+    "warnings": 1,
+    "seconds": 347.15
+  },
+  "frontend": {
+    "passed": 19,
+    "typecheck": true,
+    "bundle_files_match_exe": 3
+  },
+  "supported_matrices": [
+    {
+      "boundary": "direct_factory",
+      "original_run_count": 180,
+      "supported_run_count": 81,
+      "excluded_run_count": 99,
+      "recorded_run_count": 81,
+      "deterministic_pass_count": 81,
+      "infrastructure_failure_count": 0,
+      "source_unchanged_during_audit": true,
+      "passed": true,
+      "full_matrix_ready": false,
+      "task_quality_scored": false
+    },
+    {
+      "boundary": "run_service",
+      "original_run_count": 180,
+      "supported_run_count": 126,
+      "excluded_run_count": 54,
+      "recorded_run_count": 126,
+      "deterministic_pass_count": 126,
+      "infrastructure_failure_count": 0,
+      "source_unchanged_during_audit": true,
+      "passed": true,
+      "full_matrix_ready": false,
+      "task_quality_scored": false
+    }
+  ],
+  "exe": {
+    "path": ".artifacts/v015-deepseek-cny-20261002/desktop-nativefix/DoppelAgent/DoppelAgent.exe",
+    "sha256": "dbf0eaf169177a870aec6d45aa60cd26a334cbf9cc2896df393aeee8f1c2383e",
+    "bytes": 21247262,
+    "matched_product_modules": [
+      "doppel_agent.api.app",
+      "doppel_agent.runtime.service",
+      "doppel_agent.persistence.runs",
+      "doppel_agent.provider",
+      "doppel_agent.desktop"
+    ],
+    "native_scripted_cases": [
+      "ui-mock-graph",
+      "mock-legacy",
+      "mock-deep",
+      "mcp-graph",
+      "mcp-deep",
+      "rejected-command-no-effect",
+      "cancel-owned-parent-child"
+    ],
+    "native_runtime_passed": true,
+    "visual_scope": "1264x811 logical native window; Graph result/events, Legacy persistent quick review, body search, Mock settings read-only",
+    "visual_limitations": [
+      "left composer scroll required",
+      "hero/permission labels wrap tightly",
+      "not complete size matrix or replacement parity",
+      "permanent deletion untested"
+    ],
+    "daily_exe_replaced": false,
+    "shutdown": {
+      "actual_owned_process_identities_exited": 10,
+      "listeners_closed_count": 2,
+      "sqlite_integrity_and_exclusive_open_count": 7,
+      "passed": true
+    }
+  },
+  "packages": {
+    "source_resource_files_matched": 87,
+    "wheel_sha256": "30f90f1f07ed0b444cfadf03fca9dcf36b045e87e95b40c474ebe91df381b50d",
+    "sdist_sha256": "4e98c93a209a25a25b7e9511b479d95e2c90665ff1678d75e5c738c0a68f9032",
+    "fresh_locked_noneditable_install": true,
+    "selected_tests_passed": 80,
+    "warnings": 1,
+    "seconds": 38.58,
+    "scope": "API/Web/checkpoint/Mock/DeepSeek; different selection from historical 59"
+  },
+  "budget": {
+    "currency": "CNY",
+    "shared_runner_total": "10",
+    "per_request_worst_case_reservation": "2.129920",
+    "cost_basis": "peak_uncached_upper_bound, not actual billing",
+    "ordinary_chat_or_probe_covered": false,
+    "provider_side_cap_confirmed": false,
+    "pricing_snapshot_date": "2026-10-02",
+    "expired_for_real_calls_on_report_date": true,
+    "canonical_paid_ledger_created": false
+  },
+  "ui_decision": "retain parallel legacy root and Vue; native Graph/Deep conversation-history parity deferred",
+  "safety_audit_passed": true,
+  "fault_cases_passed": 10,
+  "mock_plumbing_completed": 180,
+  "mock_quality_score": null,
+  "pending": [
+    "final batch code review",
+    "one version-scoped clean candidate commit/archive",
+    "refresh/freeze valid pricing snapshot without discarding accounting",
+    "provider-side 10 CNY cap or isolated nonreplenished balance confirmation",
+    "paid navigation 9 then human review then blind review 12",
+    "human adjudication",
+    "version changelog remote HEAD exact-commit CI and release"
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "schema_version": "1.0",
+  "date": "2026-10-03",
+  "status": "version-scoped unreleased local candidate; application remains 0.14.4",
+  "candidate_identity": "containing Git commit; exact-HEAD clean archive and CI are separate postcommit evidence",
+  "consolidated_gates_passed": 25,
+  "consolidated_gates_total": 25,
+  "precommit_source_files_sha256": "efc43a21dd3768793f4a1f6a0679bbd397dcd86bbb49caf9a3027aedbd32cb79",
+  "evaluation_source_dirty": true,
+  "source_unchanged_during_gates": true,
+  "python_full": {
+    "passed": 638,
+    "skipped": 2,
+    "warnings": 1,
+    "seconds": 312.17
+  },
+  "lifecycle_passed": 175,
+  "mcp_lifecycle_passed": 33,
+  "frontend": {
+    "passed": 19,
+    "typecheck": true,
+    "build": true,
+    "node": "24.15.0",
+    "npm": "11.14.1"
+  },
+  "noneditable_wheel": {
+    "passed": 81,
+    "warnings": 1,
+    "seconds": 37.35,
+    "source_resource_files_matched": 87
+  },
+  "supported_matrices": [
+    {
+      "boundary": "direct_factory",
+      "original_run_count": 180,
+      "supported_run_count": 81,
+      "excluded_run_count": 99,
+      "recorded_run_count": 81,
+      "deterministic_pass_count": 81,
+      "infrastructure_failure_count": 0,
+      "source_unchanged_during_audit": true,
+      "passed": true
+    },
+    {
+      "boundary": "run_service",
+      "original_run_count": 180,
+      "supported_run_count": 126,
+      "excluded_run_count": 54,
+      "recorded_run_count": 126,
+      "deterministic_pass_count": 126,
+      "infrastructure_failure_count": 0,
+      "source_unchanged_during_audit": true,
+      "passed": true
+    }
+  ],
+  "external_paid_model_requests": 0,
+  "task_quality_scored": false,
+  "full_matrix_ready": false,
+  "price_snapshot_date": "2026-10-03",
+  "used_old_ledger_reset_forbidden": true,
+  "provider_side_cap_confirmed": false,
+  "canonical_paid_ledger_created": false,
+  "product_exe_sha256": "dbf0eaf169177a870aec6d45aa60cd26a334cbf9cc2896df393aeee8f1c2383e",
+  "native_visual_evidence": "unchanged product; prior dated native acceptance, not a new launch",
+  "gate_commands": [
+    {
+      "gate": "python-suite",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 314.445
+    },
+    {
+      "gate": "ruff",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.836
+    },
+    {
+      "gate": "compile",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.714
+    },
+    {
+      "gate": "lock",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.876
+    },
+    {
+      "gate": "lifecycle-1",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 18.46
+    },
+    {
+      "gate": "lifecycle-2",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 18.034
+    },
+    {
+      "gate": "lifecycle-3",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 16.683
+    },
+    {
+      "gate": "lifecycle-4",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 16.683
+    },
+    {
+      "gate": "lifecycle-5",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 16.308
+    },
+    {
+      "gate": "mcp-lifecycle-1",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 10.061
+    },
+    {
+      "gate": "mcp-lifecycle-2",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 10.829
+    },
+    {
+      "gate": "mcp-lifecycle-3",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 10.319
+    },
+    {
+      "gate": "safety-audit",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 21.792
+    },
+    {
+      "gate": "task-fixture-audit",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 49.654
+    },
+    {
+      "gate": "supported-factory",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 48.165
+    },
+    {
+      "gate": "supported-service",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 166.267
+    },
+    {
+      "gate": "fault-matrix",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 4.757
+    },
+    {
+      "gate": "load",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.851
+    },
+    {
+      "gate": "mock-smoke",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 7.374
+    },
+    {
+      "gate": "preflight",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.432
+    },
+    {
+      "gate": "full-guard",
+      "passed": true,
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "seconds": 0.418
+    },
+    {
+      "gate": "frontend-tests",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 3.802
+    },
+    {
+      "gate": "frontend-types",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 5.243
+    },
+    {
+      "gate": "frontend-build",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 8.325
+    },
+    {
+      "gate": "diff-hygiene",
+      "passed": true,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "seconds": 0.105
+    }
+  ]
+}

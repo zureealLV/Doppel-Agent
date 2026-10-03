@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from .. import __version__
 from ..runtime.service import RunService
@@ -68,6 +68,15 @@ def create_app(
             """Keep the v0.8 UI/API same-origin while v1 routes migrate."""
             import httpx
 
+            # Validate the browser-facing origin before translating it to the
+            # separately bound loopback console. Forwarding it verbatim rejects
+            # legitimate desktop POSTs because the two servers use different
+            # ports; simply stripping it would discard the console's CSRF gate.
+            if request.url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+                return JSONResponse({"error": "invalid host"}, status_code=403)
+            origin = request.headers.get("origin")
+            if origin is not None and origin != f"{request.url.scheme}://{request.url.netloc}":
+                return JSONResponse({"error": "invalid origin"}, status_code=403)
             target = f"{legacy_base_url.rstrip('/')}/{path}"
             if request.url.query:
                 target += f"?{request.url.query}"
@@ -76,6 +85,8 @@ def create_app(
                 for key, value in request.headers.items()
                 if key.lower() not in {"host", "content-length", "connection"}
             }
+            if origin is not None:
+                request_headers["origin"] = legacy_base_url.rstrip("/")
             async with httpx.AsyncClient(timeout=65) as client:
                 upstream = await client.request(
                     request.method,

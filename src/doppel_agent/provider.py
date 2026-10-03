@@ -85,7 +85,18 @@ class MockProvider:
         if last.role == "user" and last.content.startswith("read "):
             path = last.content[5:].strip()
             if path:
-                return ModelTurn(tool_calls=(ToolCall("mock-1", "read_file", {"path": path}),))
+                available = {tool["function"]["name"] for tool in tools}
+                if "read_file" not in available and "read_file_range" in available:
+                    return ModelTurn(tool_calls=(ToolCall(
+                        "mock-1", "read_file_range", {"path": path, "start_line": 1, "end_line": 200},
+                    ),))
+                descriptor = next(
+                    (tool["function"] for tool in tools if tool["function"]["name"] == "read_file"),
+                    {},
+                )
+                properties = descriptor.get("parameters", {}).get("properties", {})
+                path_key = "file_path" if "file_path" in properties else "path"
+                return ModelTurn(tool_calls=(ToolCall("mock-1", "read_file", {path_key: path}),))
         return ModelTurn(
             content="Offline mock received the request. Configure an API provider for real coding tasks."
         )
@@ -95,6 +106,7 @@ class OpenAICompatibleProvider:
     def __init__(
         self, base_url: str, model: str, api_key: str = "", timeout: float = 60,
         *, temperature: float | None = None,
+        thinking: str | None = None, max_tokens: int | None = None,
     ):
         parsed = urlparse(base_url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
@@ -114,6 +126,7 @@ class OpenAICompatibleProvider:
         self.api_key = api_key
         self.timeout = timeout
         self.temperature = temperature
+        self.completion_options = _completion_options(base_url, thinking, max_tokens)
 
     def next_turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> ModelTurn:
         body = {
@@ -123,6 +136,7 @@ class OpenAICompatibleProvider:
         }
         if self.temperature is not None:
             body["temperature"] = self.temperature
+        body.update(self.completion_options)
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
@@ -152,6 +166,27 @@ class OpenAICompatibleProvider:
         if len(raw) > 4 * 1024 * 1024:
             raise RuntimeError("provider response exceeds 4 MiB")
         return parse_model_turn(raw)
+
+
+def _completion_options(base_url: str, thinking: str | None, max_tokens: int | None) -> dict[str, Any]:
+    """Explicit non-thinking path; enabled thinking needs a separate history contract.
+
+    DeepSeek defaults to thinking, but our three runtimes do not retain its CoT
+    across tools. Disable it on the official host rather than silently dropping
+    reasoning_content. Other OpenAI-compatible endpoints remain unchanged.
+    """
+    if thinking is None and urlparse(base_url).hostname == "api.deepseek.com":
+        thinking = "disabled"
+    if thinking not in (None, "disabled"):
+        raise ValueError("only disabled thinking is supported by this history contract")
+    if max_tokens is not None and (type(max_tokens) is not int or max_tokens < 1):
+        raise ValueError("max_tokens must be a positive integer")
+    options: dict[str, Any] = {}
+    if thinking is not None:
+        options["thinking"] = {"type": thinking}
+    if max_tokens is not None:
+        options["max_tokens"] = max_tokens
+    return options
 
 
 def parse_model_turn(raw: bytes | str | dict[str, Any]) -> ModelTurn:
@@ -205,6 +240,8 @@ class AsyncOpenAICompatibleProvider:
         api_key: str = "",
         *,
         temperature: float | None = None,
+        thinking: str | None = None,
+        max_tokens: int | None = None,
         client: Any | None = None,
         max_attempts: int = 3,
         retry_budget_seconds: float = 10,
@@ -235,6 +272,7 @@ class AsyncOpenAICompatibleProvider:
         self.model = model
         self.api_key = api_key
         self.temperature = temperature
+        self.completion_options = _completion_options(base_url, thinking, max_tokens)
         self.max_attempts = max_attempts
         self.retry_budget_seconds = retry_budget_seconds
         self.circuit_failure_threshold = circuit_failure_threshold
@@ -308,6 +346,7 @@ class AsyncOpenAICompatibleProvider:
         }
         if self.temperature is not None:
             body["temperature"] = self.temperature
+        body.update(self.completion_options)
         if tools:
             body.update(tools=tools, tool_choice="auto")
         headers = {"Content-Type": "application/json"}

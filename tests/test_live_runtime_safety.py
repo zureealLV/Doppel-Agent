@@ -11,6 +11,7 @@ import pytest
 
 from bench import live_runtime_matrix as live
 from bench.audit_live_runtime_matrix import local_provider, transport_probe
+from bench.runtime_fixtures import FIXTURE_ROOT
 from bench.runtime_matrix import RuntimeMatrix
 from doppel_agent.provider import ModelTurn, OpenAICompatibleProvider, ProviderRequestError
 
@@ -117,7 +118,7 @@ def test_http_auth_is_preserved_with_no_fallback_request(run):
 
 def test_unknown_cost_resume_never_replays_or_mutates_attempt(tmp_path):
     run = REVIEW_RUNS[0]
-    source = (live.FIXTURE_ROOT / run.case_id / "public/service.py").read_bytes()
+    source = (FIXTURE_ROOT / run.case_id / "public/service.py").read_bytes()
     with local_provider("service.py", "def ", missing_usage=True) as (url, requests):
         async def runner(selected):
             return await live._run_review_case(selected, public_source=source,
@@ -215,7 +216,7 @@ def test_failed_attempt_has_elapsed_time_and_independent_usage_flag(tmp_path, mo
 
 def test_failed_review_keeps_fixture_hash(tmp_path):
     run = REVIEW_RUNS[1]
-    source = (live.FIXTURE_ROOT / run.case_id / "public/service.py").read_bytes()
+    source = (FIXTURE_ROOT / run.case_id / "public/service.py").read_bytes()
     with local_provider("service.py", "def ", http_status=401) as (url, _):
         async def runner(selected):
             return await live._run_review_case(selected, public_source=source,

@@ -10,7 +10,7 @@
 
 v0.14.4 修复 RunService 初始化/完成阶段取消漏接，以及协程首次执行前取消跳过收尾的竞态；等待自有 SQLite 写入完成后再发布取消终态。nav-04/tdd-01..04/patch-01 已有确定性真实路径 fixture，但不是付费模型质量结果。能力 eligibility 仍为原 180 中工厂 81、服务 126；full mode 继续阻断。详见 [更新与测试报告](docs/releases/v0.14.4.md)。历史失败 CI/标签不改写。
 
-最新评测专用增量：[patch-01 Graph/Deep 多文件审批更新与测试证据](bench/reports/2026-09-30-protocol-1.2-patch01.md)。原 Task 5B 已完成 6/13，下一步 patch-02 行为保持重构，再做 patch-03 rollback/stale-base 控制；最终证据 CI 的取消测试 watchdog 红灯与慢 I/O 修补见报告，扩题以修补提交 CI 验收为前提；不代表新的桌面版本或模型质量成绩。
+**v0.15 未发布候选（2026-10-03）：** Task 5B 全部 13 fixture 已有本地确定性控制；增加并行 Vue 持久对话页、DeepSeek 官方非思考兼容，以及仅用于受控导航/盲审 runner 的共享人民币 ¥10 请求账本，不覆盖日常桌面对话，也不是账户级硬上限。最新 Python 门禁 **637 passed、2 skipped**；隔离新 EXE 的七项 scripted runtime、原生窗口检查、自有进程与 SQLite 释放检查通过。付费 Canary、人工裁判、干净候选提交与 exact-commit CI/发布仍待完成；full 180 和完整 UI replacement 继续阻断。详见[日期化证据、失败与边界](docs/releases/2026-10-02-v0.15-acceptance-progress.md#2026-10-03-deepseek预算与最终新-exe-补记)，不改变当前 v0.14.4 发布状态，不代表模型质量。
 
 ## 功能
 

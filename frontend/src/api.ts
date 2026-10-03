@@ -1,6 +1,6 @@
 import type { RunRecord, RunRequest, RuntimeEvent, SubagentRecord } from "./types";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
     headers: {

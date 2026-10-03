@@ -1,0 +1,5 @@
+{
+  "lifetime_seconds": 45,
+  "deadline_seconds": 10,
+  "termination_cases": ["cancel", "deadline"]
+}

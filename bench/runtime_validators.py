@@ -24,6 +24,7 @@ class ReadEvidenceProvider:
             self._seen.add(key)
             self.reads.append({
                 "path": self._pending[key[0]], "content": message.content,
+                "tool_call_id": key[0],
                 "success": not message.content.startswith(("Tool error", "Error:")),
             })
         turn = self.provider.next_turn(messages, tools)
@@ -41,6 +42,12 @@ def validate_navigation_evidence(
     """Consume trusted harness tool observations, never model-reported reads."""
     if fixture.category != "navigation":
         raise ValueError("navigation validator requires a navigation fixture")
+    return validate_readonly_evidence(fixture, workspace, observed_reads)
+
+
+def validate_readonly_evidence(fixture: TaskFixture, workspace: Path, observed_reads: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    if fixture.category not in {"navigation", "known_answer_review"}:
+        raise ValueError("read evidence requires a read-only fixture")
     unchanged = all(fixture_path(workspace, path).is_file() and fixture_path(workspace, path).read_bytes() == payload
                     for path, payload in fixture.public_files)
     actual = {p.relative_to(workspace).as_posix() for p in workspace.rglob("*")
@@ -140,13 +147,16 @@ def validate_tdd_evidence(fixture: TaskFixture, workspace: Path, evidence: dict,
     return checks
 
 
-def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dict) -> dict[str, bool]:
+def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dict, *, boundary="run_service") -> dict[str, bool]:
     """Validate trusted native receipts plus external oracles; not agent claims."""
     if fixture.category != "multi_file_patch":
         raise ValueError("patch evidence requires a multi-file fixture")
     rows = evidence.get("receipts", [])
     chronology = [row.get("tool") for row in rows] == ["read_file"] * len(fixture.public_files) + ["propose_patch"]
     checks = {
+        "native_execution_boundary": evidence.get("boundary") == boundary and boundary in {"direct_factory", "run_service"}
+        and (evidence.get("factory_same_instance") is True and evidence.get("reconstructed_service") is False
+             if boundary == "direct_factory" else evidence.get("factory_same_instance", False) is False),
         "native_completion": evidence.get("status") == "completed" and evidence.get("actual_runtime") == evidence.get("runtime")
         and evidence.get("runtime") in {"graph", "deep"} and not evidence.get("paused_fallback_runtime"),
         "executor_chronology": chronology,
@@ -172,7 +182,8 @@ def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dic
         and approval.get("content_sha256") == {p: current.get(p) for p in required}
     )
     checks["no_unapproved_effects"] = approval.get("bounds_pass") is True and approval.get("no_unapproved_effects") is True and (
-        evidence.get("reconstructed_service") is True and evidence.get("approval_count") == 1
+        (evidence.get("reconstructed_service") is True if boundary == "run_service" else evidence.get("factory_same_instance") is True)
+        and type(evidence.get("approval_count")) is int and evidence["approval_count"] == 1
     )
     checks["required_multi_file_paths"] = set(rows[-1].get("requested_paths", [])) == set(rows[-1].get("changed_paths", [])) == required
     checks["reviewed_identity_executed"] = isinstance(approval.get("patch_id"), str) and rows[-1].get("patch_id") == approval["patch_id"]
@@ -187,18 +198,40 @@ def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dic
     checks["independent_seed_failures"] = before.get("exit_code") == 1 and before.get("failures") == fixture.oracle["expected_seed_target_failures"] and (
         before.get("errors") == 0 and before.get("tests_run", 0) >= before["failures"]
     )
-    checks["external_targets_and_regressions"] = green(evidence.get("external_target_after", {}), 2) and all(
-        green(evidence.get(key, {}), 3) for key in ("external_regression_before", "external_regression_after")
-    )
-    mutation = evidence.get("candidate_on_seed", {})
-    checks["new_tests_are_sensitive"] = green(evidence.get("public_after", {}), 2) and mutation.get("exit_code") == 1 and (
-        mutation.get("failures", 0) >= 1 and mutation.get("errors") == 0
-    )
+    behavior_profile = fixture.oracle["kind"] in {"behavior_preserving_refactor", "atomic_config_patch"}
+    if behavior_profile:
+        def exact_green(row, count):
+            return green(row, count) and type(row.get("tests_run")) is int and row["tests_run"] == count
+
+        checks["independent_seed_failures"] &= type(before.get("tests_run")) is int and before["tests_run"] == 2
+        checks["external_targets_and_regressions"] = exact_green(evidence.get("external_target_after", {}), 2) and all(
+            exact_green(evidence.get(key, {}), fixture.oracle["expected_regression_tests"])
+            for key in ("external_regression_before", "external_regression_after")
+        )
+        checks["public_behavior_preserved"] = "candidate_on_seed" not in evidence and all(
+            exact_green(evidence.get(key, {}), fixture.oracle["expected_public_tests"])
+            for key in ("public_before", "public_after")
+        )
+    else:
+        checks["external_targets_and_regressions"] = green(evidence.get("external_target_after", {}), 2) and all(
+            green(evidence.get(key, {}), 3) for key in ("external_regression_before", "external_regression_after")
+        )
+        mutation = evidence.get("candidate_on_seed", {})
+        checks["new_tests_are_sensitive"] = green(evidence.get("public_after", {}), 2) and mutation.get("exit_code") == 1 and (
+            mutation.get("failures", 0) >= 1 and mutation.get("errors") == 0
+        )
     hidden = dict(fixture.hidden_files)
     checks["frozen_external_oracles"] = all(
         evidence.get(key, {}).get("oracle_sha256") == sha256(hidden[path]).hexdigest()
         for key, path in (("external_target_before", "target_tests.py"), ("external_target_after", "target_tests.py"),
                           ("external_regression_before", "regression_tests.py"), ("external_regression_after", "regression_tests.py"),
-                          ("public_after", "public_check.py"), ("candidate_on_seed", "public_check.py"))
+                          ("public_after", "public_check.py"), ("public_before" if behavior_profile else "candidate_on_seed", "public_check.py"))
     )
+    if fixture.oracle["kind"] == "atomic_config_patch":
+        from bench.runtime_patch_controls import validate_atomic_control
+        controls = evidence.get("atomic_controls", [])
+        checks["native_atomic_failure_controls"] = isinstance(controls, list) and (
+            [row.get("control") for row in controls] == list(fixture.oracle["atomic_controls"])
+            and all(all(validate_atomic_control(fixture, row, runtime=evidence.get("runtime"), boundary=boundary).values()) for row in controls)
+        )
     return checks

@@ -1,0 +1,23 @@
+{
+  "case_id": "approval-01",
+  "fixture_version": "1.5",
+  "category": "approval_resume",
+  "source_kind": "synthetic_control",
+  "source_commit": "e3e499566e52548399950143618c732299c64b2a",
+  "public_files": {
+    "LICENSE.txt": "152d3891cf8fa725d300177a28ffb5f323d36fe61716982b5b569e562902f057",
+    "note.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+    "README.md": "5dfb57dcbeb6f1725fd4576e77d05bf4b545153da3aa0a65e6782fb66b247234"
+  },
+  "allowed_edits": [
+    "note.txt"
+  ],
+  "oracle": {
+    "kind": "approval_exactly_once",
+    "decision": "approve",
+    "allowed_argv": [],
+    "hidden_files": {
+      "reference_changes.json": "5b6a2351f5dfe5e2322655a04a43ac9b77bb60aa3b6b526bf1b18e83b6f3a8b3"
+    }
+  }
+}

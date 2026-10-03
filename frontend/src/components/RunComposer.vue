@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Play, RotateCcw } from "lucide-vue-next";
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 
 import type { Effort, RunMode, RunRequest } from "../types";
+import type { ModelProfile } from "../workspaceTypes";
 
-const props = defineProps<{ busy: boolean }>();
+const props = defineProps<{ busy: boolean; profiles?: ModelProfile[] }>();
 const emit = defineEmits<{ submit: [request: RunRequest] }>();
 
 const form = reactive<RunRequest>({
@@ -21,6 +22,9 @@ const modes: Array<{ value: RunMode; name: string; detail: string }> = [
   { value: "deep", name: "Deep", detail: "DeepAgent 编排" },
 ];
 const efforts: Effort[] = ["quick", "balanced", "deep"];
+watch(() => props.profiles, (profiles) => {
+  if (form.profile_id && profiles?.length && !profiles.some(profile => profile.id === form.profile_id)) form.profile_id = undefined;
+});
 
 function reset(): void {
   form.prompt = "分析当前仓库结构，给出一条可验证的改进建议。";
@@ -52,7 +56,7 @@ function reset(): void {
 
     <div class="field-grid">
       <label><span class="field-label">推理力度</span><select v-model="form.effort"><option v-for="item in efforts" :key="item">{{ item }}</option></select></label>
-      <label><span class="field-label">配置 ID</span><input v-model.trim="form.profile_id" placeholder="default" autocomplete="off" /></label>
+      <label><span class="field-label">模型档案</span><select v-if="props.profiles?.length" v-model="form.profile_id"><option :value="undefined">服务默认档案</option><option v-for="profile in props.profiles" :key="profile.id" :value="profile.id">{{ profile.name }} · {{ profile.model }}</option></select><input v-else v-model.trim="form.profile_id" placeholder="default" autocomplete="off" /></label>
     </div>
 
     <fieldset class="permissions">

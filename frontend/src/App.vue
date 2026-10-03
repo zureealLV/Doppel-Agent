@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Activity, AlertTriangle, Braces, Clock3, Copy, FileDiff, Gauge, OctagonX, Radio, TerminalSquare } from "lucide-vue-next";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { runtimeApi } from "./api";
 import ApprovalPanel from "./components/ApprovalPanel.vue";
@@ -8,8 +8,23 @@ import EventTimeline from "./components/EventTimeline.vue";
 import RunComposer from "./components/RunComposer.vue";
 import StatusBadge from "./components/StatusBadge.vue";
 import SubagentPanel from "./components/SubagentPanel.vue";
+import ConversationWorkspace from "./components/ConversationWorkspace.vue";
 import { elapsed, extractDiff, formatDuration, mergeEvents } from "./runtime";
 import type { RunRecord, RunRequest, RuntimeEvent, SubagentRecord } from "./types";
+import type { PublicSettings } from "./workspaceTypes";
+
+const page = ref<"runtime" | "conversations">("runtime");
+const modelSettings = ref<PublicSettings | null>(null);
+const conversationWorkspace = ref<InstanceType<typeof ConversationWorkspace> | null>(null);
+
+async function workspaceShortcut(event: KeyboardEvent): Promise<void> {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    page.value = "conversations";
+    await nextTick();
+    await conversationWorkspace.value?.openSearch();
+  }
+}
 
 const apiState = ref<"checking" | "online" | "offline">("checking");
 const run = ref<RunRecord | null>(null);
@@ -144,6 +159,7 @@ async function copyRunId(): Promise<void> {
 }
 
 onMounted(async () => {
+  document.addEventListener("keydown", workspaceShortcut);
   try {
     await runtimeApi.health();
     apiState.value = "online";
@@ -165,7 +181,7 @@ onMounted(async () => {
   }
 });
 
-onBeforeUnmount(() => { disconnect(); window.clearInterval(pollTimer); });
+onBeforeUnmount(() => { disconnect(); window.clearInterval(pollTimer); document.removeEventListener("keydown", workspaceShortcut); });
 </script>
 
 <template>
@@ -175,15 +191,18 @@ onBeforeUnmount(() => { disconnect(); window.clearInterval(pollTimer); });
         <span class="brand-mark" aria-hidden="true"><Braces :size="20" /></span>
         <span><strong>DOPPEL</strong><small>RUNTIME WORKBENCH</small></span>
       </a>
+      <nav class="workspace-tabs" aria-label="工作区页面"><button type="button" :aria-pressed="page === 'conversations'" @click="page = 'conversations'">持久对话</button><button type="button" :aria-pressed="page === 'runtime'" @click="page = 'runtime'">Runtime</button></nav>
       <div class="api-health" :data-state="apiState" role="status" aria-live="polite"><Radio :size="15" aria-hidden="true" />API {{ apiState }}</div>
     </header>
 
     <div v-if="message" class="global-alert" role="alert"><AlertTriangle :size="18" aria-hidden="true" /><span>{{ message }}</span><button type="button" aria-label="关闭错误提示" @click="message = ''">×</button></div>
 
-    <div class="workspace-grid">
-      <aside class="control-panel"><RunComposer :busy="busy || apiState !== 'online'" @submit="createRun" /></aside>
+    <ConversationWorkspace ref="conversationWorkspace" v-show="page === 'conversations'" :active="page === 'conversations'" @settings="modelSettings = $event" />
 
-      <main id="main-content" class="main-panel" tabindex="-1">
+    <div v-show="page === 'runtime'" class="workspace-grid">
+      <aside class="control-panel"><RunComposer :busy="busy || apiState !== 'online'" :profiles="modelSettings?.profiles || []" @submit="createRun" /></aside>
+
+      <main :id="page === 'runtime' ? 'main-content' : undefined" class="main-panel" tabindex="-1">
         <template v-if="run">
           <section class="run-hero" aria-labelledby="run-title">
             <div><p class="eyebrow">ACTIVE RUN</p><h1 id="run-title">{{ run.request.prompt }}</h1></div>

@@ -868,7 +868,28 @@ Windows 优先 Job Object；无法启用时明确降级并记录，不得只取�
 
 **v0.13 结果：** `frontend/` 已建立 Vue/TypeScript 工程，生产 bundle 写入 `web/frontend_dist/` 并由安全路径路由提供；Runtime Workbench 已覆盖上述运行时可观测对象。旧 `index.html/app.js/app.css` 暂不替换，因为持久对话、模型设置和全局搜索尚未达到 Vue parity；旧页新增 Runtime Lab 入口。这是有意的渐进迁移，不是未完成的静态 mock。
 
+**2026-10-01 v0.15 整批实现进度（未验收）：** Vue 源码已补持久对话页面、现有历史/草稿/分组/归档管理、每对话模型选择、模型设置与显式连接测试、全局 Ctrl K 搜索、旧对话审批和事件/任务详情。它沿用实际旧持久对话 API，不宣称 Graph/Deep 原生对话历史已迁移。控制器、SSR 结构和真实 same-origin 代理/存储集成测试已写，按 Lv 的整版节奏尚未运行。旧根页面和已提交 bundle 保留；统一测试、生产构建、Windows 视觉/包装及完整能力边界验收通过前，不替换旧 UI、不发布版本。当前执行顺序以 `2026-09-23-v0.15-live-runtime-matrix.md` 的最新整版章节为准。
+
+**2026-10-02 整版离线验收补记：** Vue 19 项测试、typecheck/build、实际隔离
+browser 的历史/草稿/分组/归档搜索/显式 Mock 探测/原生 Graph 提交与刷新恢复
+通过；真实页面暴露的代理同源问题已修补并有 Host/Origin 拒绝控制。当前
+工作树 production bundle 已更新，旧根 UI 仍保留。新 wheel 的 API/Web/
+DPAPI 等 59 项测试通过；新 EXE 仅完成构建与嵌入源码/资源比对，尚不称运行/
+Windows 原生视觉验收。Graph/Deep 原生对话历史、完整 replacement parity 和
+Task 29 最终 claim/release 门禁仍未完成。详见
+[整版验收进度](../releases/2026-10-02-v0.15-acceptance-progress.md)。
+
 ### Task 29: 发布门禁
+
+**2026-10-03 Task 28 决策 /Task 29 补记：** 保留旧根 UI 与 Vue 并行，延后
+完整 replacement 与 Graph/Deep conversation-history parity；新持久页仍为
+Legacy chat，不偷换执行边界。最终隔离 EXE 已通过七项本地 scripted runtime、
+原生 Graph/持久 quick/搜索/设置查看与正常退出十个自有进程、七个 DB 释放。
+Python full 637 passed、2 skipped；README/README_CN/技术报告与测试策略已区分
+历史发布和日期化未发布候选、13 fixture 与 81/126 分母、CNY runner 范围及 paid=0。
+原生全断点/永久删除/完整 UI parity 不宣称通过；账户侧 cap、有效价格快照、
+最终整批 review/clean commit/付费 9+12 人工裁判/远端 CI 与 release 仍待完成。
+详见[整版补记](../releases/2026-10-02-v0.15-acceptance-progress.md#2026-10-03-deepseek预算与最终新-exe-补记)。
 
 **Objective:** 确保 v1.0 的 README 只写已验证能力。
 

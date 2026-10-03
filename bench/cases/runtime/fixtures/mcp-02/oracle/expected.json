@@ -1,0 +1,33 @@
+[
+  {
+    "name": "structured",
+    "arguments": {
+      "value": 7
+    },
+    "content": [],
+    "structured_content": {
+      "count": 7,
+      "tag": "structured"
+    },
+    "is_error": false,
+    "model_view": "{\"count\": 7, \"tag\": \"structured\"}"
+  },
+  {
+    "name": "failure",
+    "arguments": {
+      "text": "expected"
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "fixture failure"
+      }
+    ],
+    "structured_content": {
+      "code": "EXPECTED",
+      "detail": "expected"
+    },
+    "is_error": true,
+    "model_view": "fixture failure"
+  }
+]

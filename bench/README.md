@@ -1,5 +1,43 @@
 # Code-review acceptance case
 
+## v0.15 batch drafts — complete supported scripted matrices
+
+The current worktree adds these **unaccepted** offline commands. Run them at
+the consolidated version acceptance phase, not after every implementation item:
+
+```powershell
+uv run --extra agent python -m bench.run_supported_runtime_matrix --boundary direct_factory --output-dir .bench-results/v015-factory
+uv run --extra agent python -m bench.run_supported_runtime_matrix --boundary run_service --output-dir .bench-results/v015-service
+```
+
+Each command freezes all 20 case inputs and executes its own complete eligible
+set: **81 factory /126 service keys**, including three independent repeats in
+fresh workspaces. Keep the boundaries separate. Direct Deep patches use native
+same-instance resume; this is not durable RunService reconstruction. No external
+model is called and no added command/MCP grant simulates missing capabilities.
+
+Canonical context, source/fixture/oracle hashes, exact keys, native approval
+decisions and normalized evidence are bound together. Saved attempts, including
+infrastructure failures, are create-only and never rerun on resume. Changed
+source/config/keys require a new output directory. Concurrent publication guards
+prevent overwrites; they do not guarantee at-most-once execution by two workers.
+Working-tree snapshots are labelled dirty where applicable; release evidence
+must be rerun from the exact clean source commit.
+
+`summary.json` and `adjudication_forms.json` keep the original **180** denominator,
+explicit unsupported reasons and missing/failed attempts. Human-only review key
+packets live in `reviewer_keys/` outside Agent workspaces. Read-only navigation
+and blind-review controls prove reads/inventory, not explanation or finding
+quality. Scripted passes do not fill human verdicts or model scores;
+`full_matrix_ready=false` remains mandatory. These are trusted harness
+provenance checks, not OS isolation or cryptographic execution attestation.
+
+The paid canary now also binds independently frozen review-key hashes in its
+context; keys never enter provider inputs. Old/changed contexts cannot resume.
+Paid endpoint/model/credentials/prices/budget and human-review gates still apply.
+No new tests, CI result, package, tag or published version is claimed by these
+drafts. Historical result files and their source-commit bounds stay unchanged.
+
 `review_001` is a **synthetic, intentionally flawed** 45-line Python service. The
 runner copies only `service.py` into a fresh temporary workspace; the agent
 cannot read `answer_key.json` or this README. The workspace is deleted after
@@ -220,3 +258,11 @@ These are trusted scripted controls, not a blind/paid model solving the defect.
 Hidden materialization and argv bounds do **not** provide strong OS sandboxing
 for arbitrary candidate Python code; Task 5C must retain that limitation and
 settle evaluation isolation before broader paid execution/quality claims.
+# DeepSeek shared CNY budget (unreleased v0.15 candidate)
+
+The official DeepSeek read-only canary now has an explicit non-thinking profile
+and a durable per-request **shared total 10 CNY** ledger. This is not desktop
+chat accounting, an actual billed-cost report, or a paid quality result.
+See [configuration, bounds, failure handling and paid prerequisites](DEEPSEEK_CNY.md).
+The old USD runner is not a hard cap and is rejected for the official DeepSeek
+paid CLI. No paid calls are authorized by the offline implementation alone.

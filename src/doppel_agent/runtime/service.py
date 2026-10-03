@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -390,6 +389,9 @@ class RunService:
         async def operation(token) -> RuntimeResult:
             try:
                 token.raise_if_cancelled()
+                current = await self.get(run_id)
+                if current["cancel_requested"]:
+                    raise asyncio.CancelledError
                 await _await_durable(asyncio.to_thread(self.runs.update, run_id, "running"))
                 await sink.emit("run.status_changed", previous="queued", status="running")
                 runtime = await self._runtime(record)
@@ -462,6 +464,8 @@ class RunService:
         await asyncio.to_thread(self.runs.request_cancel, run_id)
         previous_scheduler_status = self.scheduler.status(run_id)
         cancelled = await self.scheduler.cancel(run_id)
+        pending_dispatch = record["status"] == "queued" and previous_scheduler_status not in {"queued", "running"}
+        cancelled = cancelled or pending_dispatch
         await self.process_supervisor.cancel_run(run_id)
         if cancelled:
             sink = self._sink(record)
@@ -477,16 +481,43 @@ class RunService:
             raise KeyError(run_id)
         if record["status"] != "interrupted":
             raise ValueError("run is not waiting for an interrupt")
-        updated = datetime.fromisoformat(record["updated_at"])
-        if (datetime.now(UTC) - updated).total_seconds() > self.approval_ttl_seconds:
-            await asyncio.to_thread(self.runs.update, run_id, "interrupted_expired")
-            await self._sink(record).emit("approval.expired", interrupt_id=interrupt_id)
-            raise TimeoutError("approval interrupt has expired")
         known = {item.get("id") for item in record["metadata"].get("interrupts", [])}
         if interrupt_id not in known:
             raise ValueError("interrupt id does not match the pending approval")
+        # Keep one transaction-owned future so cancellation can distinguish our
+        # successful claim from a competing request that won instead.
+        claim = asyncio.create_task(asyncio.to_thread(
+            self.runs.claim_interrupt, run_id, interrupt_id, value, ttl_seconds=self.approval_ttl_seconds,
+        ))
+        try:
+            record = await _await_durable(claim)
+        except asyncio.CancelledError:
+            if not claim.cancelled() and claim.exception() is None:
+                await _await_durable(self._record_cancelled(run_id, self._sink(claim.result())))
+            raise
+        except TimeoutError:
+            await self.notifier.notify(run_id)
+            raise
+        ownership = {"scheduled": False}
+        try:
+            await self.notifier.notify(run_id)
+            return await self._resume_claimed(record, value, ownership)
+        except asyncio.CancelledError:
+            if not ownership["scheduled"]:
+                await _await_durable(self._record_cancelled(run_id, self._sink(record)))
+            raise
+        except Exception as exc:
+            if not ownership["scheduled"]:
+                # A committed decision is consumed, never put back for blind
+                # replay after scheduling failure. Preserve a terminal failure.
+                error = f"{type(exc).__name__}: approval dispatch failed"
+                await _await_durable(self._sink(record).emit("run.failed", error=error))
+                await _await_durable(asyncio.to_thread(self.runs.update, run_id, "failed", error=error))
+            raise
+
+    async def _resume_claimed(self, record: dict[str, Any], value: dict[str, Any], ownership: dict[str, bool]) -> dict[str, Any]:
+        run_id = record["run_id"]
         sink = self._sink(record)
-        await sink.emit("approval.decided", interrupt_id=interrupt_id, decision=value)
         if record["mode"] == "deep":
             value = {
                 **value,
@@ -501,6 +532,9 @@ class RunService:
         async def operation(token) -> RuntimeResult:
             try:
                 token.raise_if_cancelled()
+                current = await self.get(run_id)
+                if current["cancel_requested"]:
+                    raise asyncio.CancelledError
                 await _await_durable(asyncio.to_thread(self.runs.update, run_id, "running"))
                 runtime = await self._runtime(record)
                 lock = (
@@ -532,5 +566,6 @@ class RunService:
                 raise
 
         handle = await self.scheduler.submit(run_id, operation)
+        ownership["scheduled"] = True
         handle.future.add_done_callback(self._consume_future)
         return await self.get(run_id)

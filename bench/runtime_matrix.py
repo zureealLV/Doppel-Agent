@@ -11,11 +11,13 @@ import asyncio
 import json
 import tempfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+
+from bench.runtime_freeze import freeze_json
 
 
 RUNTIMES = ("legacy", "graph", "deep")
@@ -41,8 +43,12 @@ class RuntimeCase:
     case_id: str
     category: str
     prompt: str
-    permissions: dict[str, bool]
-    validator: dict[str, str]
+    permissions: Mapping[str, bool]
+    validator: Mapping[str, str]
+
+    def __post_init__(self):
+        object.__setattr__(self, "permissions", freeze_json(self.permissions))
+        object.__setattr__(self, "validator", freeze_json(self.validator))
 
 
 @dataclass(frozen=True)
@@ -52,8 +58,12 @@ class MatrixRun:
     runtime: str
     repeat: int
     prompt: str
-    permissions: dict[str, bool]
-    validator: dict[str, str]
+    permissions: Mapping[str, bool]
+    validator: Mapping[str, str]
+
+    def __post_init__(self):
+        object.__setattr__(self, "permissions", freeze_json(self.permissions))
+        object.__setattr__(self, "validator", freeze_json(self.validator))
 
     @property
     def run_key(self) -> str:
@@ -69,6 +79,9 @@ class RuntimeMatrix:
     protocol_version: str
     cases: tuple[RuntimeCase, ...]
     manifest_sha256: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "cases", tuple(self.cases))
 
     @classmethod
     def load(cls, path: Path) -> "RuntimeMatrix":
@@ -152,11 +165,11 @@ class RuntimeMatrix:
             "note": "Protocol only. No success or cost claim is implied until all runs execute.",
         }
 
-    def capability_document(self, path: Path, *, boundary: str) -> dict[str, Any]:
+    def capability_document(self, path: Path, *, boundary: str, _raw: bytes | None = None) -> dict[str, Any]:
         """Freeze eligibility, including excluded keys; never unlock live full mode."""
         if boundary not in CAPABILITY_BOUNDARIES:
             raise ValueError("unknown capability boundary")
-        raw = path.read_bytes()
+        raw = path.read_bytes() if _raw is None else _raw
         contract = json.loads(raw)
         if not isinstance(contract, dict) or set(contract) != {
             "contract_version", "protocol_sha256", "boundaries", "cases",

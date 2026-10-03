@@ -95,6 +95,44 @@ class RuntimeRunStore:
             )
         return cursor.rowcount == 1
 
+    def claim_interrupt(self, run_id: str, interrupt_id: str, decision: dict[str, Any], *, ttl_seconds: int) -> dict[str, Any]:
+        """Consume one pending interrupt and append its decision atomically.
+
+        A queued claim lost before scheduling is terminalized by normal restart
+        recovery, never replayed blindly. This is at-most-one approval claim,
+        not a claim of transactional/exactly-once external tool execution.
+        """
+        expired = False
+        with sqlite_connection(self.database) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute("SELECT * FROM runtime_runs WHERE run_id=?", (run_id,)).fetchone()
+            if not existing:
+                raise KeyError(run_id)
+            record = self._decode(existing)
+            now = datetime.now(UTC)
+            timestamp = now.isoformat()
+            if record["status"] != "interrupted" or record["cancel_requested"]:
+                raise ValueError("run is not waiting for an interrupt")
+            known = {item.get("id") for item in record["metadata"].get("interrupts", [])}
+            if interrupt_id not in known:
+                raise ValueError("interrupt id does not match the pending approval")
+            expired = (now - datetime.fromisoformat(record["updated_at"])).total_seconds() > ttl_seconds
+            if expired:
+                connection.execute("UPDATE runtime_runs SET status='interrupted_expired',updated_at=?,finished_at=? WHERE run_id=?",
+                                   (timestamp, timestamp, run_id))
+                payload = {"interrupt_id": interrupt_id}
+                event_type = "approval.expired"
+            else:
+                connection.execute("UPDATE runtime_runs SET status='queued',updated_at=? WHERE run_id=?", (timestamp, run_id))
+                payload = {"interrupt_id": interrupt_id, "decision": decision}
+                event_type = "approval.decided"
+            connection.execute("INSERT INTO runtime_events(run_id,thread_id,type,timestamp,payload_json) VALUES(?,?,?,?,?)",
+                               (run_id, record["thread_id"], event_type, timestamp, json.dumps(payload, ensure_ascii=False, separators=(",", ":"))))
+            row = connection.execute("SELECT * FROM runtime_runs WHERE run_id=?", (run_id,)).fetchone()
+        if expired:
+            raise TimeoutError("approval interrupt has expired")  # after committing the durable expiry
+        return self._decode(row)
+
     def recover_incomplete(
         self, error: str = "service restarted before completion"
     ) -> list[dict[str, Any]]:

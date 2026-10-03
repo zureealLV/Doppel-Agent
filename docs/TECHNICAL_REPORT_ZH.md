@@ -213,4 +213,12 @@ AgentRuntime
 
 ## 12. 当前边界与后续建议
 
-当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已进入 Runtime Workbench，但仍是同进程有界任务而不是跨机器 worker 系统；Token 预算基于 Provider usage，缺少 usage 时使用保守字符估算。v0.14 应集中完成外部故障注入、慢 SSE/重连、Provider 429/MCP 断连/进程重启 lease 和真实模型矩阵执行器；v1.0 再做全链发布审计与旧 UI parity 决策。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。
+当前版本尚不等同于强隔离执行环境：命令与 stdio MCP 仍以当前 Windows 用户身份运行，Job Object 解决的是进程树生命周期而不是权限隔离；同步 legacy Provider 被取消后，底层阻塞线程不能被 Python 强杀。异步子 Agent 已进入 Runtime Workbench，但仍是同进程有界任务而不是跨机器 worker 系统。普通 runtime 缺 usage 时的字符估算不构成费用保证；受控付费 runner 则必须在 usage 未知后停止，不使用该估算结算。v0.14 的十项确定性故障注入已有独立报告，不代表外部服务 chaos 或模型质量；真实模型矩阵、全链发布与完整 UI parity 仍需后续验收。SWE-bench、吞吐或成功率数字只有在完成可复现实验和人工判定后才能写入项目成绩。
+
+## 13. v0.15 未发布候选补记（2026-10-03）
+
+- 应用版本仍为 0.14.4；上文历史测试数字绑定对应发布，不自动用于新候选。最新本地全量 **637 passed、2 skipped、1 warning**，Vue **19 passed** 与 typecheck 通过；完整证据见[候选验收进度](releases/2026-10-02-v0.15-acceptance-progress.md)。
+- 原 Task 5B 全部 13 fixture 已实现确定性控制；81 工厂 /126 服务的能力边界保持独立，full 180 继续阻断。scripted 通过不产生模型质量分。
+- 新 Vue 持久对话页沿用旧 chat 服务，Graph/Deep 保持原生 runtime 面板；明确保留双 UI，不宣称 Graph/Deep conversation-history parity，也不删除旧根页面。
+- 官方 DeepSeek sync/async adapter 显式关闭 thinking；启用 thinking 尚未支持 reasoning-content 历史保留。受控 CNY runner 每 HTTP 前按峰值未命中输入和有界输出预留，导航与盲审共享 ¥10，未知 usage/响应和越界保留预留并停止；不覆盖普通 chat/probe，仍需要服务商侧兜底与有效价格快照。
+- 当前源码重新构建的隔离 EXE 完成三运行时 Mock、本地 MCP、审批拒绝/重复 resume、实际父子进程取消以及原生持久对话、搜索、设置查看；正常关闭后十个自有进程身份退出、两个监听关闭、七个 SQLite 完整性及无共享独占打开通过。只证明本地软件链路；本轮付费模型调用 **0**，未完成发布/远端 CI。

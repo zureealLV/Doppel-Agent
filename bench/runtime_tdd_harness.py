@@ -11,7 +11,7 @@ import tempfile
 
 from bench.runtime_fixtures import TaskFixture, TDD_ARGV, materialize_task_case
 from bench.runtime_validators import validate_tdd_evidence
-from bench.runtime_matrix import RuntimeMatrix
+from bench.runtime_contract import NativeTaskContract, native_approval_decisions
 from doppel_agent.provider import ModelTurn, ToolCall
 from doppel_agent.runtime.service import RunService
 from doppel_agent.workspace.process_supervisor import ProcessSupervisor
@@ -126,11 +126,11 @@ async def external_oracle(workspace: Path, payload: bytes) -> dict:
             await supervisor.close()
 
 
-async def probe_tdd(fixture: TaskFixture, workspace: Path) -> dict:
+async def probe_tdd(fixture: TaskFixture, workspace: Path, *, _contract=None) -> dict:
     if fixture.category != "tdd_fix":
         raise ValueError("TDD probe requires a TDD fixture")
-    matrix = RuntimeMatrix.load(Path(__file__).resolve().parent / "cases/runtime/manifest.json")
-    case = next(case for case in matrix.cases if case.case_id == fixture.case_id)
+    contract = _contract if _contract is not None else NativeTaskContract.load()
+    case = contract.case(fixture, "graph")
     materialize_task_case(fixture, workspace)
     hidden = dict(fixture.hidden_files)
     target_before = await external_oracle(workspace, hidden["target_tests.py"])
@@ -170,12 +170,15 @@ async def probe_tdd(fixture: TaskFixture, workspace: Path) -> dict:
             await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
         target_after = await external_oracle(workspace, hidden["target_tests.py"])
         regression_after = await external_oracle(workspace, hidden["regression_tests.py"])
+        decisions = native_approval_decisions(await service.list_events(run_id))
         evidence = {"initial": initial, "receipts": provider.receipts, "approvals": approvals,
+                    "approval_decisions": decisions,
                     "external_target_before": target_before, "external_regression_before": regression_before,
                     "external_target_after": target_after, "external_regression_after": regression_after,
                     "status": record["status"], "fallback_runtime": record["metadata"].get("fallback_runtime")}
         checks = validate_tdd_evidence(fixture, workspace, evidence, argv_sha256=digest(command_argv()))
-        return {"case_id": fixture.case_id, "prompt": case.prompt, "protocol_version": matrix.protocol_version,
+        return {"case_id": fixture.case_id, "prompt": case.prompt, "protocol_version": contract.matrix.protocol_version,
+                "permissions": dict(case.permissions),
                 "fixture_sha256": fixture.sha256, "fixture_version": fixture.version,
                 "source_kind": fixture.source_kind, "source_baseline_commit": fixture.source_commit,
                 "runtime": "graph", "actual_runtime": evidence["fallback_runtime"] or "graph", "boundary": "run_service",
