@@ -35,8 +35,10 @@ MAX_OBJECT_ENTRIES = 20_000
 
 
 def _signature(info: os.stat_result) -> tuple[int, ...]:
+    # Windows path/fd ctime have different semantics from Python 3.12.
+    stamp = getattr(info, "st_birthtime_ns", info.st_ctime_ns) if os.name == "nt" else info.st_ctime_ns
     return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size,
-            info.st_mtime_ns, info.st_ctime_ns, getattr(info, "st_file_attributes", 0))
+            info.st_mtime_ns, stamp, getattr(info, "st_file_attributes", 0))
 
 
 def _linked(info: os.stat_result) -> bool:
@@ -241,7 +243,8 @@ class _MetadataGuard:
                 raw = handle.read(maximum + 1)
                 if len(raw) > maximum or self.bytes_read + len(raw) > MAX_METADATA_BYTES:
                     raise GitInspectionError("git_metadata_byte_limit")
-                if _signature(opened) != _signature(os.fstat(handle.fileno())):
+                after_fd = os.fstat(handle.fileno())
+                if _signature(opened) != _signature(after_fd) or opened.st_ctime_ns != after_fd.st_ctime_ns:
                     raise GitInspectionError("git_metadata_changed")
             after = self.info(path)
             if after is None or _signature(opened) != _signature(after):

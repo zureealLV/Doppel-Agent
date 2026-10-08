@@ -48,12 +48,22 @@ Attempt02 is superseded only for publication byte provenance: staging all accumu
 
 Remaining: fresh unified whole-source S9 and native N1–N6/effect/lifecycle coverage, full S10 evidence audit/delivery closure where still open, and separately authorized controlled paid-model evaluation. Engineering fixtures/Mock controls do not establish production reliability, model quality, review success rate or Token savings. The broader goal remains active.
 
-## Final publication candidate — attempt03
+## Preserved publication candidate — attempt03 (superseded)
 
-Original build supervisor **session20143 actual exit0**, all three build subprocesses exit0. Final 283 build-input byte SHA256 **35ec8524161c21e2db77ec3a05a4ddd01bbef2b53160baf5bd182ce4a163ead3**; frozen through build and post-build checks.
+Original build supervisor **session20143 actual exit0**, all three build subprocesses exit0. Its 283 build-input byte SHA256 **35ec8524161c21e2db77ec3a05a4ddd01bbef2b53160baf5bd182ce4a163ead3**; frozen through build and post-build checks.
 
 - `packages/doppel_agent-0.15.0rc1-py3-none-any.whl`: SHA256 **d1c6a758214bd2cc6c7b824e0de66b61b41837f493a78a340007d5936d33c6d5** (555998 bytes).
 - `packages/doppel_agent-0.15.0rc1.tar.gz`: SHA256 **758f5590bf101c45a4748ac38be7ed547704771b8315b2c223b864e64f77577b** (741574 bytes).
 - `desktop/DoppelAgent/DoppelAgent.exe`: SHA256 **584d6bb8c468f748c017992532e21ce2ec7b56059ade6c08f717a838f4f4b9f1** (21833329 bytes).
 
 Attempt03 repeats the isolated wheel import/Mock API smoke, embedded EXE version and all three frontend byte-parity checks successfully. Daily app unchanged; EXE **not launched**. Frontend bundle warning remains 510.69kB. Git staged diff-check0 / Ruff0; unchanged AST cleanup does not require relabelling prior browser/UI checks as native evidence.
+
+## Exact-commit CI blocker and timestamp compatibility repair
+
+Initial publication commit `542f0c82352a1ef3520733f6cf3627a217a029d8` was pushed, but [CI 37754101775](https://github.com/zureealLV/Doppel-Agent/actions/runs/37754101775) **failed**: frontend succeeded; Python 3.12.10 had **242 failures, 2471 passes, 46 errors**; Python 3.11 was cancelled by matrix fail-fast, not passed. No tag/release was published. All failed logs remain preserved. Attempt03 and its archive are therefore superseded, not released.
+
+A standalone official Windows Python 3.12.10 embedded runtime reproduced path `lstat().st_ctime_ns` versus handle `fstat().st_ctime_ns` divergence after a file rewrite. [CPython issue 157671](https://github.com/python/cpython/issues/157671) documents the same semantic mismatch. No project dependencies were upgraded. An AST-extracted original/current ManifestReader read seam reproduces RED -> GREEN on that interpreter; this is a narrow seam test, not full-package Python 3.12 acceptance.
+
+The three cross-flavor readers (context, Git metadata, verification config) now compare Windows `st_birthtime_ns` when available, with the existing ctime fallback for older Python; device/inode/size/mtime and existing mode/link/attribute checks remain. **Raw ctime comparisons between pre/post fstat on the same descriptor are retained separately**, preserving handle change detection. POSIX behavior, path containment, link refusal, read budgets and post-read checks are unchanged. PatchService's path-only identity is unchanged.
+
+New identity regressions first RED **6 failed / 12 passed**, then **21/21** including descriptor-change guards. Context regression **41 passed / 1 skipped** including the first 18 identity tests; Git/verification focused checks **141 passed / 1 skipped**. Narrow independent read-only review found no blocker. Local full-suite and fresh exact-commit CI outcomes remain pending at this source commit and must be recorded in the release receipt/notes after actual completion; these scoped results do not erase the failed CI or complete native acceptance. A new isolated attempt04 must package this repaired source before publication.

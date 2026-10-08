@@ -142,7 +142,10 @@ class ManifestReader:
 
     @staticmethod
     def _signature(info: os.stat_result) -> tuple[int, int, int, int, int]:
-        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+        # Windows 3.12 path ctime is creation time, fd ctime is change time.
+        # Compare birthtime across flavors; retain fd change-time checks below.
+        stamp = getattr(info, "st_birthtime_ns", info.st_ctime_ns) if os.name == "nt" else info.st_ctime_ns
+        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, stamp
 
     def _read_regular(self, relative: str, maximum: int) -> bytes:
         try:
@@ -161,7 +164,8 @@ class ManifestReader:
                 raw = handle.read(maximum + 1)
                 if len(raw) > maximum:
                     raise ContextManifestError("context_file_too_large")
-                if self._signature(opened) != self._signature(os.fstat(handle.fileno())):
+                after = os.fstat(handle.fileno())
+                if self._signature(opened) != self._signature(after) or opened.st_ctime_ns != after.st_ctime_ns:
                     raise ContextManifestError("context_file_changed_during_read")
             if self._signature(opened) != self._signature(self._safe_path(relative).lstat()):
                 raise ContextManifestError("context_file_changed_during_read")

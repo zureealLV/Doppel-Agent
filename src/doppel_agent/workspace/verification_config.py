@@ -26,7 +26,9 @@ def _hash(value) -> str:
 
 
 def _identity(info) -> tuple:
-    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    # Windows path/fd ctime have different semantics from Python 3.12.
+    stamp = getattr(info, "st_birthtime_ns", info.st_ctime_ns) if os.name == "nt" else info.st_ctime_ns
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, stamp)
 
 
 def _check(info, *, directory=False):
@@ -156,7 +158,8 @@ def capture(workspace: Path, config_path: Path) -> VerificationConfig:
             after = os.fstat(descriptor)
         finally:
             os.close(descriptor)
-        if len(raw) > MAX_CONFIG_BYTES or _identity(after) != _identity(before) or _identity(path.lstat()) != _identity(before):
+        if (len(raw) > MAX_CONFIG_BYTES or _identity(after) != _identity(before)
+                or opened.st_ctime_ns != after.st_ctime_ns or _identity(path.lstat()) != _identity(before)):
             raise ValueError("verification_config_unavailable")
         for parent, identity in parents:
             # File reads may update access times, which identity deliberately omits.
