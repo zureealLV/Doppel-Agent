@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
+
+
+class EventSink(Protocol):
+    async def emit(self, kind: str, **payload: Any) -> None: ...
+
+
+class NullEventSink:
+    async def emit(self, kind: str, **payload: Any) -> None:
+        return None
 
 
 class EventBus:

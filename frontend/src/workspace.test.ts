@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { workspaceApi } from "./workspaceApi";
 import { WorkspaceController, profileConfiguration, safeMarkdown, searchIndex } from "./workspace";
@@ -37,6 +37,98 @@ describe("same-origin persistent workspace API", () => {
 });
 
 describe("persistent workspace ownership", () => {
+  beforeEach(() => {
+    vi.spyOn(workspaceApi, "selection").mockResolvedValue({ saved: false, conversation_id: null });
+    vi.spyOn(workspaceApi, "saveSelection").mockImplementation(async conversation_id => ({ saved: true, conversation_id }));
+  });
+
+  it("restores the workspace-owned choice instead of a browser-origin ID", async () => {
+    vi.spyOn(workspaceApi, "health").mockResolvedValue({ status: "ok", workspace: "fixture" });
+    vi.spyOn(workspaceApi, "settings").mockResolvedValue({ profiles: [], active_profile_id: "", key_protection: "none" });
+    vi.spyOn(workspaceApi, "conversations").mockResolvedValue([]);
+    vi.spyOn(workspaceApi, "groups").mockResolvedValue([]);
+    vi.mocked(workspaceApi.selection).mockResolvedValue({ saved: true, conversation_id: "owned" });
+    const open = vi.spyOn(workspaceApi, "conversation").mockResolvedValue(conversation("owned"));
+    const controller = new WorkspaceController({ getItem: key => key === "doppel-conversation" ? "foreign" : null,
+      setItem: () => undefined, removeItem: () => undefined });
+    await controller.initialize();
+    await controller.flushSelection();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("owned");
+    expect(controller.state.current?.id).toBe("owned");
+  });
+
+  it("serializes preference writes before draining a project transition", async () => {
+    const first = deferred<{ saved: boolean; conversation_id: string | null }>();
+    const save = vi.mocked(workspaceApi.saveSelection).mockReturnValueOnce(first.promise);
+    vi.spyOn(workspaceApi, "conversation").mockImplementation(async id => conversation(id));
+    const controller = new WorkspaceController();
+    await controller.open("first");
+    await controller.open("second");
+    const flush = controller.flushSelection();
+    expect(save.mock.calls.map(call => call[0])).toEqual(["first"]);
+    first.resolve({ saved: true, conversation_id: "first" });
+    await flush;
+    expect(save.mock.calls.map(call => call[0])).toEqual(["first", "second"]);
+  });
+
+  it("blocks transition when the preference retry still fails", async () => {
+    vi.mocked(workspaceApi.saveSelection).mockRejectedValue(new Error("PRIVATE_DATA"));
+    const controller = new WorkspaceController();
+    controller.clearSelection();
+    await expect(controller.flushSelection()).rejects.toThrow("未切换项目");
+    expect(controller.state.error).not.toContain("PRIVATE_DATA");
+    expect(workspaceApi.saveSelection).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects close preparation while a Legacy selection request is still pending", async () => {
+    const pending = deferred<ReturnType<typeof conversation>>();
+    vi.spyOn(workspaceApi, "conversation").mockReturnValue(pending.promise);
+    const controller = new WorkspaceController();
+    const open = controller.open("pending");
+    await expect(controller.prepareClose()).rejects.toThrow("仍在进行");
+    expect(controller.busy).toBe(true);
+    pending.resolve(conversation("pending"));
+    await open;
+    await controller.prepareClose();
+    expect(controller.busy).toBe(false);
+  });
+  it("preserves the selected profile when first submission creates a Legacy draft", async () => {
+    const controller = new WorkspaceController();
+    controller.updateSettings({ active_profile_id: "default", key_protection: "none", profiles:
+      ["default", "chosen"].map(id => ({ id, name: id, provider: "mock" as const, preset: "mock", model: "mock",
+        base_url: "", input_price: 0, output_price: 0, api_key_saved: false })) });
+    await controller.chooseProfile("chosen");
+    vi.spyOn(workspaceApi, "draft").mockResolvedValue(conversation("draft"));
+    const bind = vi.spyOn(workspaceApi, "setProfile").mockResolvedValue({ ...conversation("draft"), profile_id: "chosen" });
+    const start = vi.spyOn(workspaceApi, "start").mockResolvedValue({ run_id: "accepted", conversation_id: "draft" });
+    await controller.submit({ prompt: "read evidence.txt", effort: "quick", permissions: {
+      workspace_write: false, command_execute: false, mcp_execute: false, delegate: false } });
+    expect(start.mock.calls[0]?.[0].config).toEqual({ profile_id: "chosen" });
+    expect(bind).toHaveBeenCalledWith("draft", "chosen");
+    expect(controller.state.current?.profile_id).toBe("chosen");
+    expect(controller.state.profileId).toBe("chosen");
+  });
+
+  it.each(["agent", "review"] as const)("binds the selected profile before preparing a %s Legacy draft", async mode => {
+    const controller = new WorkspaceController();
+    controller.updateSettings({ active_profile_id: "default", key_protection: "none", profiles:
+      ["default", "chosen"].map(id => ({ id, name: id, provider: "mock" as const, preset: "mock", model: "mock",
+        base_url: "", input_price: 0, output_price: 0, api_key_saved: false })) });
+    await controller.chooseProfile("chosen");
+    vi.spyOn(workspaceApi, "draft").mockResolvedValue(conversation("draft"));
+    const bind = vi.spyOn(workspaceApi, "setProfile").mockResolvedValue({ ...conversation("draft"), profile_id: "chosen" });
+    vi.spyOn(workspaceApi, "conversations").mockResolvedValue([]);
+    vi.spyOn(workspaceApi, "groups").mockResolvedValue([]);
+    const start = vi.spyOn(workspaceApi, "start");
+    await controller.prepareDraft(mode);
+    expect(controller.state.profileId).toBe("chosen");
+    expect(controller.state.current?.profile_id).toBe("chosen");
+    expect(bind).toHaveBeenCalledWith("draft", "chosen");
+    expect(controller.state.nextMode).toBe(mode);
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("keeps accepted run ownership even when browser storage fails", async () => {
     vi.spyOn(workspaceApi, "start").mockResolvedValue({ run_id: "accepted", conversation_id: "origin" });
     const storage = { getItem: () => null, setItem: () => { throw new Error("storage disabled"); }, removeItem: () => undefined };

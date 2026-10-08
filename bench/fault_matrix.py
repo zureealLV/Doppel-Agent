@@ -24,7 +24,7 @@ from mcp import types
 
 from doppel_agent.api.sse import run_event_stream
 from doppel_agent.mcp.catalog import MCPToolCatalog
-from doppel_agent.mcp.client_manager import MCPClientManager
+from doppel_agent.mcp.client_manager import MCPClientManager, MCPInvocationError
 from doppel_agent.mcp.config import MCPConfig, MCPServerConfig
 from doppel_agent.mcp.executor import MCPToolExecutor
 from doppel_agent.permissions import PermissionManager
@@ -35,7 +35,7 @@ from doppel_agent.provider import (
     ProviderCircuitOpen,
     ProviderRequestError,
 )
-from doppel_agent.runtime.service import RunService
+from doppel_agent.runtime.service import EventNotifier, RunService
 from doppel_agent.workspace.process_supervisor import ProcessSupervisor
 
 
@@ -323,19 +323,26 @@ async def _mcp_disconnect_no_retry() -> dict[str, Any]:
             PermissionManager(frozenset({"mcp_execute"})),
         )
         terminal = ""
+        retry_refused = False
         try:
             await executor.execute(
                 "mcp__fault__mutate", {"value": "x"}, run_id="run", tool_call_id="call"
             )
-        except ConnectionError as exc:
+        except MCPInvocationError as exc:
             terminal = str(exc)
+            try:
+                await executor.execute("mcp__fault__mutate", {"value": "x"}, run_id="run", tool_call_id="later")
+            except MCPInvocationError:
+                retry_refused = True
         finally:
             await manager.close()
-        observed = {"remote_calls": session.tool_calls, "terminal_error": terminal}
-        passed = session.tool_calls == 1 and "disconnected after side effect" in terminal
+        observed = {"remote_calls": session.tool_calls, "terminal_error": terminal,
+                    "execution_unknown": manager.execution_failed, "later_admission_refused": retry_refused}
+        passed = (session.tool_calls == 1 and terminal == "mcp_execution_unresolved"
+                  and manager.execution_failed and retry_refused)
         return _result(
             injected_fault="MCP disconnect after a side-effecting call is sent",
-            expected="invalidate session but never auto-retry the ambiguous tool call",
+            expected="retain unknown execution, refuse later admission, never retry the ambiguous call, expose only stable error class",
             observed=observed,
             passed=passed,
             failure_reason=None if passed else "ambiguous side effect was duplicated",
@@ -386,7 +393,10 @@ async def _sse_slow_replay() -> dict[str, Any]:
         runs.update(record["run_id"], "completed", answer="done")
 
         class Service:
-            notifier = SimpleNamespace(wait=lambda _run_id: asyncio.sleep(0))
+            # This fixture models an open service lifetime, not native shutdown.
+            # Keep the real SSE lifecycle contract and notifier wait signature.
+            stream_shutdown_requested = False
+            notifier = EventNotifier()
 
             async def list_events(self, run_id: str, after_seq: int = 0) -> list[dict[str, Any]]:
                 return events.list(run_id, after_seq=after_seq)

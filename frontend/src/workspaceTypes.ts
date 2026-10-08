@@ -1,4 +1,5 @@
 import type { Effort, Permissions } from "./types";
+import type { BillingTariff, TariffEdit, TariffPatch } from './billingTariff';
 
 export interface ConversationSummary {
   id: string;
@@ -22,6 +23,7 @@ export interface ConversationGroup { id: string; name: string; conversation_coun
 export interface ModelProfile {
   id: string; name: string; provider: "mock" | "openai"; preset: string; model: string;
   base_url: string; input_price: number; output_price: number; api_key_saved: boolean;
+  billing_tariff?: BillingTariff | null; // Historical absence remains unknown.
 }
 
 export interface PublicSettings { active_profile_id: string; profiles: ModelProfile[]; key_protection: string }
@@ -29,7 +31,10 @@ export interface PublicSettings { active_profile_id: string; profiles: ModelProf
 export interface ProfileForm {
   name: string; preset: string; model: string; base_url: string;
   input_price: number; output_price: number; api_key: string;
+  billing_tariff_edit?: TariffEdit; // Private UI only, never spread onto a request.
 }
+
+export type ProfileConfiguration = Omit<ProfileForm, 'billing_tariff_edit'> & TariffPatch & { provider: 'mock' | 'openai' };
 
 export interface ChatSubmission { prompt: string; effort: Effort; permissions: Permissions }
 export interface PersistentRunRequest {
@@ -39,3 +44,21 @@ export interface PersistentRunRequest {
 export interface PersistentRun { run_id: string; conversation_id: string | null; status: string; answer?: string; prompt?: string }
 export interface LegacyEvent { kind: string; payload: Record<string, unknown> }
 export interface LegacyApproval { id: string; tool: string }
+import type { RunMode } from "./types";
+
+export interface NativeConversationSummary extends ConversationSummary {
+  mode: RunMode;
+  thread_id: string;
+}
+export interface NativeConversation extends NativeConversationSummary {
+  messages: Array<{ id: number; role: "user" | "assistant"; content: string; model?: string; run_id: string; status: string }>;
+  runs: Array<{ run_id: string; status: string; mode: RunMode; lease_active: number }>;
+  active_run_id: string | null;
+  selected_run_id?: string | null;
+}
+
+export interface NativeWorkspaceSelection {
+  saved: boolean;
+  conversation_id: string | null;
+  run_id: string | null;
+}

@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
 import json
 import re
+import stat
 from collections.abc import Mapping
 from types import MappingProxyType
 
@@ -41,6 +42,14 @@ class TaskFixture:
         object.__setattr__(self, "allowed_edits", tuple(self.allowed_edits))
 
 
+def _fixture_linked(path: Path) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False  # Public materialization may name files/parents not created yet.
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & 0x400)
+
+
 def fixture_path(base: Path, relative: str) -> Path:
     """All fixture paths are portable POSIX names below their explicit root."""
     if not isinstance(relative, str) or not relative or "\\" in relative or ":" in relative:
@@ -50,9 +59,9 @@ def fixture_path(base: Path, relative: str) -> Path:
         raise ValueError("fixture path must stay relative to its root")
     target = base.joinpath(*parts)
     if not target.resolve().is_relative_to(base.resolve()) or any(
-        item.is_symlink() for item in (target, *target.parents) if item == base or item.is_relative_to(base)
+        _fixture_linked(item) for item in (target, *target.parents) if item == base or item.is_relative_to(base)
     ):
-        raise ValueError("fixture path must not escape or use symlinks")
+        raise ValueError("fixture path must not escape or use symlinks/reparse points")
     return target
 
 

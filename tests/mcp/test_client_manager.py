@@ -5,7 +5,7 @@ from pathlib import Path
 
 from mcp import types
 
-from doppel_agent.mcp.client_manager import MCPClientManager
+from doppel_agent.mcp.client_manager import MCPClientManager, MCPCleanupError
 
 from mcp_support import config, connector_for
 from contextlib import asynccontextmanager
@@ -43,10 +43,15 @@ class MCPClientManagerTests(unittest.IsolatedAsyncioTestCase):
             manager = MCPClientManager(MCPConfig(servers, original.source), connector=connector)
             await manager.get("demo")
             await manager.get("second")
-            with self.assertRaisesRegex(ExceptionGroup, "MCP connector shutdown failed"):
+            original = manager._connections["demo"]
+            # C2c2g FIRST fixed public error/SAME failed handle contract, UNRUN.
+            # Original two-owner close failure and ordering remain unchanged.
+            with self.assertRaisesRegex(MCPCleanupError, "^mcp_cleanup_unresolved$"):
                 await manager.close()
             self.assertEqual(closed, ["demo", "second"])
-            self.assertEqual(manager._connections, {})
+            self.assertIs(manager._connections["demo"], original)
+            self.assertNotIn("second", manager._connections)
+            self.assertTrue(manager.cleanup_failed)
 
     async def test_cancelled_close_drains_all_server_owners(self):
         from dataclasses import replace
@@ -130,7 +135,7 @@ class MCPClientManagerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(manager._connections, {})
             await manager.close()
 
-    async def test_startup_error_is_not_cached_and_can_reconnect(self):
+    async def test_opaque_startup_error_retains_original_owner_and_cannot_reconnect(self):
         with tempfile.TemporaryDirectory() as directory:
             attempts = 0
 
@@ -143,12 +148,19 @@ class MCPClientManagerTests(unittest.IsolatedAsyncioTestCase):
                 yield FakeSession(), SimpleNamespace()
 
             manager = MCPClientManager(config(Path(directory)), connector=connector)
-            with self.assertRaisesRegex(ValueError, "connector fixture failed"):
+            # C2c2g3 FIRST: preserve exact opaque failure input, but an unreturned
+            # custom enter is not evidence of cleanup. Healthy built-in failed
+            # initialization/retry has its own actual-connector definition.
+            with self.assertRaisesRegex(MCPCleanupError, "^mcp_cleanup_unresolved$"):
                 await manager.get("demo")
-            self.assertEqual(manager._connections, {})
-            await manager.get("demo")
-            self.assertEqual(manager.generation("demo"), 1)
-            await manager.close()
+            original = manager._connections["demo"]
+            with self.assertRaises(MCPCleanupError):
+                await manager.get("demo")
+            self.assertEqual(attempts, 1)
+            self.assertEqual(manager.generation("demo"), 0)
+            with self.assertRaises(MCPCleanupError):
+                await manager.close()
+            self.assertIs(manager._connections["demo"], original)
 
     async def test_reuses_session_health_checks_and_closes_lifecycle(self):
         with tempfile.TemporaryDirectory() as directory:

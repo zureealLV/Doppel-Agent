@@ -4,6 +4,35 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 **Language: [简体中文](README_CN.md) · English**
 
+## Local Coding Workbench prerelease — v0.15.0-rc.1
+
+**Start here: [User guide](docs/USER_GUIDE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [中文使用指南](docs/USER_GUIDE_CN.md)**
+
+The prerelease carries durable native Graph/Deep/reviewed Legacy conversations,
+plans/tasks, explicit context, changes/verification, extensions, reports and the
+accepted compact desktop interface with a titlebar Help menu. Native conversations,
+standalone Runtime and older Legacy history are distinct; there is no automatic
+history conversion. Desktop `/` redirects to `/runtime/`; `/legacy/` preserves the
+older console; standalone `ui` is the lightweight Legacy console.
+
+This is **a prerelease, not full S0–S10/native matrix acceptance or a stable v1.0**.
+The historical stable source remains v0.14.4. New focused help/UI/build checks do not
+promote old FAIL/UNKNOWN batches, native subsets or engineering/Mock results into
+model quality, Token savings or production reliability. No paid model evaluation
+was performed. See [current release scope and receipts](docs/releases/2026-10-08-help-prerelease.md)
+and the [whole-goal handoff](docs/plans/2026-10-06-new-session-whole-goal-handoff.md).
+
+Build an isolated, explicitly untested candidate using existing dependencies:
+
+```powershell
+./scripts/build-candidate.ps1 -OutputDirectory '.artifacts/my-new-candidate'
+```
+
+The output must be new. It contains a wheel, sdist and windowed onedir EXE with
+its required `_internal` folder, stage logs and a source/artifact manifest. The
+builder does not install dependencies, launch the application or run test suites,
+and does not replace the daily `.dist/DoppelAgent` installation.
+
 ## Current release: v0.14.4
 
 This patch repairs cancellation during RunService initialization/finalization, drains owned SQLite writes before publishing a cancelled terminal state, and preserves operation cleanup when cancellation precedes coroutine entry. Deterministic scripted nav-04/tdd-01..04/patch-01 fixtures are grounded, not paid model-quality results. Capability eligibility remains 81 direct-factory /126 service paths out of the original 180; full mode remains blocked. See [update and test evidence](docs/releases/v0.14.4.md). Historical failed CI/tags are not rewritten.

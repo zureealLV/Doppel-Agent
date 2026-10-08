@@ -154,6 +154,16 @@ class AsyncRunScheduler:
     def status(self, run_id: str) -> str | None:
         return self._statuses.get(run_id)
 
+    def completion(self, run_id: str) -> asyncio.Future[Any] | None:
+        """Borrow the current job's completion reference without starting/waiting.
+
+        The caller must shield it, not cancel it. A stable ID may be scheduled
+        again; retaining this reference avoids accidentally waiting a newer job.
+        A reference alone (or a SQL terminal status) is not physical-drain proof.
+        """
+        job = self._jobs.get(run_id)
+        return job.future if job is not None else None
+
     async def wait(self, run_id: str) -> Any:
         """Wait for the currently scheduled generation of a run."""
         job = self._jobs.get(run_id)

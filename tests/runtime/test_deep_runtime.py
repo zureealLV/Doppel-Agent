@@ -10,6 +10,18 @@ from doppel_agent.workspace.patching import PatchConflictError
 
 
 class DeepRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_edit_rejects_ambiguous_argument_dialects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = DeepAgentRuntime(Path(directory), MockProvider(), max_subagents=0)
+            pending = [{"action_requests": [{"name": "read_file", "args": {"path": "original.txt"}}]}]
+            for other in ("different.txt", "edited.txt"):
+                with self.subTest(other=other):
+                    with self.assertRaisesRegex(ValueError, "ambiguous edited arguments"):
+                        runtime._resume_value({"action": "edit", "tool_calls": [{
+                            "name": "read_file", "args": {"path": "edited.txt"},
+                            "arguments": {"path": other},
+                        }]}, pending)
+
     async def test_offline_provider_runs_through_real_deep_agent_graph(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -151,3 +163,49 @@ class DeepRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             self.assertEqual(target.read_text(encoding="utf-8"), "external")
+
+    async def test_native_args_edit_reprepares_two_file_patch_after_runtime_recreation(self):
+        class WriteProvider:
+            def __init__(self):
+                self.turn = 0
+
+            def next_turn(self, messages, tools):
+                self.turn += 1
+                if self.turn == 1:
+                    return ModelTurn(tool_calls=(ToolCall("native-edit", "propose_patch", {
+                        "changes": [{"path": "existing.txt", "content": "proposed existing\n"},
+                                    {"path": "created.txt", "content": "proposed created\n"}],
+                    }),))
+                return ModelTurn(content="tool result received")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "existing.txt").write_bytes(b"original\r\n")
+            (root / "dirty.txt").write_bytes(b"unrelated dirty\r\n")
+            provider = WriteProvider()
+            runtime = DeepAgentRuntime(root, provider, allow_write=True, allow_command=True,
+                                       require_verification_review=True, max_subagents=0)
+            request = RunRequest("edit", run_id="a" * 32, thread_id="native-args-edit-thread")
+            interrupted = await runtime.run(request)
+            self.assertEqual(interrupted.status, "interrupted")
+            prepared = [item["value"] for item in interrupted.metadata["interrupts"]]
+            original = prepared[0]["action_requests"][0]
+            edited = {"name": original["name"], "args": {"changes": [
+                {"path": "existing.txt", "content": "user-edited existing\n"},
+                {"path": "created.txt", "content": "user-edited created\n"},
+            ]}}
+            self.assertEqual(runtime.ledger.list_patch_receipts(request.run_id), [])
+            runtime = DeepAgentRuntime(root, provider, allow_write=True, allow_command=True,
+                                       require_verification_review=True, max_subagents=0)
+            completed = await runtime.resume(ResumeCommand(request.run_id, request.thread_id, {
+                "action": "edit", "tool_calls": [edited], "_prepared_interrupts": prepared,
+            }))
+            self.assertEqual(completed.status, "completed")
+            self.assertNotIn("fallback_runtime", completed.metadata)
+            self.assertEqual((root / "existing.txt").read_bytes(), b"user-edited existing\n")
+            self.assertEqual((root / "created.txt").read_bytes(), b"user-edited created\n")
+            self.assertEqual((root / "dirty.txt").read_bytes(), b"unrelated dirty\r\n")
+            rows = runtime.ledger.list_patch_receipts(request.run_id)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["tool_call_id"], "native-edit")
+            self.assertTrue(rows[0]["confirmed_applied"])

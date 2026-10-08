@@ -1,249 +1,172 @@
 <script setup lang="ts">
-import { Activity, AlertTriangle, Braces, Clock3, Copy, FileDiff, Gauge, OctagonX, Radio, TerminalSquare } from "lucide-vue-next";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-
+import { Radio } from "lucide-vue-next";
+import { nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { runtimeApi } from "./api";
-import ApprovalPanel from "./components/ApprovalPanel.vue";
-import EventTimeline from "./components/EventTimeline.vue";
-import RunComposer from "./components/RunComposer.vue";
-import StatusBadge from "./components/StatusBadge.vue";
-import SubagentPanel from "./components/SubagentPanel.vue";
+import { RunSubmissionController } from "./runSubmission";
 import ConversationWorkspace from "./components/ConversationWorkspace.vue";
-import { elapsed, extractDiff, formatDuration, mergeEvents } from "./runtime";
-import type { RunRecord, RunRequest, RuntimeEvent, SubagentRecord } from "./types";
+import LegacyConversationWorkspace from "./components/LegacyConversationWorkspace.vue";
+import RunComposer from "./components/RunComposer.vue";
+import RunInspector from "./components/RunInspector.vue";
+import DesktopControls from "./components/DesktopControls.vue";
+import WorkbenchShell from "./components/WorkbenchShell.vue";
+import ProjectHome from "./components/ProjectHome.vue";
+import WorkOrdersWorkspace from "./components/WorkOrdersWorkspace.vue";
+import ContextPanel from "./components/ContextPanel.vue";
+import ChangesWorkspace from "./components/ChangesWorkspace.vue";
+import ExtensionCenter from "./components/ExtensionCenter.vue";
+import SubagentPanel from "./components/SubagentPanel.vue";
+import { ChildReviewController, openChildReviewKey } from "./childReview";
+import RunReportPanel from "./components/RunReportPanel.vue";
+import { RunReportController, openRunReportKey } from "./runReport";
+import { ModelSettingsLifetime, modelSettingsLifetimeKey } from './modelSettingsLifetime';
+import { runIdentifier } from "./changesApi";
+import { projectApi, type ProjectIdentity } from "./projects";
+import { pageFromHash, pageHash, pageAfterHashChange, type WorkspacePage } from "./navigation";
+import { browserStorage } from "./workspace";
+import type { RunRequest } from "./types";
 import type { PublicSettings } from "./workspaceTypes";
-
-const page = ref<"runtime" | "conversations">("runtime");
-const modelSettings = ref<PublicSettings | null>(null);
-const conversationWorkspace = ref<InstanceType<typeof ConversationWorkspace> | null>(null);
-
-async function workspaceShortcut(event: KeyboardEvent): Promise<void> {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    page.value = "conversations";
-    await nextTick();
-    await conversationWorkspace.value?.openSearch();
-  }
+const page = ref<WorkspacePage>(pageFromHash(typeof window === "undefined" ? "" : window.location.hash));
+function restorePage() {
+  if (closing.value || switching.value) { if (window.location.hash !== pageHash(page.value)) window.location.hash = pageHash(page.value); return; }
+  page.value = pageAfterHashChange(window.location.hash, page.value);
 }
-
-const apiState = ref<"checking" | "online" | "offline">("checking");
-const run = ref<RunRecord | null>(null);
-const events = ref<RuntimeEvent[]>([]);
-const subagents = ref<SubagentRecord[]>([]);
-const busy = ref(false);
-const connected = ref(false);
-const message = ref("");
-const copied = ref(false);
-const clock = ref(Date.now());
-let streamController: AbortController | null = null;
-let pollTimer: number | undefined;
-
-const terminal = new Set(["completed", "failed", "cancelled", "interrupted_expired"]);
-const interrupt = computed(() => run.value?.metadata.interrupts?.[0] ?? null);
-const diff = computed(() => extractDiff(events.value, run.value));
-const queueTime = computed(() => formatDuration(elapsed(run.value?.created_at, run.value?.started_at)));
-const runtimeTime = computed(() => formatDuration(elapsed(
-  run.value?.started_at,
-  run.value?.finished_at ?? (run.value?.status === "running" ? new Date(clock.value).toISOString() : run.value?.updated_at),
-)));
-const permissions = computed(() => run.value?.request.permissions);
-
-function report(error: unknown): void {
-  message.value = error instanceof Error ? error.message : String(error);
-}
-
-async function refresh(): Promise<void> {
-  if (!run.value) return;
-  const runId = run.value.run_id;
-  try {
-    run.value = await runtimeApi.getRun(runId);
-    const last = events.value.at(-1)?.seq ?? 0;
-    events.value = mergeEvents(events.value, await runtimeApi.events(runId, last));
-    if (permissions.value?.delegate) subagents.value = await runtimeApi.subagents(runId);
-    if (terminal.has(run.value.status)) {
-      disconnect();
-      window.clearInterval(pollTimer);
-    }
-  } catch (error) {
-    report(error);
-  }
-}
-
-function schedulePoll(): void {
-  window.clearInterval(pollTimer);
-  pollTimer = window.setInterval(() => { clock.value = Date.now(); void refresh(); }, 900);
-}
-
-function connect(runId: string): void {
-  streamController?.abort();
-  streamController = new AbortController();
-  const after = events.value.at(-1)?.seq ?? 0;
-  connected.value = true;
-  void runtimeApi.streamEvents(runId, after, streamController.signal, (item) => {
-      events.value = mergeEvents(events.value, [item]);
-      void refresh();
-    }).catch((error: unknown) => {
-      if (!(error instanceof DOMException && error.name === "AbortError")) report(error);
-    }).finally(() => { connected.value = false; });
-}
-
-function disconnect(): void {
-  streamController?.abort();
-  streamController = null;
-  connected.value = false;
-}
-
-async function createRun(request: RunRequest): Promise<void> {
-  busy.value = true;
-  message.value = "";
-  events.value = [];
-  subagents.value = [];
-  try {
-    const accepted = await runtimeApi.createRun(request);
-    localStorage.setItem("doppel.runtime.lastRun", accepted.run_id);
-    run.value = await runtimeApi.getRun(accepted.run_id);
-    connect(accepted.run_id);
-    schedulePoll();
-  } catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function cancelRun(): Promise<void> {
-  if (!run.value) return;
-  busy.value = true;
-  try { await runtimeApi.cancel(run.value.run_id); await refresh(); }
-  catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function decide(action: "approve" | "reject" | "edit", toolCalls?: Array<Record<string, unknown>>): Promise<void> {
-  if (!run.value || !interrupt.value) return;
-  busy.value = true;
-  try {
-    await runtimeApi.resume(run.value.run_id, interrupt.value.id, { action, ...(toolCalls ? { tool_calls: toolCalls } : {}) });
-    await refresh();
-    connect(run.value.run_id);
-  } catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function spawnSubagent(prompt: string): Promise<void> {
-  if (!run.value) return;
-  busy.value = true;
-  try { await runtimeApi.spawnSubagent(run.value.run_id, prompt); await refresh(); }
-  catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function followup(id: string, prompt: string): Promise<void> {
-  if (!run.value || !prompt.trim()) return;
-  busy.value = true;
-  try { await runtimeApi.followUpSubagent(run.value.run_id, id, prompt.trim()); await refresh(); }
-  catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function cancelSubagent(id: string): Promise<void> {
-  if (!run.value) return;
-  busy.value = true;
-  try { await runtimeApi.cancelSubagent(run.value.run_id, id); await refresh(); }
-  catch (error) { report(error); }
-  finally { busy.value = false; }
-}
-
-async function copyRunId(): Promise<void> {
-  if (!run.value) return;
-  await navigator.clipboard.writeText(run.value.run_id);
-  copied.value = true;
-  window.setTimeout(() => { copied.value = false; }, 1600);
-}
-
-onMounted(async () => {
-  document.addEventListener("keydown", workspaceShortcut);
-  try {
-    await runtimeApi.health();
-    apiState.value = "online";
-    const saved = localStorage.getItem("doppel.runtime.lastRun");
-    if (saved) {
-      run.value = await runtimeApi.getRun(saved);
-      events.value = await runtimeApi.events(saved);
-      if (permissions.value?.delegate) subagents.value = await runtimeApi.subagents(saved);
-      if (!terminal.has(run.value.status)) {
-        connect(saved);
-        schedulePoll();
-      }
-    } else {
-      schedulePoll();
-    }
-  } catch (error) {
-    apiState.value = "offline";
-    message.value = "v1 Runtime API 不可用。请通过 Doppel Desktop 或 doppel-api 启动混合服务。";
-  }
+watch(page, value => { if (window.location.hash !== pageHash(value)) window.location.hash = pageHash(value); });
+const settings = ref<PublicSettings | null>(null);
+const project = ref<ProjectIdentity | null>(null), projectError = ref(false);
+const workspace = ref<InstanceType<typeof ConversationWorkspace> | null>(null);
+const legacyWorkspace = ref<InstanceType<typeof LegacyConversationWorkspace> | null>(null);
+const ordersWorkspace = ref<InstanceType<typeof WorkOrdersWorkspace> | null>(null);
+const changesWorkspace = ref<InstanceType<typeof ChangesWorkspace> | null>(null), changesSourceRun = ref("");
+const extensionCenter = ref<InstanceType<typeof ExtensionCenter> | null>(null);
+const contextPanel = ref<InstanceType<typeof ContextPanel> | null>(null), selectedOrderId = ref<string | null>(null);
+const apiState = ref("checking"), runId = ref(""), busy = ref(false), error = ref("");
+const closing = ref(false);
+const switching = ref(false);
+const childReview = new ChildReviewController(), childReviewOpen = ref(false);
+const runReport = new RunReportController(), runReportOpen = ref(false);
+const modelSettingsLifetime = new ModelSettingsLifetime();
+provide(modelSettingsLifetimeKey, modelSettingsLifetime);
+provide(openRunReportKey, run => {
+  if (closing.value || switching.value) return;
+  runReportOpen.value = true; runReport.activate(true); runReport.selectSource(run);
 });
-
-onBeforeUnmount(() => { disconnect(); window.clearInterval(pollTimer); document.removeEventListener("keydown", workspaceShortcut); });
+function toggleRunReport() {
+  if (closing.value || switching.value) return;
+  runReportOpen.value = !runReportOpen.value; runReport.activate(runReportOpen.value);
+}
+provide(openChildReviewKey, parent => {
+  if (closing.value || switching.value) return;
+  childReviewOpen.value = true; childReview.activate(true); childReview.selectSource(parent);
+});
+function toggleChildReview() {
+  if (closing.value || switching.value) return;
+  childReviewOpen.value = !childReviewOpen.value; childReview.activate(childReviewOpen.value);
+}
+let transitionEpoch = 0;
+function assertTransition(epoch: number): void {
+  if (epoch !== transitionEpoch) throw new Error("workspace preparation superseded; no late host transition");
+}
+function navigate(value: WorkspacePage) { if (!closing.value && !switching.value) page.value = value; }
+function openChanges(run: string) {
+  if (closing.value || switching.value || !runIdentifier(run) || changesWorkspace.value && !changesWorkspace.value.canChangeSource()) return;
+  changesSourceRun.value = run; page.value = "changes";
+}
+async function prepareWindowClose(): Promise<void> {
+  closing.value = true;
+  const epoch = ++transitionEpoch;
+  submission.prepareClose();
+  await modelSettingsLifetime.prepareClose(); assertTransition(epoch);
+  await runReport.prepareClose(); assertTransition(epoch);
+  await childReview.prepareClose(); assertTransition(epoch);
+  await extensionCenter.value?.prepareClose(); assertTransition(epoch);
+  await changesWorkspace.value?.prepareClose(); assertTransition(epoch);
+  await legacyWorkspace.value?.prepareClose(); assertTransition(epoch);
+  await workspace.value?.prepareClose(); assertTransition(epoch);
+  await ordersWorkspace.value?.prepareClose(); assertTransition(epoch);
+  await contextPanel.value?.prepareClose(); assertTransition(epoch);
+}
+function finishWindowClose(): void { transitionEpoch++; modelSettingsLifetime.finishClose(); runReport.finishClose(); childReview.finishClose(); extensionCenter.value?.finishClose(); changesWorkspace.value?.finishClose(); workspace.value?.finishClose(); ordersWorkspace.value?.finishClose(); contextPanel.value?.finishClose(); closing.value = false; }
+async function prepareProjectSwitch(): Promise<void> {
+  if (closing.value || busy.value || switching.value) throw new Error("workspace transition is busy");
+  submission.prepareClose();
+  switching.value = true;
+  const epoch = ++transitionEpoch;
+  await modelSettingsLifetime.prepareClose(); assertTransition(epoch);
+  await runReport.prepareClose(); assertTransition(epoch);
+  await childReview.prepareClose(); assertTransition(epoch);
+  await extensionCenter.value?.prepareClose(); assertTransition(epoch);
+  await changesWorkspace.value?.prepareClose(); assertTransition(epoch);
+  await legacyWorkspace.value?.prepareProjectSwitch(); assertTransition(epoch);
+  await workspace.value?.prepareClose(); assertTransition(epoch);
+  await ordersWorkspace.value?.prepareClose(); assertTransition(epoch);
+  await contextPanel.value?.prepareClose(); assertTransition(epoch);
+}
+function finishProjectSwitch(navigating: boolean): void {
+  if (!navigating) { transitionEpoch++; modelSettingsLifetime.finishClose(); runReport.finishClose(); childReview.finishClose(); extensionCenter.value?.finishClose(); changesWorkspace.value?.finishClose(); workspace.value?.finishClose(); ordersWorkspace.value?.finishClose(); contextPanel.value?.finishClose(); switching.value = false; }
+}
+const submission = new RunSubmissionController(runtimeApi.createRun), submissionState = submission.state;
+async function prepareContext(scope: string | null) {
+  if (!contextPanel.value) throw new Error("上下文面板尚未就绪；没有提交运行。");
+  return contextPanel.value.prepareInput(scope);
+}
+function ownStandalone(accepted: { run_id: string }) {
+  runId.value = accepted.run_id;
+  try { browserStorage()?.setItem("doppel.runtime.lastRun", accepted.run_id); } catch { /* Optional. */ }
+}
+async function createRun(body: RunRequest, includeContext = false) {
+  if (busy.value || closing.value || switching.value || submissionState.uncertain) return;
+  busy.value = true; error.value = "";
+  try {
+    const accepted = await submission.submit(body, includeContext ? () => prepareContext(null) : undefined);
+    if (accepted) ownStandalone(accepted);
+  } catch (e) { error.value = e instanceof Error ? e.message : String(e); }
+  finally { busy.value = false; }
+}
+async function retryStandalone() {
+  if (busy.value || closing.value || switching.value) return;
+  busy.value = true; error.value = "";
+  try { const accepted = await submission.retry(); if (accepted) ownStandalone(accepted); }
+  catch (e) { error.value = e instanceof Error ? e.message : "重试未完成。"; }
+  finally { busy.value = false; }
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (busy.value || submissionState.uncertain || childReview.unloadBlocked || runReport.unloadBlocked || modelSettingsLifetime.unloadBlocked) { event.preventDefault(); event.returnValue = ""; }
+}
+async function shortcut(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    if (closing.value || switching.value) { event.preventDefault(); return; }
+    event.preventDefault(); if (!["conversations", "legacy"].includes(page.value)) page.value = "conversations";
+    await nextTick(); await (page.value === "legacy" ? legacyWorkspace.value : workspace.value)?.openSearch();
+  }
+}
+onMounted(async () => {
+  document.addEventListener("keydown", shortcut);
+  window.addEventListener("hashchange", restorePage);
+  window.addEventListener("beforeunload", beforeUnload);
+  try { await runtimeApi.health(); apiState.value = "online"; } catch { apiState.value = "offline"; }
+  try { project.value = await projectApi.current(); } catch { projectError.value = true; }
+  try { runId.value = browserStorage()?.getItem("doppel.runtime.lastRun") || ""; } catch { /* Optional. */ }
+});
+onBeforeUnmount(() => { modelSettingsLifetime.dispose(); runReport.dispose(); childReview.dispose(); document.removeEventListener("keydown", shortcut); window.removeEventListener("hashchange", restorePage); window.removeEventListener("beforeunload", beforeUnload); });
 </script>
-
 <template>
-  <div class="app-frame">
-    <header class="topbar">
-      <a class="brand" href="/runtime/" aria-label="Doppel Runtime Workbench 首页">
-        <span class="brand-mark" aria-hidden="true"><Braces :size="20" /></span>
-        <span><strong>DOPPEL</strong><small>RUNTIME WORKBENCH</small></span>
-      </a>
-      <nav class="workspace-tabs" aria-label="工作区页面"><button type="button" :aria-pressed="page === 'conversations'" @click="page = 'conversations'">持久对话</button><button type="button" :aria-pressed="page === 'runtime'" @click="page = 'runtime'">Runtime</button></nav>
-      <div class="api-health" :data-state="apiState" role="status" aria-live="polite"><Radio :size="15" aria-hidden="true" />API {{ apiState }}</div>
-    </header>
-
-    <div v-if="message" class="global-alert" role="alert"><AlertTriangle :size="18" aria-hidden="true" /><span>{{ message }}</span><button type="button" aria-label="关闭错误提示" @click="message = ''">×</button></div>
-
-    <ConversationWorkspace ref="conversationWorkspace" v-show="page === 'conversations'" :active="page === 'conversations'" @settings="modelSettings = $event" />
-
-    <div v-show="page === 'runtime'" class="workspace-grid">
-      <aside class="control-panel"><RunComposer :busy="busy || apiState !== 'online'" :profiles="modelSettings?.profiles || []" @submit="createRun" /></aside>
-
-      <main :id="page === 'runtime' ? 'main-content' : undefined" class="main-panel" tabindex="-1">
-        <template v-if="run">
-          <section class="run-hero" aria-labelledby="run-title">
-            <div><p class="eyebrow">ACTIVE RUN</p><h1 id="run-title">{{ run.request.prompt }}</h1></div>
-            <StatusBadge :status="run.status" />
-            <div class="run-id"><code>{{ run.run_id }}</code><button class="icon-button" type="button" :aria-label="copied ? '已复制运行 ID' : '复制运行 ID'" @click="copyRunId"><Copy :size="16" aria-hidden="true" /></button></div>
-          </section>
-
-          <section class="metric-strip" aria-label="运行指标">
-            <div><Clock3 :size="17" aria-hidden="true" /><span>排队</span><strong>{{ queueTime }}</strong></div>
-            <div><Gauge :size="17" aria-hidden="true" /><span>执行</span><strong>{{ runtimeTime }}</strong></div>
-            <div><Activity :size="17" aria-hidden="true" /><span>事件</span><strong>{{ events.length }}</strong></div>
-            <div><TerminalSquare :size="17" aria-hidden="true" /><span>模式</span><strong>{{ run.mode }}</strong></div>
-          </section>
-
-          <ApprovalPanel v-if="run.status === 'interrupted' && interrupt" :interrupt="interrupt" :busy="busy" @decide="decide" />
-
-          <section class="output-card" aria-labelledby="answer-title">
-            <div class="section-heading"><div><p class="eyebrow">MODEL OUTPUT</p><h2 id="answer-title">运行结果</h2></div><button v-if="['queued', 'running'].includes(run.status)" type="button" class="danger-button compact" :disabled="busy" @click="cancelRun"><OctagonX :size="16" aria-hidden="true" />取消</button></div>
-            <pre v-if="run.answer" class="answer">{{ run.answer }}</pre>
-            <p v-else-if="run.error" class="field-error">{{ run.error }}</p>
-            <div v-else class="skeleton" aria-label="等待运行输出"><span /><span /><span /></div>
-          </section>
-
-          <section class="diff-card" aria-labelledby="diff-title">
-            <div class="section-heading"><div><p class="eyebrow">EXACT PATCH</p><h2 id="diff-title">统一差异</h2></div><FileDiff :size="19" aria-hidden="true" /></div>
-            <pre v-if="diff" class="diff-output">{{ diff }}</pre><div v-else class="empty-inline">尚未提出补丁；不会伪造差异或验证结果。</div>
-          </section>
-
-          <SubagentPanel :items="subagents" :enabled="Boolean(permissions?.delegate)" :busy="busy" @spawn="spawnSubagent" @followup="followup" @cancel="cancelSubagent" />
-        </template>
-        <section v-else class="welcome-card">
-          <div class="radar" aria-hidden="true"><span /><span /><span /></div>
-          <p class="eyebrow">LOCAL-FIRST / AUDITABLE / DURABLE</p>
-          <h1>让 Agent 的每一步都可见。</h1>
-          <p>选择 Legacy、LangGraph 或 DeepAgent 运行时。这里会把状态迁移、Skill、MCP、子代理、审批和真实补丁放在同一条可审计时间线上。</p>
-          <ul><li>SQLite 持久事件 + SSE 增量回放</li><li>中断后批准、拒绝或编辑工具调用</li><li>有界异步子代理与精确运行耗时</li></ul>
-        </section>
-      </main>
-
-      <aside class="inspector-panel"><EventTimeline :events="events" :connected="connected" /></aside>
+  <WorkbenchShell :page="page" :closing="closing || switching" :project="project" :project-error="projectError" @navigate="navigate">
+    <template #projects><ProjectHome :blocked="closing" :before-switch="prepareProjectSwitch" :after-switch="finishProjectSwitch" /></template>
+    <template #status><div class="api-health" :data-state="apiState" role="status" :title="`API ${apiState}`"><Radio :size="14" aria-hidden="true" /><span class="sr-only">API {{ apiState }}</span></div></template>
+    <template #window-controls><div :inert="switching || undefined"><DesktopControls :before-close="prepareWindowClose" :after-close="finishWindowClose" /></div></template>
+    <template #context><ContextPanel ref="contextPanel" :work-order-id="selectedOrderId" :blocked="closing || switching" /></template>
+    <div v-if="runReport.state.runId" class="report-entry"><button type="button" :disabled="closing || switching" :aria-expanded="runReportOpen" aria-controls="root-run-report" @click="toggleRunReport">{{ runReportOpen ? '隐藏运行报告（保留原请求）' : '打开已固定的运行报告' }}</button></div>
+    <div id="root-run-report" v-show="runReportOpen"><RunReportPanel :controller="runReport" :active="runReportOpen" :blocked="closing || switching" /></div>
+    <div v-if="childReview.state.parentRunId" class="child-review-entry"><button type="button" :disabled="closing || switching" :aria-expanded="childReviewOpen" aria-controls="root-child-review" @click="toggleChildReview">{{ childReviewOpen ? '隐藏子任务审查（保留原请求和草稿）' : '打开已固定的子任务审查' }}</button><span v-if="childReview.state.intent" role="status">原子任务请求仍固定在父任务 {{ childReview.state.parentRunId }}；未自动解锁或重发。</span></div>
+    <div id="root-child-review" v-show="childReviewOpen"><SubagentPanel :controller="childReview" :active="childReviewOpen" :blocked="closing || switching" /></div>
+    <ConversationWorkspace ref="workspace" v-show="page === 'conversations'" :inert="closing || switching || undefined" :active="page === 'conversations'" :shared-settings="settings" :prepare-context="prepareContext" @settings="settings = $event" @open-changes="openChanges" />
+    <LegacyConversationWorkspace v-if="page === 'legacy'" ref="legacyWorkspace" :inert="closing || switching || undefined" :active="true" @settings="settings = $event" />
+    <WorkOrdersWorkspace ref="ordersWorkspace" v-show="page === 'orders'" :inert="closing || switching || undefined" :active="page === 'orders'" :profiles="settings?.profiles || []" :prepare-context="prepareContext" @selected-order="selectedOrderId = $event" @open-changes="openChanges" />
+    <ChangesWorkspace ref="changesWorkspace" v-show="page === 'changes'" :active="page === 'changes'" :blocked="closing || switching" :source-run-id="changesSourceRun" />
+    <ExtensionCenter ref="extensionCenter" v-show="page === 'extensions'" :active="page === 'extensions'" :blocked="closing || switching" />
+    <div v-if="page === 'runtime'" class="standalone-workspace" :inert="closing || switching || undefined">
+      <aside class="control-panel"><RunComposer :busy="busy || submissionState.uncertain || apiState !== 'online'" :profiles="settings?.profiles || []" @submit="createRun" /><div v-if="submissionState.uncertain" class="order-warning" role="alert">提交回复未知，表单已锁定。<button type="button" :disabled="busy || closing || switching || apiState !== 'online'" @click="retryStandalone">重试原请求（相同输入与 key）</button></div></aside>
+      <main id="main-content" class="main-panel" tabindex="-1"><p v-if="error" role="alert">{{ error }}</p><button v-if="runId" type="button" :disabled="closing || switching" @click="openChanges(runId)">读取该原生 run 的变更证据（服务端核对注册范围）</button><RunInspector :run-id="runId" /></main>
     </div>
-    <div class="sr-only" aria-live="polite">{{ copied ? '运行 ID 已复制' : '' }}</div>
-  </div>
+  </WorkbenchShell>
 </template>

@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 
 import { compactPayload, eventGroup, type EventGroup } from "../runtime";
 import type { RuntimeEvent } from "../types";
+import { childEventLabel } from "../childLineage";
 
 const props = defineProps<{ events: RuntimeEvent[]; connected: boolean }>();
 const filters = ref<Set<EventGroup>>(new Set());
@@ -39,6 +40,7 @@ function icon(group: EventGroup) {
         <div class="event-icon"><component :is="icon(eventGroup(item.type))" :size="16" aria-hidden="true" /></div>
         <details>
           <summary><span class="event-type">{{ item.type }}</span><time :datetime="item.timestamp">{{ new Date(item.timestamp).toLocaleTimeString() }}</time></summary>
+          <p v-if="childEventLabel(item)" class="helper">{{ childEventLabel(item) }}</p>
           <pre>{{ compactPayload(item.payload) }}</pre>
         </details>
         <span class="event-seq">#{{ item.seq }}</span>

@@ -1,5 +1,7 @@
 import type { RunRecord, RunRequest, RuntimeEvent, SubagentRecord } from "./types";
 
+export class HttpError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -10,7 +12,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { detail?: string; error?: string };
-    throw new Error(payload.detail || payload.error || `HTTP ${response.status}`);
+    throw new HttpError(response.status, typeof payload.detail === "string" ? payload.detail : typeof payload.error === "string" ? payload.error : `HTTP ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -28,29 +30,43 @@ export function decodeSseBlocks(input: string): { items: RuntimeEvent[]; rest: s
   return { items, rest };
 }
 
-async function streamEvents(
+export async function streamEvents(
   runId: string,
   after: number,
   signal: AbortSignal,
   onEvent: (event: RuntimeEvent) => void,
+  conversationId?: string,
 ): Promise<void> {
   const response = await fetch(
-    `/api/v1/runs/${encodeURIComponent(runId)}/events?stream=true&after_seq=${after}`,
-    { headers: { Accept: "text/event-stream" }, signal },
+    `${runPath(runId, conversationId)}/events?stream=true&after_seq=${after}`,
+    { headers: { Accept: "text/event-stream", "Last-Event-ID": String(after) }, signal },
   );
   if (!response.ok || !response.body) throw new Error(`SSE HTTP ${response.status}`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
+  try { while (true) {
     const chunk = await reader.read();
     buffer += decoder.decode(chunk.value, { stream: !chunk.done });
     const decoded = decodeSseBlocks(buffer);
     buffer = decoded.rest;
     decoded.items.forEach(onEvent);
     if (chunk.done) return;
-  }
+  } } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
+
+export const runPath = (runId: string, conversationId?: string) => conversationId
+  ? `/api/v1/conversations/${encodeURIComponent(conversationId)}/runs/${encodeURIComponent(runId)}`
+  : `/api/v1/runs/${encodeURIComponent(runId)}`;
+
+export const ownedRuntimeApi = (conversationId?: string) => ({
+  getRun: (runId: string) => request<RunRecord>(runPath(runId, conversationId)),
+  events: (runId: string, after = 0) => request<RuntimeEvent[]>(`${runPath(runId, conversationId)}/events?after_seq=${after}`),
+  streamEvents: (runId: string, after: number, signal: AbortSignal, onEvent: (event: RuntimeEvent) => void) => streamEvents(runId, after, signal, onEvent, conversationId),
+  cancel: (runId: string) => post(`${runPath(runId, conversationId)}/cancel`),
+  resume: (runId: string, interruptId: string, body: { action: "approve" | "reject" | "edit"; tool_calls?: Array<Record<string, unknown>> }) =>
+    post(`${runPath(runId, conversationId)}/interrupts/${encodeURIComponent(interruptId)}/resume`, body),
+});
 
 const post = <T>(path: string, body?: unknown) => request<T>(path, {
   method: "POST",

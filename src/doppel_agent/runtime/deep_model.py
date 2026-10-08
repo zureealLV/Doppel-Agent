@@ -9,15 +9,27 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr, StrictInt
 
 from ..provider import Message, ToolCall, next_model_turn
+from ..provider_usage import MAX_SAFE, TokenUsageMeter
 
 
 def _content_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     return json.dumps(content, ensure_ascii=False, default=str)
+
+
+def _guard_estimate(turn: Any) -> int:
+    """Compatibility content/tool heuristic ONLY for the internal local guard.
+
+    Does not include request input, framing, provider tokenizer/cache/reasoning,
+    retries or failures. Not actual tokens, billing or a request/account limit.
+    """
+    return max(1, len(turn.content) // 4) + sum(
+        max(1, len(json.dumps(call.arguments, default=str)) // 4) for call in turn.tool_calls
+    )
 
 
 def _to_doppel_message(message: BaseMessage) -> Message:
@@ -47,9 +59,9 @@ class DoppelChatModel(BaseChatModel):
     provider: Any
     model_label: str = "doppel-provider"
     model_name: str = "doppel-runtime"
-    token_budget: int | None = None
+    token_budget: StrictInt | None = Field(default=None, gt=0, le=MAX_SAFE)
 
-    _spent_tokens: int = PrivateAttr(default=0)
+    _usage_meter: TokenUsageMeter = PrivateAttr(default_factory=TokenUsageMeter)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -81,21 +93,11 @@ class DoppelChatModel(BaseChatModel):
         return self.bind(tools=formatted, **kwargs)
 
     def _result(self, turn: Any) -> ChatResult:
-        usage = turn.usage or {}
-        charged = usage.get("total_tokens")
-        if not isinstance(charged, int):
-            charged = sum(
-                value
-                for key, value in usage.items()
-                if key in {"input_tokens", "output_tokens", "prompt_tokens", "completion_tokens"}
-                and isinstance(value, int)
-            )
-        if not charged:
-            charged = max(1, len(turn.content) // 4) + sum(
-                max(1, len(json.dumps(call.arguments, default=str)) // 4) for call in turn.tool_calls
-            )
-        self._spent_tokens += charged
-        budget_exhausted = self.token_budget is not None and self._spent_tokens > self.token_budget
+        # Preserve original raw usage (including cache/reasoning details) for
+        # compatibility callbacks. Never replace it with a synthetic estimate.
+        usage = turn.usage if isinstance(turn.usage, dict) else {}
+        meter = self._usage_meter.record(usage, lambda: _guard_estimate(turn))
+        budget_exhausted = self._usage_meter.exhausted(self.token_budget)
         message = AIMessage(
             content=(
                 "Subagent token budget exhausted; return the evidence collected so far."
@@ -108,13 +110,19 @@ class DoppelChatModel(BaseChatModel):
             ],
             response_metadata={
                 "doppel_usage": usage,
-                "doppel_spent_tokens": self._spent_tokens,
+                # Kept as an explicitly labeled compatibility guard field,
+                # null on unsafe cumulative totals; not provider billing.
+                "doppel_spent_tokens": meter["guard_tokens"],
+                "doppel_spent_tokens_kind": meter["guard_kind"],
+                "doppel_usage_meter": meter,
                 "doppel_token_budget": self.token_budget,
             },
         )
         return ChatResult(
             generations=[ChatGeneration(message=message)],
-            llm_output={"token_usage": usage},
+            llm_output={"token_usage": usage, **(
+                {"doppel_provider_call_id": turn.provider_call_id} if turn.provider_call_id is not None else {}
+            )},
         )
 
     def _generate(

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event, Lock, get_ident
+from typing import Any, NoReturn
 from uuid import uuid4
 
 
@@ -13,10 +17,38 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class TaskPersistenceError(RuntimeError):
+    def __init__(self, source: TaskManager | None = None):
+        super().__init__('legacy_task_persistence_unavailable')
+        self.source = source  # Private exact original reader/constructor, never HTTP/report data.
+
+
+@dataclass
+class _TaskConnectionLifetime:
+    connection: Any = None
+    owner_thread: int = field(default_factory=get_ident)
+    connect_attempted: bool = False
+    transaction_entered: bool = False
+    transaction_exit_returned: bool = False
+    close_returned: bool = False
+
+
 class TaskManager:
-    def __init__(self, database: Path):
+    def __init__(self, database: Path, *, read_only: bool = False, failure: Callable[[], None] | None = None,
+                 cleanup_failure: Callable[[TaskManager], None] | None = None):
         self.database = database
-        database.parent.mkdir(parents=True, exist_ok=True)
+        self._read_only = read_only
+        self._failure, self._cleanup_failure = failure, cleanup_failure
+        self._cleanup_uncertain = Event()
+        self._resource_cleanup_uncertain = Event()
+        self._lifetime_lock = Lock()
+        self._unresolved_connections: dict[int, _TaskConnectionLifetime] = {}
+        if read_only:
+            return  # Original list query, no mkdir/schema/migration on GET.
+        try:
+            database.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            self._unavailable()
         with self._connect() as connection:
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -37,17 +69,116 @@ class TaskManager:
                 CREATE INDEX IF NOT EXISTS idx_tasks_run ON tasks(run_id, status);
             """)
 
+    @property
+    def cleanup_uncertain(self) -> bool:
+        # Historical broad metadata quarantine, not physical cleanup proof.
+        return self._cleanup_uncertain.is_set()
+
+    @property
+    def failed(self) -> bool:
+        return self.cleanup_uncertain
+
+    @property
+    def resource_cleanup_uncertain(self) -> bool:
+        return self._resource_cleanup_uncertain.is_set()
+
+    def _mark_failed(self) -> None:
+        if self.failed:
+            return
+        self._cleanup_uncertain.set()
+        if self._failure is not None:
+            try:
+                self._failure()
+            except BaseException:
+                pass
+
+    def _unavailable(self) -> NoReturn:
+        self._mark_failed()
+        raise TaskPersistenceError(self) from None
+
+    def _retain_uncertain(self, frame: _TaskConnectionLifetime) -> None:
+        self._resource_cleanup_uncertain.set()
+        with self._lifetime_lock:
+            self._unresolved_connections[id(frame)] = frame
+        self._mark_failed()
+        if self._cleanup_failure is not None:
+            try:
+                self._cleanup_failure(self)  # Original ephemeral reader/failed constructor retained too.
+            except BaseException:
+                pass
+
+    def check_resource_cleanup(self) -> None:
+        if self.resource_cleanup_uncertain:
+            raise TaskPersistenceError(self)
+
+    @classmethod
+    def read_existing(cls, database: Path, run_id: str, *, failure: Callable[[], None] | None = None,
+                      cleanup_failure: Callable[[TaskManager], None] | None = None) -> list[dict]:
+        reader = cls(database, read_only=True, failure=failure, cleanup_failure=cleanup_failure)
+        try:
+            database.stat()
+        except FileNotFoundError:
+            return []  # No recorded task DB, not proof of full task coverage.
+        except OSError:
+            reader._unavailable()
+        return reader.list(run_id)
+
     @contextmanager
     def _connect(self):
-        connection = sqlite3.connect(self.database, timeout=5)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=5000")
+        if self.failed:
+            raise TaskPersistenceError(self)
+        frame = _TaskConnectionLifetime()  # BEFORE original path/factory; no handle absence as exit.
         try:
-            with connection:
+            database = self.database.resolve().as_uri() + '?mode=ro' if self._read_only else self.database
+        except (OSError, ValueError):
+            self._unavailable()  # Path preparation failed BEFORE factory; not unknown allocation.
+        frame.connect_attempted = True
+        try:
+            connection = (sqlite3.connect(database, uri=True, timeout=5) if self._read_only
+                          else sqlite3.connect(database, timeout=5))
+        except BaseException:
+            self._retain_uncertain(frame)  # SAME opaque original allocation attempt, no retry.
+            raise TaskPersistenceError(self) from None
+        frame.connection = connection
+        try:
+            try:
+                # Same allocated connection: setup ALSO inside original finally.
+                # A failing row_factory/PRAGMA cannot leak before yield ownership.
+                connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA foreign_keys=ON")
+                connection.execute("PRAGMA busy_timeout=5000")
+                connection.__enter__()
+                frame.transaction_entered = True
+            except BaseException:
+                self._unavailable()  # Original fault BEFORE same setup close.
+            try:
                 yield connection
+            except BaseException as exc:
+                storage_failure = isinstance(exc, (sqlite3.Error, OSError, TaskPersistenceError))
+                if storage_failure:
+                    self._mark_failed()
+                try:
+                    suppressed = connection.__exit__(type(exc), exc, exc.__traceback__)
+                    frame.transaction_exit_returned = True
+                except BaseException:
+                    self._unavailable()
+                if storage_failure:
+                    self._unavailable()  # Same successful rollback cannot invent a known receipt.
+                if not suppressed:
+                    raise  # Original validation/cancellation with known rollback/close survives.
+            else:
+                try:
+                    connection.__exit__(None, None, None)
+                    frame.transaction_exit_returned = True
+                except BaseException:
+                    self._unavailable()
         finally:
-            connection.close()
+            try:
+                connection.close()
+                frame.close_returned = True
+            except BaseException:
+                self._retain_uncertain(frame)
+                raise TaskPersistenceError(self) from None
 
     def _get(self, connection: sqlite3.Connection, task_id: str) -> sqlite3.Row:
         row = connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()

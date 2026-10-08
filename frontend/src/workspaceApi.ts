@@ -1,19 +1,43 @@
 import { request } from "./api";
+import type { RunMode, RunRequest } from "./types";
+import type { NativeConversation, NativeConversationSummary, NativeWorkspaceSelection } from "./workspaceTypes";
 import type { Conversation, ConversationGroup, ConversationSummary, LegacyApproval, LegacyEvent,
-  PersistentRun, PersistentRunRequest, ProfileForm, PublicSettings } from "./workspaceTypes";
+  PersistentRun, PersistentRunRequest, ProfileConfiguration, PublicSettings } from "./workspaceTypes";
 
 const id = encodeURIComponent;
 const post = <T>(path: string, body: unknown = {}) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
+const patch = <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+const conversationPath = (cid: string) => `/api/v1/conversations/${id(cid)}`;
+export const nativeWorkspaceApi = {
+  selection: () => request<NativeWorkspaceSelection>("/api/v1/workspace-selection"),
+  saveSelection: (conversationId: string | null, runId: string | null) => request<NativeWorkspaceSelection>(
+    "/api/v1/workspace-selection", { method: "PUT", body: JSON.stringify({ conversation_id: conversationId, run_id: runId }) }),
+  conversations: (archived = false) => request<NativeConversationSummary[]>(`/api/v1/conversations?archived=${archived}`),
+  conversation: (cid: string) => request<NativeConversation>(conversationPath(cid)),
+  draft: (mode: RunMode, profileId: string, title = "新对话") => post<NativeConversation>("/api/v1/conversations", { mode, profile_id: profileId, title, draft: true }),
+  search: (query: string) => request<NativeConversationSummary[]>(`/api/v1/conversations?q=${id(query)}`),
+  update: (cid: string, body: { title?: string; archived?: boolean; group_id?: string | null; profile_id?: string }) => patch<NativeConversation>(conversationPath(cid), body),
+  delete: (cid: string) => request<{ ok: boolean; audit_retained: boolean }>(conversationPath(cid), { method: "DELETE" }),
+  groups: () => request<ConversationGroup[]>("/api/v1/conversation-groups"),
+  createGroup: (name: string) => post<ConversationGroup>("/api/v1/conversation-groups", { name }),
+  renameGroup: (gid: string, name: string) => patch<ConversationGroup>(`/api/v1/conversation-groups/${id(gid)}`, { name }),
+  deleteGroup: (gid: string) => request<{ ok: boolean }>(`/api/v1/conversation-groups/${id(gid)}`, { method: "DELETE" }),
+  start: (cid: string, body: RunRequest) => post<{ run_id: string; conversation_id: string; status: string }>(`${conversationPath(cid)}/runs`, body),
+};
+
 // Intentionally retains the production persistent-chat API. These are not v1
 // Graph/Deep conversations and must not be presented as native runtime parity.
 export const workspaceApi = {
+  selection: () => request<{ saved: boolean; conversation_id: string | null }>("/api/workspace-selection"),
+  saveSelection: (conversationId: string | null) => post<{ saved: boolean; conversation_id: string | null }>(
+    "/api/workspace-selection", { conversation_id: conversationId }),
   health: () => request<{ status: string; workspace: string }>("/api/health"),
   settings: () => request<PublicSettings>("/api/settings"),
-  saveProfile: (profileId: string, config: ProfileForm & { provider: string }, forgetKey = false) =>
+  saveProfile: (profileId: string, config: ProfileConfiguration, forgetKey = false) =>
     post<PublicSettings>("/api/settings", { profile_id: profileId, config, forget_key: forgetKey }),
   deleteProfile: (profileId: string) => post<PublicSettings>(`/api/settings/profiles/${id(profileId)}/delete`),
-  probe: (config: ProfileForm & { provider: string; profile_id?: string }) => post<{ ok: boolean; reply: string }>("/api/probe", { config }),
+  probe: (config: ProfileConfiguration & { profile_id?: string }) => post<{ ok: boolean; reply: string }>("/api/probe", { config }),
   conversations: (archived = false) => request<ConversationSummary[]>(`/api/conversations?archived=${archived ? 1 : 0}`),
   conversation: (conversationId: string) => request<Conversation>(`/api/conversations/${id(conversationId)}`),
   draft: (mode: "agent" | "review") => post<Conversation>(`/api/conversations/${mode === "review" ? "review" : "new"}-draft`),

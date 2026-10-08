@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+from uuid import uuid4
 
 from bench.runtime_fixtures import TaskFixture, TDD_ARGV, materialize_task_case
 from bench.runtime_validators import validate_tdd_evidence
@@ -49,6 +50,12 @@ class ScriptedTddProvider:
         self.turn = 0
 
     def next_turn(self, messages, tools):
+        # Finish the red source run before a separately reviewed verification.
+        # The next original RunService admission continues this scripted control;
+        # no production policy bypass or second execution engine is introduced.
+        if self.turn == 3 and not getattr(self, "red_phase_finished", False):
+            self.red_phase_finished = True
+            return ModelTurn(content="Red phase complete; separate verification requires human review.")
         names = {tool["function"]["name"] for tool in tools}
         if not {"read_file", "propose_patch", "run_command"} <= names:
             raise ValueError("TDD requires the production service tool surface")
@@ -93,11 +100,10 @@ class TddEvidenceProvider:
                 row["requested_paths"] = [change["path"] for change in call.arguments["changes"]]
                 try:
                     output = json.loads(message.content)
-                    verification = output["verification"]["results"]
                     row["changed_paths"] = output["changed_paths"]
-                    row["verification"] = [{**unittest_outcome(item["exit_code"], item["stdout"] + item["stderr"]),
-                                            "success": item["success"], "argv_sha256": digest(item["argv"])}
-                                           for item in verification]
+                    row["patch_id"] = output["patch_id"]
+                    row["verification_marker"] = output["verification"]
+                    row["verification"] = []  # Filled ONLY by actual separate original review below.
                 except (ValueError, KeyError, TypeError):
                     row["changed_paths"], row["verification"] = [], []
             self.receipts.append(row)
@@ -142,37 +148,57 @@ async def probe_tdd(fixture: TaskFixture, workspace: Path, *, _contract=None) ->
     initial = workspace_snapshot(workspace)
     provider = TddEvidenceProvider(ScriptedTddProvider(hidden["scripted_test.py"], hidden["reference_source.py"]), workspace)
     service = RunService(workspace, provider=provider)
-    approvals = []
+    approvals, source_runs, manual_reviews, decisions = [], [], [], []
     await service.start()
     try:
-        record, _ = await service.create({"mode": "graph", "prompt": case.prompt,
+        for phase in range(2):
+            record, _ = await service.create({"mode": "graph", "prompt": case.prompt,
                                           "effort": "deep", "permissions": dict(case.permissions),
                                           "deadline_seconds": 60})
-        run_id = record["run_id"]
-        for _ in range(5):
-            await service.scheduler.wait(run_id)
-            record = await service.get(run_id)
-            if record["status"] != "interrupted":
-                break
-            interrupts = record["metadata"]["interrupts"]
-            requested = interrupts[0]["value"]["tool_calls"]
-            previous = provider.receipts[-1]["snapshot"] if provider.receipts else initial
-            bounds = all(
-                (call["name"] == "run_command" and call["arguments"] == {"argv": command_argv()})
-                or (call["name"] == "propose_patch" and {c["path"] for c in call["arguments"]["changes"]} <= set(fixture.allowed_edits))
-                for call in requested
-            )
-            unchanged = workspace_snapshot(workspace) == previous
-            approvals.append({"tool": requested[0]["name"], "bounds_pass": bounds,
+            run_id = record["run_id"]
+            for _ in range(3):
+                await service.scheduler.wait(run_id)
+                record = await service.get(run_id)
+                if record["status"] != "interrupted":
+                    break
+                interrupts = record["metadata"]["interrupts"]
+                requested = interrupts[0]["value"]["tool_calls"]
+                previous = provider.receipts[-1]["snapshot"] if provider.receipts else initial
+                bounds = all(
+                    (call["name"] == "run_command" and call["arguments"] == {"argv": command_argv()})
+                    or (call["name"] == "propose_patch" and {c["path"] for c in call["arguments"]["changes"]} <= set(fixture.allowed_edits))
+                    for call in requested)
+                unchanged = workspace_snapshot(workspace) == previous
+                approvals.append({"tool": requested[0]["name"], "bounds_pass": bounds,
                               "no_unapproved_effects": unchanged})
-            if not bounds or not unchanged:
-                raise ValueError("TDD approval violated frozen edit/argv/no-effect bounds")
-            await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
+                if not bounds or not unchanged:
+                    raise ValueError("TDD approval violated frozen edit/argv/no-effect bounds")
+                await service.resume(run_id, interrupts[0]["id"], {"action": "approve"})
+            if record["status"] != "completed" or record["lease_active"]:
+                raise ValueError("TDD source phase must complete and drain before manual verification")
+            source_runs.append({key: record[key] for key in ("run_id", "status", "lease_active")})
+            decisions.extend(native_approval_decisions(await service.list_events(run_id)))
+            patch_row = [row for row in provider.receipts if row["tool"] == "propose_patch"][phase]
+            marker = patch_row["verification_marker"]
+            if marker["status"] != "not_run_separate_review_required" or marker["success"] is not None or marker["results"] != []:
+                raise ValueError("TDD patch cannot claim implicit verification execution")
+            view = await service.prepare_verification(run_id, patch_row["tool_call_id"], patch_row["patch_id"],
+                operation_id=uuid4().hex, names=["candidate"], command_execute=True, workspace_write=True)
+            if view["status"] != "pending":
+                raise ValueError("TDD requires a fresh original verification review")
+            reviewed = await service.decide_verification(run_id, view["review_id"], view["plan"]["plan_id"],
+                action="approve", command_execute=True, workspace_write=True)
+            if reviewed["status"] != "completed" or len(reviewed["steps"]) != 1:
+                raise ValueError("TDD original manual verification did not seal one actual command")
+            manual_reviews.append(reviewed)
+            item = reviewed["steps"][0]["result"]
+            patch_row["verification"] = [{**unittest_outcome(item["exit_code"], item["stdout"] + item["stderr"]),
+                "success": item["success"], "argv_sha256": digest(item["argv"]), "result_sha256": digest(item)}]
         target_after = await external_oracle(workspace, hidden["target_tests.py"])
         regression_after = await external_oracle(workspace, hidden["regression_tests.py"])
-        decisions = native_approval_decisions(await service.list_events(run_id))
         evidence = {"initial": initial, "receipts": provider.receipts, "approvals": approvals,
                     "approval_decisions": decisions,
+                    "source_runs": source_runs, "manual_verification_reviews": manual_reviews,
                     "external_target_before": target_before, "external_regression_before": regression_before,
                     "external_target_after": target_after, "external_regression_after": regression_after,
                     "status": record["status"], "fallback_runtime": record["metadata"].get("fallback_runtime")}

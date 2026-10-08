@@ -21,7 +21,8 @@ from langgraph.types import Command
 
 from ..concurrency.limits import ResourceLimits
 from ..persistence import sqlite_checkpointer
-from ..provider import Provider
+from ..persistence.tool_ledger import ToolExecutionLedger
+from ..provider import Provider, bounded_run_retries
 from ..skills.registry import SkillRegistry
 from ..mcp.tool_adapter import reset_mcp_run_id, set_mcp_run_id
 from ..workspace.process_supervisor import ProcessSupervisor
@@ -36,6 +37,8 @@ from .base import EventSink, NullEventSink, ResumeCommand, RunRequest, RuntimeRe
 from .deep_backend import DoppelBackend
 from .deep_model import DoppelChatModel
 from .graph import GraphRuntime
+from .provider_recording import ProviderReceiptFault, receipt_sink, record_provider
+from ..billing_tariff import validate_price_receipt
 
 
 register_harness_profile(
@@ -70,17 +73,20 @@ class _DeepEventBridge(AsyncCallbackHandler):
         name = self._tool_names.pop(str(kwargs.get("run_id", "")), "unknown")
         kind = "deep.subagent_finished" if name == "task" else "deep.tool_finished"
         await self.sink.emit(kind, tool=name, output_preview=str(output)[:500])
-        if name == "propose_patch":
-            await self.sink.emit("patch.applied", result=str(output)[:2000])
+        # Patch effects are emitted by the owned tool immediately after actual
+        # ledger sealing, before optional verification, not inferred from repr.
 
     async def on_tool_error(self, error: BaseException, **kwargs: Any) -> None:
-        await self.sink.emit("deep.tool_failed", error=f"{type(error).__name__}: {error}")
+        await self.sink.emit("deep.tool_failed", error=f"{type(error).__name__}: tool execution failed")
         if type(error).__name__ == "PatchConflictError":
             await self.sink.emit("patch.conflict", error=str(error))
 
     async def on_llm_end(self, response: Any, **kwargs: Any) -> None:
-        usage = (getattr(response, "llm_output", None) or {}).get("token_usage", {})
-        await self.sink.emit("deep.model_finished", usage=usage)
+        output = getattr(response, "llm_output", None) or {}
+        usage = output.get("token_usage", {})
+        identity = output.get("doppel_provider_call_id")
+        receipt = {"provider_call_id": identity} if identity is not None else {}
+        await self.sink.emit("deep.model_finished", usage=usage, **receipt)
 
 
 class DeepAgentRuntime:
@@ -97,11 +103,20 @@ class DeepAgentRuntime:
         max_steps: int = 12,
         allow_write: bool = False,
         allow_command: bool = False,
+        require_verification_review: bool = False,
         max_subagents: int = 2,
         resource_limits: ResourceLimits | None = None,
+        process_supervisor: ProcessSupervisor | None = None,
+        provider_receipt_fault: ProviderReceiptFault | None = None,
+        billing_price_receipt: dict | None = None,
     ) -> None:
+        if type(require_verification_review) is not bool:
+            raise ValueError("verification_review_policy_invalid")
+        self.require_verification_review = require_verification_review
+        self._billing_price_receipt = None if billing_price_receipt is None else validate_price_receipt(billing_price_receipt)
         self.workspace = workspace.resolve(strict=True)
         self.provider = provider
+        self.provider_receipt_fault = provider_receipt_fault if provider_receipt_fault is not None else ProviderReceiptFault()
         self.max_steps = max_steps
         self.allow_write = allow_write
         self.max_subagents = max(0, min(max_subagents, 2))
@@ -110,14 +125,21 @@ class DeepAgentRuntime:
         self.checkpoint_path = root
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self.additional_tools: list[Any] = []
-        self.process_supervisor = ProcessSupervisor()
+        self.process_supervisor = (process_supervisor if process_supervisor is not None else
+                                   ProcessSupervisor(failure=self.provider_receipt_fault.mark_failed,
+                                                     cleanup_failure=self.provider_receipt_fault.retain_cleanup))
+        self.ledger = ToolExecutionLedger(root.with_name("tool-executions.sqlite3"),
+                                          failure=self.provider_receipt_fault.mark_failed,
+                                          cleanup_failure=self.provider_receipt_fault.retain_cleanup)
         verification = (
             VerificationPipeline(self.workspace, supervisor=self.process_supervisor)
-            if allow_write and allow_command
+            if allow_write and allow_command and not require_verification_review
             else None
         )
         self.patch_tool: WorkspacePatchTool | None = (
-            langchain_patch_tool(self.workspace, verification=verification) if allow_write else None
+            langchain_patch_tool(self.workspace, verification=verification, ledger=self.ledger,
+                                 resource_limits=resource_limits, allow_command=allow_command,
+                                 require_verification_review=require_verification_review) if allow_write else None
         )
         self._pending_interrupts: dict[str, list[Any]] = {}
         self._fallback = GraphRuntime(
@@ -126,6 +148,8 @@ class DeepAgentRuntime:
             checkpoint_path=root.with_name("focused-fallback.sqlite3"),
             max_steps=min(max_steps, 8),
             resource_limits=resource_limits,
+            provider_receipt_fault=self.provider_receipt_fault,
+            billing_price_receipt=self._billing_price_receipt,
         )
 
     def _skill_sources(self) -> list[str]:
@@ -151,7 +175,14 @@ class DeepAgentRuntime:
             rules.append(FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"))
         return rules
 
-    def _subagents(self) -> list[dict[str, Any]]:
+    def _subagents(self, *, sink: EventSink | None = None) -> list[dict[str, Any]]:
+        def model(actor: str, label: str):
+            provider = self.provider if sink is None else record_provider(
+                self.provider, sink, fault=self.provider_receipt_fault, engine="deep", actor=actor,
+                billing_price_receipt=self._billing_price_receipt,
+            )
+            return DoppelChatModel(provider=provider, model_label=label, token_budget=8000)
+
         specs = [
             {
                 "name": "general-purpose",
@@ -160,7 +191,7 @@ class DeepAgentRuntime:
                     "Investigate only; never modify files or delegate. Return concise findings and cite every "
                     "claim with a workspace-relative evidence path."
                 ),
-                "model": DoppelChatModel(provider=self.provider, model_label="doppel-investigator", token_budget=8000),
+                "model": model("deep_builtin_investigator", "doppel-investigator"),
                 "tools": [],
                 "middleware": [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
                 "permissions": [
@@ -174,7 +205,7 @@ class DeepAgentRuntime:
                     "Verify the proposed conclusion against files. Do not modify files or delegate. "
                     "Return evidence paths and explicitly state uncertainty."
                 ),
-                "model": DoppelChatModel(provider=self.provider, model_label="doppel-verifier", token_budget=8000),
+                "model": model("deep_builtin_verifier", "doppel-verifier"),
                 "tools": [],
                 "middleware": [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
                 "permissions": [
@@ -185,7 +216,10 @@ class DeepAgentRuntime:
         return specs[: self.max_subagents]
 
     def _build_graph(self, checkpointer: Any, sink: EventSink):
-        model = DoppelChatModel(provider=self.provider)
+        model = DoppelChatModel(provider=record_provider(
+            self.provider, sink, fault=self.provider_receipt_fault, engine="deep",
+            billing_price_receipt=self._billing_price_receipt,
+        ))
         backend = DoppelBackend(
             self.workspace,
             allow_write=self.allow_write,
@@ -201,7 +235,7 @@ class DeepAgentRuntime:
                 "delegate at most two read-only investigations, and ground the final answer in evidence paths. "
                 "For workspace changes, use propose_patch and provide only its changes field."
             ),
-            subagents=self._subagents(),
+            subagents=self._subagents(sink=sink),
             skills=self._skill_sources() or None,
             permissions=self._permissions(),
             backend=backend,
@@ -258,13 +292,22 @@ class DeepAgentRuntime:
         )
 
     async def _invoke(self, request: RunRequest, sink: EventSink) -> RuntimeResult:
-        async with sqlite_checkpointer(self.checkpoint_path) as checkpointer:
+        sink = receipt_sink(sink, self.provider_receipt_fault)
+        async with sqlite_checkpointer(self.checkpoint_path, failure=self.provider_receipt_fault.mark_failed,
+                cleanup_failure=self.provider_receipt_fault.retain_cleanup,
+                cleanup_check=self.provider_receipt_fault.check_cleanup) as checkpointer:
             graph = self._build_graph(checkpointer, sink)
+            snapshot = await graph.aget_state({"configurable": {"thread_id": request.thread_id}})
+            if snapshot.next:
+                raise ValueError("checkpoint has pending work; resume or start a new thread")
+            messages = [{"role": "user", "content": request.input_prompt}]
+            if not snapshot.values.get("messages"):
+                messages = [{"role": item.role, "content": item.content} for item in request.history] + messages
             token = set_mcp_run_id(request.run_id)
-            patch_token = set_patch_run_id(request.run_id)
+            patch_token = set_patch_run_id(request.run_id, sink)
             try:
                 result = await graph.ainvoke(
-                    {"messages": [{"role": "user", "content": request.prompt}]},
+                    {"messages": messages},
                     config={
                         "configurable": {"thread_id": request.thread_id},
                         "recursion_limit": max(40, self.max_steps * 8),
@@ -276,6 +319,7 @@ class DeepAgentRuntime:
                 reset_mcp_run_id(token)
         return self._result(request.run_id, request.thread_id, result)
 
+    @bounded_run_retries()
     async def run(self, request: RunRequest, sink: EventSink | None = None) -> RuntimeResult:
         sink = sink or NullEventSink()
         await sink.emit("runtime.started", runtime=self.name, run_id=request.run_id, thread_id=request.thread_id)
@@ -284,10 +328,14 @@ class DeepAgentRuntime:
             self._tasks[request.run_id] = task
         try:
             result = await self._invoke(request, sink)
+            self.provider_receipt_fault.check()
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - deep mode must degrade predictably
-            await sink.emit("deep.fallback", error=f"{type(exc).__name__}: {exc}", runtime="graph")
+            # SDK/tool wrappers may hide the original recording exception type.
+            # The original owner latch, not exception text, fences Graph fallback.
+            self.provider_receipt_fault.check()
+            await sink.emit("deep.fallback", error=f"{type(exc).__name__}: deep execution failed", runtime="graph")
             focused = await self._fallback.run(request, sink)
             result = RuntimeResult(
                 run_id=focused.run_id,
@@ -295,7 +343,7 @@ class DeepAgentRuntime:
                 status=focused.status,
                 answer=focused.answer,
                 runtime="deep",
-                metadata={**focused.metadata, "fallback_runtime": "graph", "deep_error": str(exc)},
+                metadata={**focused.metadata, "fallback_runtime": "graph", "deep_error": type(exc).__name__},
             )
         finally:
             self._tasks.pop(request.run_id, None)
@@ -361,8 +409,10 @@ class DeepAgentRuntime:
                 raise ValueError("edited approval must include every pending action")
             decisions = []
             for item, request in zip(edited, requests, strict=True):
+                if "arguments" in item and "args" in item:
+                    raise ValueError("ambiguous edited arguments: use args or arguments, not both")
                 name = item.get("name", request.get("name"))
-                arguments = item.get("arguments", request.get("args", {}))
+                arguments = item.get("arguments", item.get("args", request.get("args", {})))
                 if request.get("name") == "propose_patch":
                     if name != "propose_patch" or self.patch_tool is None:
                         raise ValueError("an edited patch cannot change tool")
@@ -379,15 +429,19 @@ class DeepAgentRuntime:
             raise ValueError("unknown approval action")
         return {"decisions": decisions}
 
+    @bounded_run_retries()
     async def resume(self, command: ResumeCommand, sink: EventSink | None = None) -> RuntimeResult:
         sink = sink or NullEventSink()
+        sink = receipt_sink(sink, self.provider_receipt_fault)
         await sink.emit(
             "runtime.resumed",
             runtime=self.name,
             run_id=command.run_id,
             thread_id=command.thread_id,
         )
-        async with sqlite_checkpointer(self.checkpoint_path) as checkpointer:
+        async with sqlite_checkpointer(self.checkpoint_path, failure=self.provider_receipt_fault.mark_failed,
+                cleanup_failure=self.provider_receipt_fault.retain_cleanup,
+                cleanup_check=self.provider_receipt_fault.check_cleanup) as checkpointer:
             graph = self._build_graph(checkpointer, sink)
             config = {
                 "configurable": {"thread_id": command.thread_id},
@@ -403,21 +457,22 @@ class DeepAgentRuntime:
             if prepared_interrupt_values is None:
                 prepared_interrupt_values = self._pending_interrupts.get(command.thread_id)
             token = set_mcp_run_id(command.run_id)
-            patch_token = set_patch_run_id(command.run_id)
+            patch_token = set_patch_run_id(command.run_id, sink)
             try:
+                resume_value = self._resume_value(command.value, interrupt_values, prepared_interrupt_values)
+                for decision in resume_value.get("decisions", []):
+                    action = decision.get("edited_action", {})
+                    proposal = action.get("args", {}).get("_doppel_patch")
+                    if action.get("name") == "propose_patch" and proposal:
+                        await sink.emit("patch.proposed", edited=True, proposal=proposal)
                 result = await graph.ainvoke(
-                    Command(
-                        resume=self._resume_value(
-                            command.value,
-                            interrupt_values,
-                            prepared_interrupt_values,
-                        )
-                    ),
+                    Command(resume=resume_value),
                     config=config,
                 )
             finally:
                 reset_patch_run_id(patch_token)
                 reset_mcp_run_id(token)
+        self.provider_receipt_fault.check()
         runtime_result = self._result(command.run_id, command.thread_id, result)
         await sink.emit(
             "runtime.finished",

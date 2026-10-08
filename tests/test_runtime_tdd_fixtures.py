@@ -75,8 +75,25 @@ def test_tdd01_real_service_records_red_before_source_patch_and_green_after(acce
     assert report["task_quality_scored"] is False
 
 
+def test_tdd01_post_patch_verification_is_separate_original_review_after_each_drained_run(accepted_tdd01):
+    _, _, report = accepted_tdd01
+    reviews = report["manual_verification_reviews"]
+    assert len(reviews) == 2 and len(report["source_runs"]) == 2
+    assert len({run["run_id"] for run in report["source_runs"]}) == 2
+    assert all(run["status"] == "completed" and not run["lease_active"] for run in report["source_runs"])
+    assert [review["status"] for review in reviews] == ["completed", "completed"]
+    assert [review["success"] for review in reviews] == [False, True]
+    assert all(review["operation_kind"] == "manual_verification" and review["source"]["run_id"] == run["run_id"]
+               for review, run in zip(reviews, report["source_runs"], strict=True))
+    assert all(len(review["steps"]) == 1 and review["steps"][0]["status"] == "finished" for review in reviews)
+    assert all(row["verification_marker"]["status"] == "not_run_separate_review_required"
+               and row["verification_marker"]["success"] is None and row["verification_marker"]["results"] == []
+               for row in report["receipts"] if row["tool"] == "propose_patch")
+
+
 @pytest.mark.parametrize("mutation", ["order", "no_red", "error_not_assertion", "weakened_test", "argv", "early_effect",
-                                      "target_failure", "oracle_hash", "duplicate_ids"])
+                                      "target_failure", "oracle_hash", "duplicate_ids", "missing_manual_review",
+                                      "unquiescent_source", "foreign_review_source", "review_result_drift"])
 def test_tdd_validator_rejects_fabricated_completion_and_incomplete_chronology(accepted_tdd01, mutation):
     from bench.runtime_tdd_harness import command_argv, digest
     from bench.runtime_validators import validate_tdd_evidence
@@ -100,6 +117,14 @@ def test_tdd_validator_rejects_fabricated_completion_and_incomplete_chronology(a
         evidence["external_target_after"]["exit_code"] = 1
     elif mutation == "oracle_hash":
         evidence["external_target_after"]["oracle_sha256"] = "unfrozen-oracle"
+    elif mutation == "missing_manual_review":
+        evidence.pop("manual_verification_reviews")
+    elif mutation == "unquiescent_source":
+        evidence["source_runs"][0]["lease_active"] = True
+    elif mutation == "foreign_review_source":
+        evidence["manual_verification_reviews"][0]["source"]["run_id"] = evidence["source_runs"][1]["run_id"]
+    elif mutation == "review_result_drift":
+        evidence["manual_verification_reviews"][0]["steps"][0]["result"]["exit_code"] = 0
     else:
         for row in rows:
             row["tool_call_id"] = "replayed-call"

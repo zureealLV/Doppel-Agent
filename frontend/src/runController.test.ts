@@ -1,0 +1,31 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RunController } from "./runController";
+import { ownedRuntimeApi, runtimeApi } from "./api";
+import type { RunRecord, RuntimeEvent } from "./types";
+const mocks = vi.hoisted(() => ({ getRun: vi.fn(), events: vi.fn(), streamEvents: vi.fn(), cancel: vi.fn(), resume: vi.fn(), subagents: vi.fn() }));
+vi.mock("./api", () => ({ ownedRuntimeApi: vi.fn(() => mocks), runtimeApi: { subagents: mocks.subagents } }));
+const record = (rid = "r", changes = {}): RunRecord => ({ run_id: rid, conversation_id: "c", thread_id: "t", status: "running", mode: "graph", request: { prompt: "test", mode: "graph", effort: "balanced", deadline_seconds: 600, permissions: { workspace_write: false, command_execute: false, mcp_execute: false, delegate: false } }, answer: "", error: "", metadata: {}, created_at: "", updated_at: "", started_at: null, finished_at: null, cancel_requested: false, ...changes });
+const event = (seq: number, rid = "r"): RuntimeEvent => ({ seq, run_id: rid, thread_id: "t", type: "graph.node_started", timestamp: "", payload: {} });
+const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; };
+beforeEach(() => { vi.resetAllMocks(); mocks.getRun.mockImplementation(async rid => record(rid)); mocks.events.mockResolvedValue([]); mocks.subagents.mockResolvedValue([]); mocks.streamEvents.mockImplementation(() => new Promise(() => {})); });
+describe("unified run inspection races and recovery", () => {
+  it("uses owned routes and retains terminal audit", async () => { const c = new RunController(); mocks.getRun.mockResolvedValue(record("r", { status: "completed" })); mocks.events.mockResolvedValue([event(1)]); await c.select("r", "c"); expect(ownedRuntimeApi).toHaveBeenCalledWith("c"); expect(c.state.events).toHaveLength(1); expect(mocks.streamEvents).not.toHaveBeenCalled(); c.dispose(); });
+  it("rejects a wrong owner", async () => { const c = new RunController(); mocks.getRun.mockResolvedValue(record("r", { conversation_id: "other" })); await c.select("r", "c"); expect(c.state.run).toBeNull(); expect(c.state.error).toContain("不匹配"); c.dispose(); });
+  it("ignores late selection responses", async () => { const c = new RunController(); const slow = deferred<RunRecord>(); mocks.getRun.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(record("two")); const first = c.select("one", "c"); await c.select("two", "c"); slow.resolve(record("one")); await first; expect(c.state.run?.run_id).toBe("two"); c.dispose(); });
+  it("aborts stale streams and ignores their callbacks/finalizers", async () => { const c = new RunController(); await c.select("one", "c"); const old = mocks.streamEvents.mock.calls[0]!; await c.select("two", "c"); expect((old[2] as AbortSignal).aborted).toBe(true); old[3](event(20,"one")); expect(c.state.events).toEqual([]); expect(c.state.connected).toBe(true); c.dispose(); });
+  it("deduplicates SSE replay and ignores foreign events", async () => { const c = new RunController(); await c.select("r", "c"); const callback = mocks.streamEvents.mock.calls[0]![3]; callback(event(1)); callback(event(1)); callback(event(5,"foreign")); expect(c.state.events.map(e => e.seq)).toEqual([1]); c.dispose(); });
+  it("recovers an ended stream from the latest sequence via polling", async () => { vi.useFakeTimers(); const c = new RunController(); mocks.events.mockResolvedValueOnce([event(1)]).mockResolvedValue([event(2)]); mocks.streamEvents.mockResolvedValue(undefined); await c.select("r", "c"); await Promise.resolve(); await vi.advanceTimersByTimeAsync(1600); await c.refresh(); expect(mocks.streamEvents).toHaveBeenLastCalledWith("r", 2, expect.any(AbortSignal), expect.any(Function)); expect(c.state.events.map(e=>e.seq)).toEqual([1,2]); c.dispose(); vi.useRealTimers(); });
+  it("blocks duplicate approval while a decision is pending", async () => { const c = new RunController(); const slow = deferred<unknown>(); mocks.getRun.mockResolvedValue(record("r", { status: "interrupted", metadata: { interrupts: [{ id: "i", value: {} }] } })); mocks.resume.mockReturnValue(slow.promise); await c.select("r", "c"); const decision = c.decide("approve"); await c.decide("reject"); expect(mocks.resume).toHaveBeenCalledTimes(1); expect(mocks.resume).toHaveBeenCalledWith("r","i",{ action: "approve" }); slow.resolve({}); await decision; c.dispose(); });
+  it("cancels a reconstructed interrupted run", async () => { const c = new RunController(); mocks.getRun.mockResolvedValue(record("r", { status: "interrupted" })); await c.select("r", "c"); await c.cancel(); expect(mocks.cancel).toHaveBeenCalledWith("r"); c.dispose(); });
+  it("does not leak a stale action error into the next run", async () => { const c = new RunController(); let reject!: (e: unknown) => void; mocks.cancel.mockReturnValue(new Promise((_r,j) => { reject = j; })); await c.select("one", "c"); const action = c.cancel(); await c.select("two", "c"); reject(new Error("old action")); await action; expect(c.state.error).toBe(""); expect(c.state.busy).toBe(false); c.dispose(); });
+  it("does not automatically read child compatibility routes even with delegation granted", async () => { const c = new RunController(); const r = record(); r.request.permissions.delegate = true; mocks.getRun.mockResolvedValue(r); await c.select("r", "c"); expect(runtimeApi.subagents).not.toHaveBeenCalled(); c.dispose(); });
+  it("renders errors without retaining previous run data", async () => { const c = new RunController(); await c.select("r", "c"); mocks.getRun.mockRejectedValue(new Error("missing")); await c.select("deleted","c"); expect(c.state.run).toBeNull(); expect(c.state.loading).toBe(false); expect(c.state.error).toBe("missing"); c.dispose(); });
+});
+
+it("does not send a second decision against a stale refreshed interrupt", async () => {
+  const c = new RunController();
+  mocks.getRun.mockResolvedValue(record("r", { status: "interrupted", metadata: { interrupts: [{ id: "i", value: {} }] } }));
+  mocks.resume.mockResolvedValue({});
+  await c.select("r", "c"); await c.decide("approve"); await c.decide("reject");
+  expect(mocks.resume).toHaveBeenCalledTimes(1); c.dispose();
+});

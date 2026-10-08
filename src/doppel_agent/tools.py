@@ -12,6 +12,9 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .permissions import PermissionManager
+from .persistence.tool_ledger import ToolExecutionLedger
+from .concurrency.limits import ResourceLimits
+from .persistence.owned import await_durable
 from .workspace.patching import PatchProposal, PatchService
 from .workspace.process_supervisor import ProcessSupervisor
 from .workspace.verification import VerificationPipeline
@@ -28,6 +31,11 @@ class Tool:
     async_handler: Callable[[dict[str, Any], str, str], Awaitable[str]] | None = None
     approval_preparer: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     approval_editor: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None
+    # Specialized effect owns its ledger reservation; never additionally wrap
+    # it in execute_once/aexecute_once with the same key.
+    effect_handler: Callable[[dict[str, Any], str, str, ToolExecutionLedger | None], tuple[str, bool]] | None = None
+    after_effect: Callable[[dict[str, Any], str, str, str, bool], Awaitable[str]] | None = None
+    after_effect_capability: str | None = None
 
     def schema(self) -> dict[str, Any]:
         return {
@@ -68,7 +76,13 @@ class ToolRegistry:
         tool = self.tools.get(name)
         if tool is None:
             raise ValueError(f"unknown tool: {name}")
-        return tool.async_handler is not None
+        return tool.async_handler is not None or tool.effect_handler is not None
+
+    def owns_effect(self, name: str) -> bool:
+        tool = self.tools.get(name)
+        if tool is None:
+            raise ValueError(f"unknown tool: {name}")
+        return tool.effect_handler is not None
 
     def prepare_approval(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         tool = self.tools.get(name)
@@ -114,14 +128,44 @@ class ToolRegistry:
             raise PermissionError(decision.reason)
         return tool.handler(arguments)
 
-    async def aexecute(self, name: str, arguments: dict[str, Any], *, run_id: str, tool_call_id: str) -> str:
+    async def aexecute(self, name: str, arguments: dict[str, Any], *, run_id: str, tool_call_id: str,
+                       ledger: ToolExecutionLedger | None = None,
+                       on_effect: Callable[[str, bool, bool], Awaitable[None]] | None = None) -> str:
         tool = self.tools.get(name)
         if tool is None:
             raise ValueError(f"unknown tool: {name}")
+        if tool.effect_handler is not None:
+            if not isinstance(arguments, dict):
+                raise ValueError(f"invalid arguments for {name}")
+            decision = self.permissions.check(tool.capability, name, arguments)
+            if not decision.allowed:
+                raise PermissionError(decision.reason)
+            worker = asyncio.create_task(asyncio.to_thread(tool.effect_handler, arguments, run_id, tool_call_id, ledger))
+            try:
+                output, replayed = await await_durable(worker)
+            except asyncio.CancelledError:
+                # The source worker/ledger is settled before the lock/owner may
+                # leave. Expose only its actual completed effect, not intent.
+                if on_effect is not None and not worker.cancelled() and worker.done() and worker.exception() is None:
+                    output, replayed = worker.result()
+                    try:
+                        await await_durable(on_effect(output, replayed, True))
+                    except asyncio.CancelledError:
+                        pass
+                raise
+            if on_effect is not None:
+                await await_durable(on_effect(output, replayed, False))
+            # This phase is explicitly outside effect reservation. Verification
+            # failure/cancel cannot turn the completed patch into a failed write.
+            if tool.after_effect is not None:
+                if tool.after_effect_capability is not None and tool.after_effect_capability not in self.permissions.allowed_capabilities:
+                    applied = json.loads(output)
+                    applied["verification"] = {"status": "not_run_command_grant_missing", "success": None, "results": []}
+                    return json.dumps(applied, ensure_ascii=False, separators=(",", ":"))
+                return await tool.after_effect(arguments, output, run_id, tool_call_id, replayed)
+            return output
         if tool.async_handler is None:
-            import asyncio
-
-            return await asyncio.to_thread(self.execute, name, arguments)
+            return await await_durable(asyncio.to_thread(self.execute, name, arguments))
         decision = self.permissions.check(tool.capability, name, arguments)
         if not decision.allowed:
             raise PermissionError(decision.reason)
@@ -291,9 +335,13 @@ def patch_tool(
     workspace: Path,
     *,
     verification: VerificationPipeline | None = None,
+    resource_limits: ResourceLimits | None = None,
+    require_verification_review: bool = False,
 ) -> Tool:
     """Create one reviewable multi-file patch and apply only its prepared snapshot."""
 
+    if type(require_verification_review) is not bool:
+        raise ValueError("verification_review_policy_invalid")
     service = PatchService(workspace)
 
     def prepare(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -302,7 +350,7 @@ def patch_tool(
         proposal = service.prepare(arguments.get("changes"))
         return {"changes": arguments["changes"], "_doppel_patch": proposal.as_dict()}
 
-    def apply(arguments: dict[str, Any]) -> str:
+    def reviewed(arguments: dict[str, Any]) -> PatchProposal:
         if set(arguments) != {"changes", "_doppel_patch"}:
             raise ValueError("propose_patch must be prepared before execution")
         proposal = PatchProposal.from_dict(arguments["_doppel_patch"])
@@ -310,18 +358,69 @@ def patch_tool(
         prepared = [(change.path, change.content) for change in proposal.changes]
         if visible != prepared:
             raise ValueError("reviewed patch differs from execution arguments")
+        if any(change.content is None or change.target_mode is not None for change in proposal.changes):
+            raise ValueError("model patch tool cannot execute inverse changes")
+        return proposal
+
+    def apply(arguments: dict[str, Any]) -> str:
+        proposal = reviewed(arguments)
         result = service.apply(proposal)
         return json.dumps(
-            {"patch_id": result.patch_id, "changed_paths": result.changed_paths},
+            {"patch_id": result.patch_id, "changed_paths": result.changed_paths, "unified_diff": proposal.unified_diff},
             ensure_ascii=False,
             separators=(",", ":"),
         )
 
-    async def apply_and_verify(arguments: dict[str, Any], run_id: str, tool_call_id: str) -> str:
-        applied = json.loads(apply(arguments))
+    def effect(arguments: dict[str, Any], run_id: str, tool_call_id: str,
+               ledger: ToolExecutionLedger | None) -> tuple[str, bool]:
+        if (not isinstance(run_id, str) or not run_id or len(run_id) > 128 or "\x00" in run_id
+                or not isinstance(tool_call_id, str) or not tool_call_id or len(tool_call_id) > 256 or "\x00" in tool_call_id):
+            raise ValueError("patch_execution_scope_unavailable")
+        proposal = reviewed(arguments)
+        if ledger is None:
+            result = service.apply(proposal)
+            output = json.dumps({"patch_id": result.patch_id, "changed_paths": result.changed_paths,
+                                 "unified_diff": proposal.unified_diff,
+                                 "patch_receipt": result.receipt.as_dict(include_preimage=False)}, ensure_ascii=False)
+            replayed = False
+        else:
+            output, replayed = ledger.execute_patch_once(run_id, tool_call_id, arguments, service, proposal)
+        applied = json.loads(output)
+        applied["receipt_source"] = {"run_id": run_id, "tool_call_id": tool_call_id,
+                                     "durability": "sealed_tool_ledger" if ledger is not None else "ephemeral"}
+        applied["effect_replayed"] = replayed
+        if require_verification_review:
+            # Add only to returned/event metadata AFTER the exact patch result
+            # is sealed. Never mutate the patch ledger's stored result shape or
+            # treat its approval/grants as a reviewed command plan. No config
+            # lookup, pending review creation, launch or claimed test success.
+            applied["verification"] = {
+                "status": "not_run_separate_review_required", "success": None, "results": [],
+                "operation_kind": "manual_verification",
+                "source": {**applied["receipt_source"], "patch_id": applied["patch_id"]},
+                "target": "current_workspace_not_original_patch_snapshot",
+            }
+        return json.dumps(applied, ensure_ascii=False, separators=(",", ":")), replayed
+
+    async def after_effect(_arguments: dict[str, Any], output: str, run_id: str, _tool_call_id: str, replayed: bool) -> str:
+        if require_verification_review:
+            return output
+        applied = json.loads(output)
         if verification is not None and verification.available:
-            report = await verification.run(run_id=run_id)
-            applied["verification"] = report.as_dict()
+            if replayed:
+                applied["verification"] = {"status": "not_repeated_for_patch_replay", "success": None, "results": []}
+            else:
+                try:
+                    if resource_limits is not None:
+                        async with resource_limits.command():
+                            report = await verification.run(run_id=run_id)
+                    else:
+                        report = await verification.run(run_id=run_id)
+                except Exception as exc:
+                    applied["verification"] = {"status": "failed", "success": False, "results": [],
+                                               "error": f"{type(exc).__name__}: verification failed"}
+                else:
+                    applied["verification"] = {"status": "completed", **report.as_dict()}
         return json.dumps(applied, ensure_ascii=False, separators=(",", ":"))
 
     def edit(arguments: dict[str, Any], previous: dict[str, Any]) -> dict[str, Any]:
@@ -331,8 +430,8 @@ def patch_tool(
             raise ValueError("edited patch is missing its reviewed base")
         original = PatchProposal.from_dict(previous["_doppel_patch"])
         refreshed = service.prepare(arguments.get("changes"))
-        original_bases = {change.path: change.base_hash for change in original.changes}
-        refreshed_bases = {change.path: change.base_hash for change in refreshed.changes}
+        original_bases = {change.path: (change.base_hash, change.base_mode) for change in original.changes}
+        refreshed_bases = {change.path: (change.base_hash, change.base_mode) for change in refreshed.changes}
         if original_bases != refreshed_bases:
             raise ValueError("edited patch paths or workspace base changed; request a new proposal")
         return {"changes": arguments["changes"], "_doppel_patch": refreshed.as_dict()}
@@ -365,11 +464,12 @@ def patch_tool(
         {},
         apply,
         input_schema=schema,
-        async_handler=(
-            apply_and_verify if verification is not None and verification.available else None
-        ),
         approval_preparer=prepare,
         approval_editor=edit,
+        effect_handler=effect,
+        after_effect=after_effect,
+        after_effect_capability=("command_execute" if not require_verification_review
+                                 and verification is not None and verification.available else None),
     )
 
 
@@ -379,7 +479,7 @@ def run_command_tool(
     *,
     supervisor: ProcessSupervisor | None = None,
 ) -> Tool:
-    process_supervisor = supervisor or ProcessSupervisor()
+    process_supervisor = supervisor if supervisor is not None else ProcessSupervisor()
 
     def run(arguments: dict[str, Any]) -> str:
         return asyncio.run(arun(arguments, "standalone", uuid4().hex))

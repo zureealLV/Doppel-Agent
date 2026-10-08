@@ -105,6 +105,11 @@ def test_setup_cancellation_does_not_leave_durable_running(tmp_path, monkeypatch
             # drained, so no background write can restore "running" afterwards.
             terminal = await service.get(run_id)
             assert terminal["status"] == "cancelled", terminal
+            if terminal.get("conversation_id"):
+                projected = service.conversations.get(terminal["conversation_id"])
+                assert [m["role"] for m in projected["messages"]] == ["user"]
+                assert projected["messages"][0]["status"] == "cancelled"
+                assert projected["active_run_id"] is None
             events = await service.list_events(run_id)
             assert sum(event["type"] == "run.cancelled" for event in events) == 1
             assert not await service.cancel(run_id)
@@ -147,6 +152,8 @@ def test_scheduler_cancel_before_operation_entry_still_runs_service_cleanup(tmp_
             await wait_for_cancelled(service.scheduler, record["run_id"])
             assert await asyncio.gather(*cancellation_tasks) == ([True] if action == "cancel" else [None])
             assert (await service.get(record["run_id"]))["status"] == "cancelled"
+            if record.get("conversation_id"):
+                assert [m["role"] for m in service.conversations.get(record["conversation_id"])["messages"]] == ["user"]
             events = await service.list_events(record["run_id"])
             assert sum(event["type"] == "run.cancelled" for event in events) == 1
         finally:

@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import monotonic
+from types import MappingProxyType
 from typing import Any, Sequence
 
-from .process_supervisor import ProcessSupervisor
-
-
-@dataclass(frozen=True)
-class VerificationCommand:
-    name: str
-    argv: tuple[str, ...]
-    timeout_seconds: float
+from .process_supervisor import ProcessOutputLimitError, ProcessSupervisor, ProcessSupervisionError
+from .verification_config import VerificationCommand, VerificationPlan, capture
+from ..owned_async import await_durable
 
 
 @dataclass(frozen=True)
@@ -39,9 +35,13 @@ class VerificationResult:
 class VerificationReport:
     success: bool
     results: tuple[VerificationResult, ...]
+    review: VerificationPlan | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"success": self.success, "results": [item.as_dict() for item in self.results]}
+        result = {"success": self.success, "results": [item.as_dict() for item in self.results]}
+        if self.review is not None:
+            result["review"] = self.review.as_dict()
+        return result
 
 
 class VerificationPipeline:
@@ -71,51 +71,39 @@ class VerificationPipeline:
     ) -> None:
         self.workspace = workspace.resolve(strict=True)
         self.config_path = config_path or self.workspace / ".doppel" / "verification.json"
-        self.supervisor = supervisor or ProcessSupervisor()
-        self.commands, self.max_output_bytes, self.stop_on_failure = self._load()
+        if not self.config_path.is_absolute():
+            self.config_path = self.workspace / self.config_path
+        self.supervisor = supervisor if supervisor is not None else ProcessSupervisor()
+        self._config = capture(self.workspace, self.config_path)
+        self.commands = MappingProxyType({command.name: command for command in self._config.commands})
+        self.max_output_bytes, self.stop_on_failure = self._config.max_output_bytes, self._config.stop_on_failure
 
     def _load(self) -> tuple[dict[str, VerificationCommand], int, bool]:
-        if not self.config_path.is_file():
-            return {}, 64 * 1024, True
-        data = json.loads(self.config_path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or set(data) - {
-            "commands",
-            "max_output_bytes",
-            "stop_on_failure",
-        }:
-            raise ValueError("verification config contains unsupported fields")
-        raw_commands = data.get("commands")
-        if not isinstance(raw_commands, list):
-            raise ValueError("verification commands must be a list")
-        commands: dict[str, VerificationCommand] = {}
-        for raw in raw_commands:
-            if not isinstance(raw, dict) or set(raw) != {"name", "argv", "timeout_seconds"}:
-                raise ValueError("each verification command requires name, argv and timeout_seconds")
-            name, argv, timeout = raw["name"], raw["argv"], raw["timeout_seconds"]
-            if (
-                not isinstance(name, str)
-                or not name
-                or name in commands
-                or not isinstance(argv, list)
-                or not argv
-                or not all(isinstance(item, str) and item and "\x00" not in item for item in argv)
-                or not isinstance(timeout, (int, float))
-                or isinstance(timeout, bool)
-                or not 0 < timeout <= 600
-            ):
-                raise ValueError("invalid verification command")
-            commands[name] = VerificationCommand(name, tuple(argv), float(timeout))
-        output_limit = data.get("max_output_bytes", 64 * 1024)
-        if (
-            not isinstance(output_limit, int)
-            or isinstance(output_limit, bool)
-            or not 1 <= output_limit <= 1024 * 1024
-        ):
-            raise ValueError("max_output_bytes must be between 1 and 1048576")
-        stop = data.get("stop_on_failure", True)
-        if not isinstance(stop, bool):
-            raise ValueError("stop_on_failure must be boolean")
-        return commands, output_limit, stop
+        config = capture(self.workspace, self.config_path)
+        return {command.name: command for command in config.commands}, config.max_output_bytes, config.stop_on_failure
+
+    def prepare(self, names: Sequence[str] | None = None) -> VerificationPlan:
+        """Preview only; neither command grant nor operator approval is inferred."""
+        if capture(self.workspace, self.config_path) != self._config:
+            raise ValueError("verification_review_stale")
+        return self._config.select(names)
+
+    def _assert_review(self, plan: VerificationPlan) -> None:
+        if type(plan) is not VerificationPlan:
+            raise ValueError("verification_review_stale")
+        fresh = capture(self.workspace, self.config_path)
+        if fresh != self._config or plan != fresh.select(plan.names):
+            raise ValueError("verification_review_stale")
+
+    async def run_reviewed(self, plan: VerificationPlan, *, run_id: str, command_grant: bool,
+                           on_result: Callable[[VerificationResult], Awaitable[None]] | None = None,
+                           on_start: Callable[[VerificationCommand], Awaitable[None]] | None = None) -> VerificationReport:
+        # The owned service must separately consume exact durable approval; this
+        # foundation's boolean is NOT that operator review/owner/lease barrier.
+        if command_grant is not True:
+            raise PermissionError("verification_command_grant_required")
+        self._assert_review(plan)
+        return await self._run_plan(plan, run_id=run_id, reviewed=True, on_result=on_result, on_start=on_start)
 
     @property
     def available(self) -> tuple[str, ...]:
@@ -123,9 +111,8 @@ class VerificationPipeline:
 
     @classmethod
     def _safe_env(cls) -> dict[str, str]:
-        env = {
-            name: value for name, value in os.environ.items() if name.upper() in cls.SAFE_ENV_NAMES
-        }
+        # Named lookups only, never enumerate unrelated secret environment values.
+        env = {name: value for name in cls.SAFE_ENV_NAMES if (value := os.environ.get(name)) is not None}
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"
         return env
@@ -141,20 +128,45 @@ class VerificationPipeline:
             raise ValueError("no verification commands selected or configured")
         if len(selected) != len(set(selected)) or any(name not in self.commands for name in selected):
             raise PermissionError("verification command is not in the project allowlist")
+        # Compatibility/direct caller path is NOT operator-reviewed evidence.
+        plan = self.prepare(selected)
+        return await self._run_plan(plan, run_id=run_id, reviewed=False)
+
+    async def _run_plan(self, plan: VerificationPlan, *, run_id: str, reviewed: bool,
+                        on_result: Callable[[VerificationResult], Awaitable[None]] | None = None,
+                        on_start: Callable[[VerificationCommand], Awaitable[None]] | None = None) -> VerificationReport:
+        if not isinstance(run_id, str) or not 1 <= len(run_id) <= 128 or "\x00" in run_id:
+            raise ValueError("verification_run_scope_unavailable")
         results: list[VerificationResult] = []
-        for name in selected:
-            command = self.commands[name]
+        for command in plan.commands:
+            self._assert_review(plan)
+            if on_start is not None:
+                await await_durable(on_start(command))
+                self._assert_review(plan)  # Config may change during durable intent IO.
+            name = command.name
             started = monotonic()
             try:
-                process = await self.supervisor.run(
-                    command.argv,
-                    cwd=self.workspace,
-                    run_id=run_id,
-                    timeout_seconds=command.timeout_seconds,
-                    env=self._safe_env(),
-                    output_limit=max(1, self.max_output_bytes // 2),
-                )
-            except TimeoutError as exc:
+                options = {"cwd": self.workspace, "run_id": run_id, "timeout_seconds": command.timeout_seconds,
+                           "env": self._safe_env(), "output_limit": max(1, plan.config.max_output_bytes // 2)}
+                if reviewed:
+                    # Original supervisor, not a parallel command executor.
+                    # Binary pipe caps fail on overflow, never text-spool/truncate.
+                    process = await self.supervisor.run_binary(command.argv, **options, require_tree_ownership=True)
+                    if len(process.stdout) + len(process.stderr) > plan.config.max_output_bytes:
+                        raise ProcessOutputLimitError("verification total output budget exceeded")
+                    # Explicit presentation conversion only, not lossless protocol
+                    # evidence or an assertion that invalid bytes were UTF-8.
+                    stdout = process.stdout.decode("utf-8", errors="replace")
+                    stderr = process.stderr.decode("utf-8", errors="replace")
+                else:
+                    process = await self.supervisor.run(command.argv, **options)
+                    stdout, stderr = process.stdout, process.stderr
+            except (TimeoutError, ProcessOutputLimitError, ProcessSupervisionError) as exc:
+                # Cleanup failure is a separate exception and MUST remain unknown;
+                # these are only settled command-attempt/admission outcomes.
+                error = ("verification_timeout" if isinstance(exc, TimeoutError) else
+                         "verification_output_limit" if isinstance(exc, ProcessOutputLimitError) else
+                         "verification_supervision_unavailable")
                 result = VerificationResult(
                     name,
                     command.argv,
@@ -163,8 +175,8 @@ class VerificationPipeline:
                     "",
                     "",
                     round((monotonic() - started) * 1000),
-                    "terminated",
-                    str(exc),
+                    "unavailable" if isinstance(exc, ProcessSupervisionError) else "terminated",
+                    error,
                 )
             else:
                 result = VerificationResult(
@@ -172,12 +184,16 @@ class VerificationPipeline:
                     command.argv,
                     process.exit_code,
                     process.exit_code == 0,
-                    process.stdout,
-                    process.stderr,
+                    stdout,
+                    stderr,
                     round((monotonic() - started) * 1000),
                     process.supervision,
                 )
             results.append(result)
-            if not result.success and self.stop_on_failure:
+            if on_result is not None:
+                # C2 seals each actual result independently before a later
+                # config conflict/cancel/failure. Never claim persistence here.
+                await await_durable(on_result(result))
+            if not result.success and plan.config.stop_on_failure:
                 break
-        return VerificationReport(all(item.success for item in results), tuple(results))
+        return VerificationReport(all(item.success for item in results), tuple(results), plan if reviewed else None)

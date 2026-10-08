@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from uuid import uuid4
 
+from ..events import EventSink as EventSink, NullEventSink as NullEventSink
 from ..provider import Message
 
 
@@ -15,6 +16,7 @@ class RunRequest:
     run_id: str = field(default_factory=lambda: uuid4().hex)
     thread_id: str = field(default_factory=lambda: uuid4().hex)
     history: tuple[Message, ...] = ()
+    context_text: str = ""
 
     def __post_init__(self) -> None:
         if not self.prompt.strip() or len(self.prompt) > 100_000:
@@ -23,6 +25,13 @@ class RunRequest:
             raise ValueError("run_id and thread_id are required")
         if any(character not in "0123456789abcdef" for character in self.run_id):
             raise ValueError("run_id must be lowercase hexadecimal")
+        _ = self.input_prompt  # Validate separate context without lowering the raw prompt limit.
+
+    @property
+    def input_prompt(self) -> str:
+        from ..context.input import compose_prompt
+
+        return compose_prompt(self.prompt, self.context_text)
 
 
 @dataclass(frozen=True)
@@ -40,15 +49,6 @@ class RuntimeResult:
     answer: str
     runtime: str
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-class EventSink(Protocol):
-    async def emit(self, kind: str, **payload: Any) -> None: ...
-
-
-class NullEventSink:
-    async def emit(self, kind: str, **payload: Any) -> None:
-        return None
 
 
 class AgentRuntime(Protocol):

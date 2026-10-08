@@ -15,7 +15,8 @@ from bench.runtime_freeze import canonical_json, freeze_json, thaw_json
 
 
 SOURCE_PATHS = ("src", "bench", "tests", "spikes", "scripts", "frontend/src", "frontend/tests",
-                "frontend/package.json", "frontend/package-lock.json", "pyproject.toml", "uv.lock")
+                "frontend/package.json", "frontend/package-lock.json", "frontend/vite.config.ts",
+                "frontend/tsconfig.json", "pyproject.toml", "uv.lock")
 OFFLINE_BUDGET = freeze_json({
     "external_model_calls_allowed": False, "max_cost_usd": 0, "repeat_ids": [1],
     "standard_service_deadline_seconds": 60, "cancel_service_deadline_seconds": 10,

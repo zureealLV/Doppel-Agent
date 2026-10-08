@@ -32,11 +32,11 @@ class ApprovalSideEffectTrace:
     def __enter__(self):
         original_apply, original_run = PatchService.apply, ProcessSupervisor.run
 
-        def apply(service, proposal):
+        def apply(service, proposal, *, record_intent=None):
             if service.workspace.root != self.workspace:
-                return original_apply(service, proposal)
+                return original_apply(service, proposal, record_intent=record_intent)
             self.trace["patch_apply_count"] += 1
-            result = original_apply(service, proposal)
+            result = original_apply(service, proposal, record_intent=record_intent)
             self.trace["applied_patches"].append({"patch_id": result.patch_id,
                                                   "snapshot": workspace_snapshot(self.workspace)})
             return result

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Sequence
 from hashlib import sha256
+import json
 
 from bench.runtime_fixtures import TaskFixture, fixture_path
 
@@ -126,6 +127,26 @@ def validate_tdd_evidence(fixture: TaskFixture, workspace: Path, evidence: dict,
         and green(verifications[1][0]) and verifications[1][0].get("success") is True
         and all(values[0].get("argv_sha256") == argv_sha256 for values in verifications)
     )
+    runs, reviews = evidence.get("source_runs", []), evidence.get("manual_verification_reviews", [])
+    separate = len(runs) == len(reviews) == 2 and len({run.get("run_id") for run in runs}) == 2
+    if separate:
+        for row, run, review in zip((rows[1], rows[3]), runs, reviews, strict=True):
+            steps, marker = review.get("steps", []), row.get("verification_marker", {})
+            actual = steps[0].get("result") if len(steps) == 1 else None
+            expected_source = {"run_id": run.get("run_id"), "tool_call_id": row.get("tool_call_id"), "patch_id": row.get("patch_id")}
+            separate &= (run.get("status") == "completed" and run.get("lease_active") is False
+                and review.get("operation_kind") == "manual_verification" and review.get("status") == "completed"
+                and review.get("target") == "current_workspace_not_original_patch_snapshot"
+                and review.get("source") == expected_source
+                and marker.get("source") == {**expected_source, "durability": "sealed_tool_ledger"}
+                and marker.get("status") == "not_run_separate_review_required"
+                and marker.get("success") is None and marker.get("results") == []
+                and len(steps) == 1 and steps[0].get("status") == "finished" and isinstance(actual, dict))
+            if isinstance(actual, dict):
+                values = row.get("verification", [])
+                separate &= len(values) == 1 and values[0].get("result_sha256") == sha256(
+                    json.dumps(actual, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    checks["separate_original_manual_verification"] = separate
     approvals = evidence.get("approvals", [])
     checks["approved_without_early_effects"] = [row.get("tool") for row in approvals] == expected_tools[1:] and all(
         row.get("bounds_pass") is True and row.get("no_unapproved_effects") is True for row in approvals
@@ -189,7 +210,9 @@ def validate_patch_evidence(fixture: TaskFixture, workspace: Path, evidence: dic
     checks["reviewed_identity_executed"] = isinstance(approval.get("patch_id"), str) and rows[-1].get("patch_id") == approval["patch_id"]
     checks["edit_bounds"] = set(current) == set(base) and all(current.get(p) == base[p] for p in base if p not in required)
     checks["all_required_files_changed"] = all(current.get(p) not in {None, base[p]} for p in required)
-    checks["no_native_verification_grant"] = rows[-1].get("native_verification_present") is False and not evidence.get("permissions", {}).get("command_execute")
+    checks["no_native_verification_grant"] = (rows[-1].get("native_verification_present") is False
+        and rows[-1].get("verification_separate_review_required") is (boundary == "run_service")
+        and not evidence.get("permissions", {}).get("command_execute"))
 
     def green(row, minimum):
         return row.get("exit_code") == 0 and row.get("tests_run", 0) >= minimum and row.get("errors") == row.get("failures") == 0

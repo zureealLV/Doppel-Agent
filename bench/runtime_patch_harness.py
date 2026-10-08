@@ -42,8 +42,18 @@ class ScriptedPatchProvider:
                     output = json.loads(message.content[message.content.rindex('{"patch_id"'):])
                 except (ValueError, TypeError):
                     output = {}
+                verification = output.get("verification")
+                separate = isinstance(verification, dict) and (
+                    verification.get("status") == "not_run_separate_review_required"
+                    and verification.get("success") is None and verification.get("results") == []
+                    and verification.get("operation_kind") == "manual_verification"
+                    and verification.get("target") == "current_workspace_not_original_patch_snapshot"
+                    and verification.get("source", {}).get("tool_call_id") == call.id
+                    and verification.get("source", {}).get("patch_id") == output.get("patch_id")
+                )
                 row.update(requested_paths=list(self.changes), changed_paths=output.get("changed_paths", []),
-                           patch_id=output.get("patch_id"), native_verification_present="verification" in output)
+                           patch_id=output.get("patch_id"), native_verification_present="verification" in output and not separate,
+                           verification_separate_review_required=separate)
             self.receipts.append(row)
         self.turn += 1
         if self.turn <= len(self.paths):

@@ -9,22 +9,89 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
+from threading import Event
 from typing import Any
 from uuid import uuid4
 
 from .mcp import MCPClientManager, MCPToolCatalog, MCPToolExecutor, load_mcp_config
+from .mcp.client_manager import MCPAdmissionError, MCPCleanupError, MCPInvocationError, MCPPublicationError
 from .permissions import PermissionManager
 from .tools import Tool
 
 
 class MCPBridge:
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path, *, failure: Callable[[], None] | None = None,
+                 execution_failure: Callable[[], None] | None = None,
+                 publication_failure: Callable[[], None] | None = None):
         self.workspace = workspace.resolve(strict=True)
         self.config = load_mcp_config(self.workspace)
         self.config_path = self.config.source
         self.servers = {name: asdict(server) for name, server in self.config.servers.items()}
+        self._failure = failure
+        self._cleanup_failed = Event()
+        self._execution_failure = execution_failure
+        self._execution_failed = Event()
+        self._publication_failure = publication_failure
+        self._publication_failed = Event()
+        self._manager: MCPClientManager | None = None
+
+    @property
+    def cleanup_failed(self) -> bool:
+        return self._cleanup_failed.is_set()
+
+    @property
+    def execution_failed(self) -> bool:
+        return self._execution_failed.is_set()
+
+    @property
+    def publication_failed(self) -> bool:
+        return self._publication_failed.is_set()
+
+    def _mark_publication_failed(self) -> None:
+        if self._publication_failed.is_set():
+            return
+        self._publication_failed.set()
+        if self._publication_failure is not None:
+            try:
+                self._publication_failure()  # Same original owner; no remote/SDK fault fabrication.
+            except BaseException:
+                pass
+
+    def _check_faults(self) -> None:
+        if self.cleanup_failed:
+            raise MCPCleanupError()
+        if self.execution_failed:
+            raise MCPInvocationError()
+        if self.publication_failed:
+            raise MCPPublicationError()
+
+    def _mark_execution_failed(self) -> None:
+        if self._execution_failed.is_set():
+            return
+        self._execution_failed.set()
+        if self._execution_failure is not None:
+            try:
+                self._execution_failure()  # Same original owner fault, not false SDK cleanup.
+            except BaseException:
+                pass
+
+    def _mark_cleanup_failed(self) -> None:
+        if self._cleanup_failed.is_set():
+            return
+        self._cleanup_failed.set()
+        if self._failure is not None:
+            try:
+                self._failure()  # Same original native owner hook, not another IO.
+            except BaseException:
+                pass
+
+    @staticmethod
+    def _known_closed(manager) -> bool:
+        task = getattr(manager, '_close_task', None)
+        return bool(task is not None and task.done() and not task.cancelled() and task.exception() is None)
 
     def approval_context(self, arguments: dict[str, Any]) -> dict[str, Any]:
         context = dict(arguments)
@@ -44,11 +111,15 @@ class MCPBridge:
         tool: str | None,
         arguments: dict[str, Any] | None,
     ) -> str:
+        self._check_faults()
         if name not in self.config.servers:
             raise ValueError(f"unknown MCP server: {name}")
-        manager = MCPClientManager(self.config)
-        catalog = MCPToolCatalog(manager)
+        manager = MCPClientManager(self.config, failure=self._mark_cleanup_failed,
+                                   execution_failure=self._mark_execution_failed,
+                                   publication_failure=self._mark_publication_failed)
+        self._manager = manager  # SAME original lifetime retained on failed close.
         try:
+            catalog = MCPToolCatalog(manager)
             descriptors = await catalog.list_server(name)
             if tool is None:
                 return json.dumps(
@@ -78,23 +149,46 @@ class MCPBridge:
                 run_id=uuid4().hex,
                 tool_call_id=uuid4().hex,
             )
-            blocks = result.application_view["content"]
-            content = [
-                block.get("text")
-                if block.get("type") == "text"
-                else f"[{block.get('type', 'content')}]"
-                for block in blocks
-            ]
-            return json.dumps(
-                {
-                    "is_error": not result.success,
-                    "content": content,
-                    "structured_content": result.application_view.get("structured_content"),
-                },
-                ensure_ascii=False,
-            )
+            try:
+                blocks = result.application_view["content"]
+                content = [
+                    block.get("text")
+                    if block.get("type") == "text"
+                    else f"[{block.get('type', 'content')}]"
+                    for block in blocks
+                ]
+                output = json.dumps(
+                    {
+                        "is_error": not result.success,
+                        "content": content,
+                        "structured_content": result.application_view.get("structured_content"),
+                    },
+                    ensure_ascii=False, allow_nan=False,
+                )
+                if len(output.encode('utf-8')) > 64 * 1024:
+                    raise MCPPublicationError()
+                return output
+            except BaseException:
+                # Typed reply exists but Legacy delivery failed. Mark BEFORE
+                # original close, retaining SAME manager even if SDK exit succeeds.
+                manager._mark_publication_failed()
+                raise MCPPublicationError() from None
         finally:
-            await manager.close()
+            try:
+                await manager.close()
+            except asyncio.CancelledError:
+                if self._known_closed(manager) and not self.cleanup_failed:
+                    self._check_faults()  # Retain SAME closed unknown manager.
+                    self._manager = None
+                    raise  # Exact known SDK exit, preserve caller cancellation.
+                self._mark_cleanup_failed()
+                raise MCPCleanupError() from None
+            except BaseException:
+                self._mark_cleanup_failed()
+                raise MCPCleanupError() from None
+            else:
+                self._check_faults()
+                self._manager = None
 
     def _run(
         self,
@@ -102,8 +196,11 @@ class MCPBridge:
         tool: str | None = None,
         arguments: dict[str, Any] | None = None,
     ) -> str:
+        self._check_faults()  # Before original coroutine/loop/manager entry.
         try:
             output = asyncio.run(asyncio.wait_for(self._invoke(name, tool, arguments), timeout=45))
+        except (MCPCleanupError, MCPAdmissionError, MCPInvocationError, MCPPublicationError):
+            raise  # Cleanup/refused entry must NOT become ordinary Tool error.
         except ValueError:
             raise
         except Exception as exc:

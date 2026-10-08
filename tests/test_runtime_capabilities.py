@@ -125,13 +125,13 @@ def test_production_factory_and_service_read_and_tool_surface(tmp_path, boundary
             assert "fallback_runtime" not in result.metadata
             assert provider.calls == 2
             assert "read_file" in provider.names
-            patch_expected = granted and (mode == "deep" or (mode == "graph" and boundary == "run_service"))
+            patch_expected = granted and (mode == "deep" or boundary == "run_service")
             assert ("propose_patch" in provider.names) == patch_expected
             command_expected = mode == "legacy" or (granted and mode == "graph" and boundary == "run_service")
             assert ("run_command" in provider.names) == command_expected
             assert "execute" not in provider.names
             assert not any(name.startswith("mcp__") for name in provider.names)
-            assert runtime.supports_resume == (mode != "legacy")
+            assert runtime.supports_resume == (mode != "legacy" or boundary == "run_service")
             # Graph cancellation belongs to its service scheduler, never its factory.
             assert runtime.supports_cancel == (mode == "deep")
         finally:
@@ -314,7 +314,7 @@ def test_reconstructed_direct_deep_cannot_resume_reviewed_patch_without_external
         (tmp_path / "target.txt").write_text("external")
         rebuilt = create_runtime("deep", tmp_path, provider, core_options={"allow_write": True})
         try:
-            with pytest.raises(ValueError, match="prepared before execution"):
+            with pytest.raises(ValueError, match="patch_reviewed_run_scope_unavailable"):
                 await rebuilt.resume(ResumeCommand(request.run_id, request.thread_id, {"action": "approve"}))
             assert (tmp_path / "target.txt").read_text() == "external"
             report = RuntimeMatrix.load(MANIFEST).capability_document(CONTRACT, boundary="direct_factory")
@@ -326,8 +326,9 @@ def test_reconstructed_direct_deep_cannot_resume_reviewed_patch_without_external
 
 
 @pytest.mark.parametrize("mode", ["graph", "deep"])
-def test_service_reconstruction_preserves_reviewed_patch_and_runs_verification_once(tmp_path, mode):
+def test_service_reconstruction_preserves_reviewed_patch_and_runs_explicit_verification_once(tmp_path, mode):
     import sys
+    from uuid import uuid4
 
     from doppel_agent.provider import ModelTurn, ToolCall
     from doppel_agent.runtime.service import RunService
@@ -389,8 +390,19 @@ def test_service_reconstruction_preserves_reviewed_patch_and_runs_verification_o
             completed = await service.get(run_id)
             assert completed["status"] == "completed", completed
             assert "fallback_runtime" not in completed["metadata"]
-            assert provider.outcome["verification"]["success"] is True
+            assert provider.outcome["verification"]["status"] == "not_run_separate_review_required"
+            assert provider.outcome["verification"]["success"] is None
+            assert not (tmp_path / "verification-count.txt").exists()
+            view = await service.prepare_verification(run_id, "patch", provider.outcome["patch_id"],
+                operation_id=uuid4().hex, names=["verify"], command_execute=True, workspace_write=True)
+            assert view["status"] == "pending" and not (tmp_path / "verification-count.txt").exists()
+            verified = await service.decide_verification(run_id, view["review_id"], view["plan"]["plan_id"],
+                action="approve", command_execute=True, workspace_write=True)
+            assert verified["status"] == "completed" and verified["success"] is True
             assert (tmp_path / "verification-count.txt").read_text() == "1"
+            replay = await service.decide_verification(run_id, view["review_id"], view["plan"]["plan_id"],
+                action="approve", command_execute=True, workspace_write=True)
+            assert replay["decision_replayed"] and await service.get(run_id) == completed
             with pytest.raises(ValueError, match="waiting for an interrupt"):
                 await service.resume(run_id, interrupt_id, {"action": "approve"})
             assert (tmp_path / "verification-count.txt").read_text() == "1"

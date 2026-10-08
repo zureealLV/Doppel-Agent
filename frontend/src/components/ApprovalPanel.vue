@@ -10,10 +10,24 @@ const editing = ref(false);
 const editValue = ref("");
 const parseError = ref("");
 const toolCalls = computed(() => props.interrupt.value.tool_calls ?? props.interrupt.value.action_requests ?? []);
+const editableToolCalls = computed(() => toolCalls.value.map(call => {
+  if (call.name !== "propose_patch") return call;
+  const draft = { ...call };
+  for (const dialect of ["args", "arguments"]) {
+    const value = call[dialect];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const argumentsDraft = { ...value as Record<string, unknown> };
+      delete argumentsDraft._doppel_patch;
+      draft[dialect] = argumentsDraft;
+    }
+  }
+  return draft;
+}));
 
 watch(() => props.interrupt.id, () => {
   editing.value = false;
-  editValue.value = JSON.stringify(toolCalls.value, null, 2);
+  parseError.value = "";
+  editValue.value = JSON.stringify(editableToolCalls.value, null, 2);
 }, { immediate: true });
 
 function submitEdit(): void {

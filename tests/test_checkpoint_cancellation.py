@@ -1,4 +1,8 @@
-"""A cancelled checkpoint acquisition must not orphan a SQLite worker handle."""
+"""A cancelled checkpoint acquisition must not orphan a SQLite worker handle.
+
+2026-10-07 source-first stronger opaque failure definitions UNRUN; historical
+executions do not validate the new checkpoint lifetime/source bindings.
+"""
 
 import asyncio
 import sqlite3
@@ -89,6 +93,9 @@ class GatedConnection:
     async def execute(self, _sql):
         if self.fail_setup:
             raise sqlite3.OperationalError("fixture setup failed")
+        class Cursor:
+            async def close(self): pass
+        return Cursor()  # Match original SDK's returned setup-cursor identity.
 
     async def commit(self):
         pass
@@ -131,16 +138,20 @@ def test_setup_failure_still_closes_checkpoint_connection(tmp_path, monkeypatch)
         connection.fail_setup = True
         connection.release_close.set()
         monkeypatch.setattr(checkpoints.aiosqlite, "connect", lambda _path: connection)
-        with pytest.raises(sqlite3.OperationalError, match="setup failed"):
+        # Unreturned original execute now retains its source, not an invented
+        # no-cursor claim. Original connection still independently closes once.
+        with pytest.raises(checkpoints.CheckpointCleanupError) as error:
             async with sqlite_checkpointer(tmp_path / "setup.sqlite3"):
                 pytest.fail("failed setup entered checkpoint body")
         assert connection.closed
+        assert error.value.source.proxy is connection and error.value.source.close_returned
+        assert error.value.source.cleanup_uncertain and error.value.source.setup_cursors[0]['execute_attempted']
 
     asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
-def test_open_failure_is_observed_and_preserves_cancellation(tmp_path, monkeypatch, cancelled):
+def test_opaque_open_failure_is_joined_and_retained_even_after_cancellation(tmp_path, monkeypatch, cancelled):
     async def scenario():
         opening = asyncio.Event()
         release = asyncio.Event()
@@ -162,9 +173,14 @@ def test_open_failure_is_observed_and_preserves_cancellation(tmp_path, monkeypat
             task.cancel()
             await asyncio.sleep(0)
         release.set()
-        error = asyncio.CancelledError if cancelled else sqlite3.OperationalError
-        with pytest.raises(error):
+        # Failure after entering a factory awaitable does not establish zero
+        # allocation, even if its caller cancelled. Keep the original failed
+        # opening task/source rather than replacing uncertainty with cancellation.
+        with pytest.raises(checkpoints.CheckpointCleanupError) as error:
             await asyncio.wait_for(task, timeout=3)
+        source = error.value.source
+        assert source.cleanup_uncertain and source.opening.done() and source.connection is None
+        assert not source.close_attempted and source.closing is None
 
     asyncio.run(scenario())
 
@@ -197,7 +213,7 @@ def test_api_cancel_during_open_releases_handle_before_terminal_state(tmp_path, 
 
     monkeypatch.setattr(aiosqlite.core.sqlite3, "connect", gated_checkpoint_connect)
     try:
-        with TestClient(create_app(tmp_path, provider=SlowProvider())) as client:
+        with TestClient(create_app(tmp_path, provider=SlowProvider()), base_url="http://127.0.0.1") as client:
             run_id = client.post("/api/v1/runs", json={"prompt": "cancel while opening"}).json()["run_id"]
             assert opened.wait(timeout=3)
             assert client.post(f"/api/v1/runs/{run_id}/cancel").json()["cancel_requested"]

@@ -7,10 +7,10 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from ..concurrency.limits import ResourceLimits
+from ..events import EventSink
 from ..persistence.tool_ledger import ToolExecutionLedger
 from ..provider import Provider
 from ..tools import ToolRegistry
-from ..runtime.base import EventSink
 from .nodes import FocusedGraphNodes
 from .routing import route_after_approval, route_after_reason
 from .state import DoppelState
@@ -35,10 +35,19 @@ def build_focused_graph(
         sink=sink,
     )
     builder = StateGraph(DoppelState)
-    builder.add_node("reason", nodes.reason)
-    builder.add_node("prepare_approval", nodes.prepare_approval)
-    builder.add_node("approval", nodes.request_approval)
-    builder.add_node("tools", nodes.execute_tools)
+    def observed(name, operation):
+        async def invoke(state):
+            await nodes.sink.emit("graph.node_started", node=name)
+            result = await operation(state)
+            # An interrupted/cancelled node does not invent a finished event.
+            await nodes.sink.emit("graph.node_finished", node=name)
+            return result
+        return invoke
+
+    builder.add_node("reason", observed("reason", nodes.reason))
+    builder.add_node("prepare_approval", observed("prepare_approval", nodes.prepare_approval))
+    builder.add_node("approval", observed("approval", nodes.request_approval))
+    builder.add_node("tools", observed("tools", nodes.execute_tools))
     builder.add_edge(START, "reason")
     builder.add_conditional_edges(
         "reason",

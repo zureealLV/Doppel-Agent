@@ -1,9 +1,16 @@
 import unittest
 
-from bench.fault_matrix import SCENARIOS, run_fault_matrix
+from bench.fault_matrix import SCENARIOS, _sse_slow_replay, run_fault_matrix
 
 
 class FaultMatrixTests(unittest.IsolatedAsyncioTestCase):
+    async def test_slow_sse_replay_retains_exact_durable_ids_with_shutdown_contract(self):
+        result = await _sse_slow_replay()
+
+        self.assertTrue(result["passed"], result["failure_reason"])
+        self.assertEqual(result["observed"]["streamed_ids"], [2, 3, 4])
+        self.assertEqual(result["observed"]["durable_ids"], [2, 3, 4])
+
     async def test_fixed_matrix_records_denominator_and_raw_outcomes(self):
         report = await run_fault_matrix()
 

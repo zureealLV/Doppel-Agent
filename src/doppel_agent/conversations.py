@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, get_ident
+from typing import Any, NoReturn
 from uuid import uuid4
 
 
@@ -18,27 +21,157 @@ def _valid_id(value: str) -> bool:
     return len(value) == 32 and all(ch in "0123456789abcdef" for ch in value)
 
 
+class ConversationPersistenceError(RuntimeError):
+    """Original Legacy SQLite failure, never private SQL/path/error text."""
+
+    def __init__(self, source: ConversationStore | None = None):
+        super().__init__("legacy_metadata_persistence_unavailable")
+        self.source = source  # Private original source, never an HTTP/report payload.
+
+
+@dataclass
+class _ConversationConnectionLifetime:
+    connection: Any = None
+    owner_thread: int = field(default_factory=get_ident)
+    connect_attempted: bool = False
+    transaction_entered: bool = False
+    transaction_exit_returned: bool = False
+    close_returned: bool = False
+
+
 class ConversationStore:
-    def __init__(self, path: Path):
-        self.path = path.resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, path: Path, *, failure: Callable[[], None] | None = None,
+                 cleanup_failure: Callable[[ConversationStore], None] | None = None):
+        self._failure, self._cleanup_failure = failure, cleanup_failure
+        # Preserve inherited broad metadata quarantine. It does NOT by itself
+        # assert failed physical resource cleanup; that has a separate boundary.
+        self._cleanup_uncertain = Event()
+        self._resource_cleanup_uncertain = Event()
+        self._lifetime_lock = Lock()
+        self._unresolved_connections: dict[int, _ConversationConnectionLifetime] = {}
         self._draft_lock = Lock()
+        try:
+            self.path = path.resolve()
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            self._unavailable()
         self._initialize()
 
+    @property
+    def cleanup_uncertain(self) -> bool:
+        return self._cleanup_uncertain.is_set()
+
+    @property
+    def failed(self) -> bool:
+        return self.cleanup_uncertain
+
+    @property
+    def resource_cleanup_uncertain(self) -> bool:
+        return self._resource_cleanup_uncertain.is_set()
+
+    def _mark_failed(self) -> None:
+        if self.failed:
+            return
+        self._cleanup_uncertain.set()
+        if self._failure is not None:
+            try:
+                self._failure()  # Original manager/native latch; no DB/loop/IO.
+            except BaseException:
+                pass  # Preserve fixed storage error; never raw callback failure.
+
+    def _unavailable(self) -> NoReturn:
+        self._mark_failed()
+        raise ConversationPersistenceError(self) from None
+
+    def _retain_uncertain(self, frame: _ConversationConnectionLifetime) -> None:
+        self._resource_cleanup_uncertain.set()
+        with self._lifetime_lock:
+            self._unresolved_connections[id(frame)] = frame
+        self._mark_failed()
+        if self._cleanup_failure is not None:
+            try:
+                self._cleanup_failure(self)  # SAME original source, even unreturned constructor.
+            except BaseException:
+                pass
+
+    def check_resource_cleanup(self) -> None:
+        if self.resource_cleanup_uncertain:
+            raise ConversationPersistenceError(self)
+
+    def _close_original(self, frame: _ConversationConnectionLifetime) -> None:
+        try:
+            frame.connection.close()
+            frame.close_returned = True
+        except BaseException:
+            self._retain_uncertain(frame)
+            raise ConversationPersistenceError(self) from None
+
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        if self.failed:
+            raise ConversationPersistenceError(self)  # No direct healthy-read reset/reopen.
+        frame = _ConversationConnectionLifetime()
+        frame.connect_attempted = True  # BEFORE original SQLite factory.
+        try:
+            connection = sqlite3.connect(self.path, timeout=10)
+        except BaseException:
+            # Opaque factory allocation may not return an original handle.
+            self._retain_uncertain(frame)
+            raise ConversationPersistenceError(self) from None
+        frame.connection = connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            return connection
+        except BaseException:
+            self._mark_failed()  # BEFORE same original setup close.
+            self._close_original(frame)
+            self._unavailable()
 
     @contextmanager
     def _database(self):
-        connection = self._connect()
+        if self.failed:
+            raise ConversationPersistenceError(self)
+        # Original method boundary is observed BEFORE entering it; _connect's
+        # own frame covers a handle that fails setup before returning here.
+        frame = _ConversationConnectionLifetime()
+        frame.connect_attempted = True
         try:
-            with connection:
+            connection = self._connect()
+        except ConversationPersistenceError:
+            raise  # SAME _connect already recorded exact failure/known close.
+        except BaseException:
+            self._retain_uncertain(frame)  # Opaque original method did not return.
+            raise ConversationPersistenceError(self) from None
+        frame.connection = connection
+        try:
+            try:
+                connection.__enter__()
+                frame.transaction_entered = True
+            except BaseException:
+                self._unavailable()
+            try:
                 yield connection
+            except BaseException as exc:
+                storage_failure = isinstance(exc, (sqlite3.Error, OSError, ConversationPersistenceError))
+                if storage_failure:
+                    self._mark_failed()  # Receipt fault BEFORE same rollback/close.
+                try:
+                    suppressed = connection.__exit__(type(exc), exc, exc.__traceback__)
+                    frame.transaction_exit_returned = True
+                except BaseException:
+                    self._unavailable()
+                if storage_failure:
+                    self._unavailable()  # A suppressing exit cannot invent a known receipt.
+                if not suppressed:
+                    raise  # SAME healthy rollback retains original validation/cancellation.
+            else:
+                try:
+                    connection.__exit__(None, None, None)
+                    frame.transaction_exit_returned = True
+                except BaseException:
+                    self._unavailable()
         finally:
-            connection.close()
+            self._close_original(frame)  # SAME original handle, no retry/second close.
 
     def _initialize(self) -> None:
         with self._database() as db:
@@ -68,6 +201,10 @@ class ConversationStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_messages_conversation
                     ON messages(conversation_id, id);
+                CREATE TABLE IF NOT EXISTS legacy_workspace_selection (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL
+                );
             """)
             conversation_columns = {row[1] for row in db.execute("PRAGMA table_info(conversations)")}
             for name, definition in (
@@ -80,6 +217,29 @@ class ConversationStore:
             message_columns = {row[1] for row in db.execute("PRAGMA table_info(messages)")}
             if "model" not in message_columns:
                 db.execute("ALTER TABLE messages ADD COLUMN model TEXT")
+
+    def selection(self) -> dict:
+        """Workspace-owned UI selection, independent of native runtime history."""
+        with self._database() as db:
+            row = db.execute("SELECT conversation_id FROM legacy_workspace_selection WHERE singleton = 1").fetchone()
+        return {"saved": row is not None, "conversation_id": row[0] if row else None}
+
+    def save_selection(self, conversation_id: str | None) -> dict:
+        if conversation_id is not None and (not isinstance(conversation_id, str) or not _valid_id(conversation_id)):
+            raise ValueError("invalid conversation id")
+        with self._database() as db:
+            # Check existence in the same write transaction as the upsert. A
+            # concurrent delete cannot leave an invalid persisted reference.
+            db.execute("BEGIN IMMEDIATE")
+            if conversation_id is not None and db.execute(
+                "SELECT 1 FROM conversations WHERE id = ?", (conversation_id,),
+            ).fetchone() is None:
+                raise ValueError("conversation not found")
+            db.execute("""
+                INSERT INTO legacy_workspace_selection(singleton, conversation_id) VALUES (1, ?)
+                ON CONFLICT(singleton) DO UPDATE SET conversation_id = excluded.conversation_id
+            """, (conversation_id,))
+        return {"saved": True, "conversation_id": conversation_id}
 
     def create(self, title: str = "新对话") -> dict:
         title = title.strip()[:80] or "新对话"

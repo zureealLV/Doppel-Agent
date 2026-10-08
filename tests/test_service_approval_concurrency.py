@@ -134,8 +134,8 @@ def test_cancellation_after_claim_before_dispatch_prevents_native_patch(tmp_path
 
 
 @pytest.mark.parametrize("mode", ["graph", "deep"])
-@pytest.mark.parametrize("separate_service", [False, True])
-def test_concurrent_stale_approval_reads_have_one_durable_decision_and_one_patch(tmp_path, monkeypatch, mode, separate_service):
+@pytest.mark.parametrize("reconstructed_service", [False, True])
+def test_concurrent_stale_approval_reads_have_one_durable_decision_and_one_patch(tmp_path, monkeypatch, mode, reconstructed_service):
     async def scenario():
         fixture = load_task_fixture("approval-01")
         workspace = tmp_path / "agent"
@@ -152,10 +152,11 @@ def test_concurrent_stale_approval_reads_have_one_durable_decision_and_one_patch
             paused = await first.get(run_id)
             assert paused["status"] == "interrupted"
             interrupt_id = paused["metadata"]["interrupts"][0]["id"]
-            if separate_service:
+            if reconstructed_service:
                 second = RunService(workspace, provider=provider)
-                await second.start()  # interrupted records must survive service reconstruction
-            contenders = (first, second or first)
+                await first.close()
+                await second.start()  # interrupted records survive exclusive-owner handoff
+            contenders = (second or first, second or first)
             reached = 0
             release = asyncio.Event()
 
@@ -187,6 +188,9 @@ def test_concurrent_stale_approval_reads_have_one_durable_decision_and_one_patch
                 events = await first.list_events(run_id)
                 assert sum(event["type"] == "approval.decided" for event in events) == 1
                 assert (await first.get(run_id))["status"] == "completed"
+                projected = first.conversations.get(record["conversation_id"])
+                assert [m["role"] for m in projected["messages"]] == ["user", "assistant"]
+                assert projected["active_run_id"] is None
                 assert trace.trace["patch_apply_count"] == 1
                 assert trace.trace["command_calls"] == []
         finally:

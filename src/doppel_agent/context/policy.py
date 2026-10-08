@@ -9,6 +9,13 @@ from ..provider import Message
 
 
 class ContextPolicy:
+    @staticmethod
+    def estimate_utf8_bytes(size: int) -> int:
+        """Attachment estimate only, not tokenizer or provider actual usage."""
+        if type(size) is not int or size < 0:
+            raise ValueError("invalid context byte count")
+        return (size + 3) // 4
+
     def __init__(self, limit_tokens: int = 32_000, warning_ratio: float = 0.8):
         if limit_tokens < 256 or not 0 < warning_ratio < 1:
             raise ValueError("invalid context policy")

@@ -86,7 +86,7 @@ class VerificationPipelineIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertFalse(report.success)
             self.assertIsNone(report.results[0].exit_code)
-            self.assertIn("timed out", report.results[0].error)
+            self.assertEqual(report.results[0].error, "verification_timeout")
             self.assertEqual(pipeline.supervisor.active_count, 0)
 
 

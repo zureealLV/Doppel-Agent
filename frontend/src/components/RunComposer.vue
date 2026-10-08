@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Play, RotateCcw } from "lucide-vue-next";
-import { reactive, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 
 import type { Effort, RunMode, RunRequest } from "../types";
 import type { ModelProfile } from "../workspaceTypes";
 
 const props = defineProps<{ busy: boolean; profiles?: ModelProfile[] }>();
-const emit = defineEmits<{ submit: [request: RunRequest] }>();
+const emit = defineEmits<{ submit: [request: RunRequest, includeContext: boolean] }>();
+const includeContext = ref(false);
 
 const form = reactive<RunRequest>({
   prompt: "分析当前仓库结构，给出一条可验证的改进建议。",
@@ -27,6 +28,7 @@ watch(() => props.profiles, (profiles) => {
 });
 
 function reset(): void {
+  includeContext.value = false;
   form.prompt = "分析当前仓库结构，给出一条可验证的改进建议。";
   form.mode = "graph";
   form.effort = "balanced";
@@ -36,7 +38,8 @@ function reset(): void {
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="emit('submit', JSON.parse(JSON.stringify(form)))">
+  <form class="composer" @submit.prevent="!props.busy && emit('submit', JSON.parse(JSON.stringify(form)), includeContext)">
+    <fieldset class="composer-fields" :disabled="props.busy">
     <div class="section-heading">
       <div><p class="eyebrow">CONTROL PLANE</p><h2>创建运行</h2></div>
       <button type="button" class="icon-button" aria-label="重置运行表单" title="重置" @click="reset"><RotateCcw :size="17" aria-hidden="true" /></button>
@@ -67,8 +70,11 @@ function reset(): void {
       <label><input v-model="form.permissions.delegate" type="checkbox" /><span><strong>子代理</strong><small>允许异步委派</small></span></label>
     </fieldset>
 
+    <label class="context-confirm"><input v-model="includeContext" type="checkbox" />本次绑定项目上下文 / 已选笔记版本</label>
+    <p class="helper">默认不绑定；勾选后等待选择保存并固定输入。不会批准工具或自动更新历史输入。</p>
     <button class="primary-button" type="submit" :disabled="props.busy || !form.prompt.trim()">
       <Play :size="18" aria-hidden="true" />{{ props.busy ? "提交中…" : "启动运行" }}
     </button>
+    </fieldset>
   </form>
 </template>

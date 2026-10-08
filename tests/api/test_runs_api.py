@@ -2,6 +2,7 @@ import time
 import threading
 import unittest
 import asyncio
+from urllib.request import urlopen
 
 from fastapi.testclient import TestClient
 
@@ -27,7 +28,7 @@ class RunsApiTests(unittest.TestCase):
         raise AssertionError(record)
 
     def test_create_get_and_idempotency_replay(self):
-        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             body = {
                 "prompt": "hello",
                 "mode": "graph",
@@ -44,11 +45,11 @@ class RunsApiTests(unittest.TestCase):
             self.assertIn("Offline mock", record["answer"])
 
     def test_unknown_run_is_404(self):
-        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             self.assertEqual(client.get("/api/v1/runs/missing").status_code, 404)
 
     def test_deep_mode_runs_through_versioned_api(self):
-        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             response = client.post(
                 "/api/v1/runs",
                 json={"prompt": "inspect", "mode": "deep", "permissions": {"delegate": True}},
@@ -60,7 +61,7 @@ class RunsApiTests(unittest.TestCase):
             self.assertEqual(record["metadata"]["subagent_limit"], 2)
 
     def test_async_subagent_lifecycle_is_exposed_by_parent_run(self):
-        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             parent_response = client.post(
                 "/api/v1/runs",
                 json={
@@ -117,7 +118,7 @@ class RunsApiTests(unittest.TestCase):
             self.assertIn("subagent.completed", event_types)
 
     def test_subagent_api_requires_parent_delegate_permission(self):
-        with TestClient(create_app(self.root, provider=MockProvider())) as client:
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             parent = client.post("/api/v1/runs", json={"prompt": "parent"}).json()
             self.wait(client, parent["run_id"])
             response = client.post(
@@ -148,7 +149,7 @@ class RunsApiTests(unittest.TestCase):
                     )
                 return ModelTurn(content="finished")
 
-        with TestClient(create_app(self.root, provider=WriteProvider())) as client:
+        with TestClient(create_app(self.root, provider=WriteProvider()), base_url="http://127.0.0.1") as client:
             response = client.post(
                 "/api/v1/runs",
                 json={
@@ -207,7 +208,7 @@ class RunsApiTests(unittest.TestCase):
                     )
                 return ModelTurn(content="finished")
 
-        with TestClient(create_app(self.root, provider=WriteProvider())) as client:
+        with TestClient(create_app(self.root, provider=WriteProvider()), base_url="http://127.0.0.1") as client:
             response = client.post(
                 "/api/v1/runs",
                 json={
@@ -246,7 +247,7 @@ class RunsApiTests(unittest.TestCase):
                 return ModelTurn(content="done")
 
         app = create_app(self.root, provider=SlowProvider(), max_active_runs=1, queue_capacity=1)
-        with TestClient(app) as client:
+        with TestClient(app, base_url="http://127.0.0.1") as client:
             first = client.post("/api/v1/runs", json={"prompt": "one"})
             self.assertEqual(first.status_code, 202)
             time.sleep(0.03)
@@ -269,7 +270,7 @@ class RunsApiTests(unittest.TestCase):
                 )
 
         app = create_app(self.root, provider=WriteProvider(), approval_ttl_seconds=0)
-        with TestClient(app) as client:
+        with TestClient(app, base_url="http://127.0.0.1") as client:
             run_id = client.post(
                 "/api/v1/runs",
                 json={
@@ -299,11 +300,22 @@ class RunsApiTests(unittest.TestCase):
         )
         try:
             with TestClient(app, base_url="http://127.0.0.1:8765") as client:
-                page = client.get("/")
+                redirect = client.get("/", follow_redirects=False)
+                self.assertEqual(redirect.status_code, 307)
+                self.assertEqual(redirect.headers["location"], "/runtime/")
+                self.assertEqual(redirect.headers["cache-control"], "no-store")
+                default = client.get("/")
+                self.assertEqual(default.status_code, 200)
+                self.assertEqual(default.url.path, "/runtime/")
+                self.assertIn('id="app"', default.text)
+                self.assertNotIn("run-form", default.text)
+                page = client.get("/legacy/")
                 self.assertEqual(page.status_code, 200)
                 self.assertIn("run-form", page.text)
                 self.assertEqual(client.get("/api/health").json()["status"], "ok")
                 self.assertEqual(client.get("/api/v1/health").json()["status"], "ok")
+                self.assertEqual(legacy.manager.recent(), [])
+                self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
         finally:
             legacy.shutdown()
             worker.join(timeout=3)
@@ -386,21 +398,105 @@ class RunsApiTests(unittest.TestCase):
             worker.join(timeout=3)
             legacy.server_close()
 
+    def test_compatibility_routes_and_native_hash_pages_preserve_existing_data(self):
+        """Real proxy/assets/data seam, not packaged-window or JS interaction proof."""
+        legacy = ConsoleServer(("127.0.0.1", 0), self.root)
+        old = legacy.manager.conversations.create('Existing Legacy E')
+        legacy.manager.conversations.add_message(old['id'], 'user', 'old history sentinel')
+        legacy.manager.conversations.add_message(old['id'], 'assistant', 'old answer sentinel')
+        worker = threading.Thread(target=legacy.serve_forever, daemon=True)
+        worker.start()
+        app = create_app(self.root, provider=MockProvider(), legacy_base_url=f"http://127.0.0.1:{legacy.server_port}")
+        try:
+            with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+                # Compare with independent original-console bytes, not Vue root.
+                with urlopen(f'http://127.0.0.1:{legacy.server_port}/', timeout=5) as upstream:
+                    original = upstream.read()
+                self.assertIn(b'run-form', original)
+                for path in ('/legacy', '/legacy/'):
+                    response = client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content, original)
+                    self.assertIn("frame-ancestors 'none'", response.headers['content-security-policy'])
+                for name in ('app.js', 'app.css'):
+                    self.assertEqual(client.get('/legacy/' + name).content, client.get('/' + name).content)
+                for fragment in ('conversations', 'runtime', 'legacy'):
+                    page = client.get('/runtime/#' + fragment)
+                    self.assertEqual(page.status_code, 200)
+                    self.assertIn('id="app"', page.text)
+                import re
+                for asset in re.findall(r'(?:src|href)="(/runtime/assets/[^" ]+)"', page.text):
+                    response = client.get(asset)
+                    self.assertEqual(response.status_code, 200, asset)
+                    self.assertEqual(response.headers['x-content-type-options'], 'nosniff')
+                visible = client.get('/api/conversations/' + old['id']).json()
+                self.assertEqual([m['content'] for m in visible['messages']], ['old history sentinel', 'old answer sentinel'])
+                self.assertEqual(client.get('/api/v1/conversations').json(), [])
+                self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
+                for path in ('/', '/legacy/', '/runtime/', '/api/v1/health'):
+                    self.assertEqual(client.get(path, headers={'Host':'attacker.invalid'}).status_code, 403)
+                    self.assertEqual(client.get(path, headers={'Origin':'https://attacker.invalid'}).status_code, 403)
+        finally:
+            legacy.shutdown()
+            worker.join(timeout=3)
+            legacy.server_close()
+
+    def test_api_only_root_does_not_redirect_to_unavailable_workspace(self):
+        with TestClient(create_app(self.root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
+            response = client.get("/", follow_redirects=False)
+            self.assertEqual(response.status_code, 404)
+            self.assertNotIn("location", response.headers)
+            self.assertEqual(client.get("/api/v1/health").json()["status"], "ok")
+
+    def test_default_workspace_does_not_fallback_when_vue_bundle_is_missing(self):
+        from unittest.mock import patch
+
+        legacy = ConsoleServer(("127.0.0.1", 0), self.root)
+        worker = threading.Thread(target=legacy.serve_forever, daemon=True)
+        worker.start()
+        app = create_app(self.root, provider=MockProvider(), legacy_base_url=f"http://127.0.0.1:{legacy.server_port}")
+        try:
+            with patch("doppel_agent.web.server.RUNTIME_ASSET_ROOT", self.root / "missing-bundle"):
+                with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+                    response = client.get("/")
+                    self.assertEqual(response.status_code, 404)
+                    self.assertEqual(response.json()["error"], "runtime workbench has not been built")
+                    self.assertIn("run-form", client.get("/legacy/").text)
+                    self.assertEqual(legacy.manager.recent(), [])
+                    self.assertEqual(app.state.run_service.scheduler.accepted_count, 0)
+        finally:
+            legacy.shutdown()
+            worker.join(timeout=3)
+            legacy.server_close()
+
     def test_cancel_running_async_provider_emits_one_terminal_event(self):
+        entered, observed_cancel = threading.Event(), threading.Event()
+
         class SlowAsyncProvider:
             async def anext_turn(self, messages, tools):
-                await asyncio.sleep(30)
+                entered.set()
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    observed_cancel.set()
+                    raise
 
-        with TestClient(create_app(self.root, provider=SlowAsyncProvider())) as client:
+        app = create_app(self.root, provider=SlowAsyncProvider())
+        with TestClient(app, base_url="http://127.0.0.1") as client:
             run_id = client.post("/api/v1/runs", json={"prompt": "slow"}).json()["run_id"]
-            for _ in range(100):
-                record = client.get(f"/api/v1/runs/{run_id}").json()
-                if record["status"] == "running":
-                    break
-                time.sleep(0.01)
+            # "running" precedes original checkpoint/schema cursor acquisition.
+            # This test's subject is an ENTERED provider, not opaque startup
+            # cancellation (whose separate tests must retain the owner).
+            self.assertTrue(entered.wait(timeout=3))  # Fixture watchdog, not SLA.
+            record = client.get(f"/api/v1/runs/{run_id}").json()
+            self.assertEqual(record["status"], "running")
             cancelled = client.post(f"/api/v1/runs/{run_id}/cancel")
             self.assertTrue(cancelled.json()["cancel_requested"])
             terminal = self.wait(client, run_id, statuses=("cancelled",))
             self.assertEqual(terminal["status"], "cancelled")
             events = client.get(f"/api/v1/runs/{run_id}/events").json()
             self.assertEqual([event["type"] for event in events].count("run.cancelled"), 1)
+            self.assertTrue(observed_cancel.is_set())
+        self.assertTrue(app.state.run_service.cleanup_complete)
+        self.assertFalse(app.state.run_service._owner.held)
+        self.assertFalse(app.state.run_service._provider_receipt_fault.broken)

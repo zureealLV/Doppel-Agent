@@ -20,8 +20,10 @@ def encode_sse(event: dict) -> str:
 
 async def run_event_stream(service: RunService, run_id: str, after_seq: int) -> AsyncIterator[str]:
     cursor = after_seq
-    while True:
+    while not service.stream_shutdown_requested:
         events = await service.list_events(run_id, cursor)
+        if service.stream_shutdown_requested:
+            return
         for event in events:
             cursor = event["seq"]
             yield encode_sse(event)
@@ -30,6 +32,9 @@ async def run_event_stream(service: RunService, run_id: str, after_seq: int) -> 
             return
         if not events:
             try:
-                await service.notifier.wait(run_id)
+                # Native shutdown must end the original response BEFORE ASGI
+                # lifespan cleanup. No client navigation/cancellation is needed;
+                # the pending checkpoint/lease remains untouched for restart.
+                await service.notifier.wait(run_id, timeout=0.5)
             except asyncio.CancelledError:
                 return

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-import hashlib
-import json
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -16,6 +14,7 @@ from .types import MCPToolDescriptor
 
 
 _RUN_ID: ContextVar[str] = ContextVar("doppel_mcp_run_id", default="standalone")
+_CALL_ID: ContextVar[str | None] = ContextVar("doppel_mcp_tool_call_id", default=None)
 
 
 def set_mcp_run_id(run_id: str):
@@ -37,16 +36,31 @@ class MCPGatewayTool(BaseTool):
     def _run(self, **kwargs: Any) -> str:
         raise RuntimeError("MCP gateway tools require async execution")
 
+    async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        # Original LangGraph ToolNode passes the actual ToolCall envelope here.
+        # Dynamic dict args_schema cannot use a model field's InjectedToolCallId;
+        # retain the envelope's ID before BaseTool creates its original arun task.
+        # No schema/argument injection, replacement result or second executor.
+        if not isinstance(input, dict) or input.get("type") != "tool_call" or input.get("name") != self.name:
+            raise ValueError("mcp_tool_call_scope_unavailable")
+        identifier = input.get("id")
+        try:
+            valid = (isinstance(identifier, str) and 1 <= len(identifier) <= 1024 and "\x00" not in identifier
+                     and 1 <= len(identifier.encode("utf-8")) <= 1024)
+        except UnicodeError:
+            valid = False
+        if not valid:
+            raise ValueError("mcp_tool_call_scope_unavailable")
+        token = _CALL_ID.set(identifier)
+        try:
+            return await super().ainvoke(input, config, **kwargs)
+        finally:
+            _CALL_ID.reset(token)
+
     async def _arun(self, **kwargs: Any) -> str:
-        call_id = hashlib.sha256(
-            json.dumps(
-                {"run_id": _RUN_ID.get(), "tool": self.name, "arguments": kwargs},
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-                default=str,
-            ).encode("utf-8")
-        ).hexdigest()[:32]
+        call_id = _CALL_ID.get()
+        if call_id is None:
+            raise ValueError("mcp_tool_call_scope_unavailable")
         result = await self.executor.execute(
             self.name,
             kwargs,

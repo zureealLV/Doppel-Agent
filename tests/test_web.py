@@ -49,6 +49,41 @@ class WebTests(unittest.TestCase):
         self.assertIn("default-src 'self'", headers["Content-Security-Policy"])
         self.assertEqual(json.loads(self.get("/api/health")[1])["status"], "ok")
 
+    def test_legacy_selection_is_durable_and_requires_explicit_json_choice(self):
+        self.assertEqual(json.loads(self.get("/api/workspace-selection")[1]),
+                         {"saved": False, "conversation_id": None})
+        cid = self.post("/api/conversations", {"title": "selected"})[1]["id"]
+        self.post("/api/workspace-selection", {"conversation_id": cid})
+        self.assertEqual(json.loads(self.get("/api/workspace-selection")[1])["conversation_id"], cid)
+        for body in ({}, {"conversation_id": cid, "run_id": "native"}, {"conversation_id": 1}):
+            with self.subTest(body=body), self.assertRaises(HTTPError) as caught:
+                self.post("/api/workspace-selection", body)
+            self.assertEqual(caught.exception.code, 400)
+        with self.assertRaises(HTTPError) as caught:
+            self.post("/api/workspace-selection", {"conversation_id": None}, {"Origin": "https://external.invalid"})
+        self.assertEqual(caught.exception.code, 403)
+        self.post(f"/api/conversations/{cid}/delete", {})
+        self.assertEqual(json.loads(self.get("/api/workspace-selection")[1]),
+                         {"saved": True, "conversation_id": None})
+
+    def test_explicit_legacy_compatibility_routes_preserve_original_assets(self):
+        for suffix in ("/", "/app.js", "/app.css"):
+            original = self.get(suffix)
+            compatibility = self.get('/legacy' + suffix)
+            self.assertEqual(compatibility[0], 200)
+            self.assertEqual(compatibility[1], original[1])
+            self.assertEqual(compatibility[2]['Content-Type'], original[2]['Content-Type'])
+        self.assertEqual(self.get('/legacy')[1], self.get('/')[1])
+
+    def test_compatibility_assets_do_not_open_arbitrary_files(self):
+        for path in ('/legacy/missing.js', '/legacy/%2e%2e/pyproject.toml',
+                     '/runtime/assets/..%2f..%2findex.html',
+                     '/runtime/assets/C:%5cWindows%5cwin.ini',
+                     '/runtime/assets/%00.js'):
+            with self.subTest(path=path), self.assertRaises(HTTPError) as caught:
+                self.get(path)
+            self.assertEqual(caught.exception.code, 404)
+
     def test_serves_runtime_workbench_and_blocks_asset_traversal(self):
         status, html, headers = self.get("/runtime/")
         self.assertEqual(status, 200)

@@ -4,6 +4,31 @@
 
 **语言：简体中文 · [English](README.md)**
 
+## Local Coding Workbench 预发布 — v0.15.0-rc.1
+
+**开始使用：[使用指南](docs/USER_GUIDE_CN.md) · [故障排除](docs/TROUBLESHOOTING_CN.md) · [English guide](docs/USER_GUIDE.md)**
+
+预发布包含原生 Graph/Deep/受审 Legacy 持久对话、计划与任务、显式上下文、
+变更与验证、扩展、报告，以及 Lv 验收的紧凑桌面界面和标题栏帮助菜单。
+原生对话、独立 Runtime、旧版 Legacy 历史是不同入口，不自动转换历史。
+桌面 `/` 跳转 `/runtime/`，`/legacy/` 保留旧版；独立 `ui` 仍是轻量 Legacy console。
+
+**这是预发布，不是完整 S0–S10/原生矩阵验收完结或稳定 v1.0。**
+历史稳定源码版本仍为 v0.14.4。本次帮助/UI/构建精准回归不会把旧 FAIL/UNKNOWN、
+原生子集或 Mock 工程结果提升为模型质量、Token 节省或生产稳定性证明。
+未进行付费模型评测。详见[本次发布范围与回执](docs/releases/2026-10-08-help-prerelease.md)
+及[原整体目标交接](docs/plans/2026-10-06-new-session-whole-goal-handoff.md)。
+
+复用已有依赖进行隔离构建：
+
+```powershell
+./scripts/build-candidate.ps1 -OutputDirectory '.artifacts/my-new-candidate'
+```
+
+输出目录必须是新目录，包含 wheel、sdist、带 `_internal` 的 windowed onedir
+EXE、分阶段日志和源码/产物 manifest。该入口不安装依赖、不启动应用、不运行
+测试套件、不覆盖日常 `.dist/DoppelAgent`。
+
 > 当前版本：`v0.14.4`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
 
 ![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)

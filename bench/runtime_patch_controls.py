@@ -18,6 +18,7 @@ class ScopedPatchFault:
         if control not in {"second_replace_failure", "stale_base"}:
             raise ValueError("unknown patch failure control")
         self.workspace = workspace.resolve(strict=True)
+        self.base = workspace_snapshot(self.workspace)
         self.control = control
         self.trace = {"apply_calls": 0, "apply_errors": [], "replace_attempts": 0,
                       "failure_injected": False, "replacements": [], "rollbacks": []}
@@ -30,8 +31,13 @@ class ScopedPatchFault:
         def replace(source, target):
             source, target = Path(source), Path(target)
             owned = target.parent.resolve() == self.workspace and source.parent.resolve() == self.workspace
-            is_patch = owned and ".doppel-patch-" in source.name
-            is_rollback = owned and ".doppel-rollback-" in source.name
+            is_temporary = owned and ".doppel-patch-" in source.name
+            # Original PatchService uses the SAME temporary writer for inverse
+            # restore. Classify its actual preimage bytes, not a nonexistent
+            # '.doppel-rollback-' filename; otherwise restore looks like write3.
+            is_rollback = is_temporary and self.trace["failure_injected"] and (
+                sha256(source.read_bytes()).hexdigest() == self.base.get(target.name))
+            is_patch = is_temporary and not is_rollback
             if is_patch:
                 self.trace["replace_attempts"] += 1
                 if self.control == "second_replace_failure" and self.trace["replace_attempts"] == 2:
@@ -44,12 +50,12 @@ class ScopedPatchFault:
                 })
             return result
 
-        def apply(service, proposal):
+        def apply(service, proposal, *, record_intent=None):
             if service.workspace.root != self.workspace:
-                return original_apply(service, proposal)
+                return original_apply(service, proposal, record_intent=record_intent)
             self.trace["apply_calls"] += 1
             try:
-                return original_apply(service, proposal)
+                return original_apply(service, proposal, record_intent=record_intent)
             except Exception as exc:
                 self.trace["apply_errors"].append(type(exc).__name__)
                 raise

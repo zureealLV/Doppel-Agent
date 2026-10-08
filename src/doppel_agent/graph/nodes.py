@@ -9,12 +9,13 @@ from langgraph.types import interrupt
 
 from ..concurrency.limits import ResourceLimits
 from ..context.policy import ContextPolicy
+from ..events import EventSink, NullEventSink
 from ..loop import SYSTEM_PROMPT
 from ..persistence.tool_ledger import ToolExecutionLedger
+from ..persistence.owned import await_durable
 from ..provider import Message, ModelTurn, Provider, ToolCall, next_model_turn
 from ..tools import ToolRegistry
 from ..workspace.patching import PatchConflictError
-from ..runtime.base import EventSink, NullEventSink
 from .state import DoppelState, SerializedMessage
 
 FINAL_TURN_PROMPT = (
@@ -76,6 +77,10 @@ class FocusedGraphNodes:
         messages, _ = self.context.compact(messages)
         schemas = [] if final_turn else self.tools.schemas()
         turn: ModelTurn = await next_model_turn(self.provider, messages, schemas)
+        # Compatibility completion remains raw usage; canonical logical call
+        # receipt is separate. Exact scope-linked report dedup is S8 B2b4.
+        receipt = {"provider_call_id": turn.provider_call_id} if turn.provider_call_id is not None else {}
+        await self.sink.emit("graph.model_finished", usage=turn.usage, **receipt)
         if final_turn and turn.tool_calls:
             return {
                 "messages": [serialize_message(item) for item in messages],
@@ -190,6 +195,9 @@ class FocusedGraphNodes:
                     item["arguments"],
                     source.arguments,
                 )
+                if source.name == "propose_patch":
+                    await self.sink.emit("patch.proposed", edited=True, tool_call_id=source.id,
+                                         proposal=arguments.get("_doppel_patch", {}))
                 replacement.append(ToolCall(source.id, source.name, arguments))
             if {call.id for call in replacement} != set(original):
                 raise ValueError("edited approval must include every tool call")
@@ -212,6 +220,7 @@ class FocusedGraphNodes:
                 "error": {"code": "invalid_tool_state"},
             }
         for call in assistant.tool_calls:
+            await self.sink.emit("graph.tool_started", tool=call.name, tool_call_id=call.id)
             try:
                 if self.tools.capability(call.name) == "command_execute" and self.resource_limits:
                     async with self.resource_limits.command():
@@ -232,17 +241,25 @@ class FocusedGraphNodes:
             ) as exc:
                 output = f"Tool error ({type(exc).__name__}): {exc}"
             else:
-                if call.name == "propose_patch":
+                if call.name == "propose_patch" and not self.tools.owns_effect(call.name):
                     await self.sink.emit(
                         "patch.applied", tool_call_id=call.id, result=output
                     )
             messages.append(Message("tool", output, tool_call_id=call.id))
+            await self.sink.emit("graph.tool_finished", tool=call.name, tool_call_id=call.id)
         return {
             "messages": [serialize_message(item) for item in messages],
             "step_count": state.get("step_count", 1) + 1,
         }
 
     async def _execute_one(self, run_id: str, call: ToolCall) -> str:
+        if self.tools.owns_effect(call.name):
+            async def effect_receipt(output: str, replayed: bool, cancelled: bool) -> None:
+                await self.sink.emit("patch.applied", tool_call_id=call.id, result=output,
+                                     replayed=replayed, cancel_requested=cancelled)
+
+            return await self.tools.aexecute(call.name, call.arguments, run_id=run_id, tool_call_id=call.id,
+                                             ledger=self.ledger, on_effect=effect_receipt)
         if self.ledger:
             if self.tools.is_async(call.name):
                 output, _ = await self.ledger.aexecute_once(
@@ -258,14 +275,39 @@ class FocusedGraphNodes:
                     ),
                 )
                 return output
-            output, _ = await asyncio.to_thread(
+            worker = asyncio.create_task(asyncio.to_thread(
                 self.ledger.execute_once,
                 run_id,
                 call.id,
                 call.name,
                 call.arguments,
                 lambda name=call.name, arguments=call.arguments: self.tools.execute(name, arguments),
-            )
+            ))
+            try:
+                output, _ = await await_durable(worker)
+            except asyncio.CancelledError:
+                # Accepted synchronous effects cannot be rolled back by task
+                # cancellation. Drain the worker/ledger and expose only an
+                # actual completed receipt before releasing the workspace.
+                if not worker.cancelled() and worker.done() and worker.exception() is None:
+                    output, replayed = worker.result()
+
+                    async def receipt():
+                        if call.name == "propose_patch":
+                            await self.sink.emit(
+                                "patch.applied", tool_call_id=call.id, result=output,
+                                cancel_requested=True,
+                            )
+                        await self.sink.emit(
+                            "graph.tool_finished", tool=call.name, tool_call_id=call.id,
+                            result=output, replayed=replayed, cancel_requested=True,
+                        )
+
+                    try:
+                        await await_durable(receipt())
+                    except asyncio.CancelledError:
+                        pass
+                raise
             return output
         return await self.tools.aexecute(
             call.name,

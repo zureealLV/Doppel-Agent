@@ -10,7 +10,7 @@ from support import workspace
 
 class SseReplayTests(unittest.TestCase):
     def test_after_seq_replays_only_newer_durable_events(self):
-        with workspace() as root, TestClient(create_app(root, provider=MockProvider())) as client:
+        with workspace() as root, TestClient(create_app(root, provider=MockProvider()), base_url="http://127.0.0.1") as client:
             run_id = client.post("/api/v1/runs", json={"prompt": "hello"}).json()["run_id"]
             for _ in range(100):
                 record = client.get(f"/api/v1/runs/{run_id}").json()

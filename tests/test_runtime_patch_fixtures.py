@@ -112,7 +112,7 @@ def accepted_patch_evidence(tmp_path_factory):
     return fixture, workspace, asyncio.run(probe_patch(fixture, "graph", workspace))
 
 
-@pytest.mark.parametrize("mutation", ["empty", "duplicate", "failed_read", "base", "receipt_snapshot", "extra_inventory", "missing_path", "identity", "native_grant", "oracle_hash", "fallback", "insensitive_tests", "approval_content"])
+@pytest.mark.parametrize("mutation", ["empty", "duplicate", "failed_read", "base", "receipt_snapshot", "extra_inventory", "missing_path", "identity", "native_grant", "missing_separate_marker", "oracle_hash", "fallback", "insensitive_tests", "approval_content"])
 def test_patch_validator_rejects_incomplete_or_forged_trusted_evidence(accepted_patch_evidence, mutation):
     import copy
     from bench.runtime_validators import validate_patch_evidence
@@ -137,6 +137,8 @@ def test_patch_validator_rejects_incomplete_or_forged_trusted_evidence(accepted_
         evidence["receipts"][-1]["patch_id"] = "wrong"
     elif mutation == "native_grant":
         evidence["receipts"][-1]["native_verification_present"] = True
+    elif mutation == "missing_separate_marker":
+        evidence["receipts"][-1].pop("verification_separate_review_required")
     elif mutation == "oracle_hash":
         evidence["external_target_after"]["oracle_sha256"] = "wrong"
     elif mutation == "fallback":

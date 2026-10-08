@@ -1,3 +1,3 @@
 """A small, auditable local coding-agent runtime."""
 
-__version__ = "0.14.4"
+__version__ = "0.15.0rc1"

@@ -89,3 +89,34 @@ class MCPToolCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(opened, 2)
             self.assertNotEqual(first[1].schema_hash, second[1].schema_hash)
             await manager.close()
+
+
+def test_mcp_catalog_repeated_cursor_is_bounded(tmp_path):
+    import asyncio
+    import pytest
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from mcp import types
+    from doppel_agent.mcp.catalog import MCPToolCatalog
+    from doppel_agent.mcp.client_manager import MCPClientManager
+    from mcp_support import config
+    calls=[]
+    class Session:
+        async def list_tools(self, *, params=None):
+            calls.append(getattr(params,'cursor',None))
+            # Yield so the test watchdog can stop the old unbounded collector.
+            await asyncio.sleep(0)
+            return types.ListToolsResult(tools=[],nextCursor='repeated')
+    @asynccontextmanager
+    async def connector(server):
+        yield Session(),SimpleNamespace(protocol_version='2025-06-18',server_info=None,capabilities={})
+    async def scenario():
+        manager=MCPClientManager(config(tmp_path),connector=connector)
+        catalog=MCPToolCatalog(manager)
+        try:
+            with pytest.raises(ValueError,match='pagination'):
+                await asyncio.wait_for(catalog.list_server('demo'),1)
+            assert len(calls)==4  # two bounded discovery attempts, two pages each
+        finally:
+            await manager.close()
+    asyncio.run(scenario())

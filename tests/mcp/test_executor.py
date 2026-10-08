@@ -5,7 +5,7 @@ from pathlib import Path
 from mcp import types
 
 from doppel_agent.mcp.catalog import MCPToolCatalog
-from doppel_agent.mcp.client_manager import MCPClientManager
+from doppel_agent.mcp.client_manager import MCPClientManager, MCPInvocationError
 from doppel_agent.mcp.executor import MCPToolExecutor
 from doppel_agent.permissions import PermissionManager
 from doppel_agent.persistence.tool_ledger import ToolExecutionLedger
@@ -123,11 +123,34 @@ class MCPToolExecutorTests(unittest.IsolatedAsyncioTestCase):
             self.catalog,
             PermissionManager(frozenset({"mcp_execute"})),
         )
-        with self.assertRaises(ConnectionError):
+        # FIRST g5b preserves SAME ambiguous dispatched transport input/count;
+        # fatal outcome unknown is not an ordinary recoverable connection error.
+        with self.assertRaises(MCPInvocationError):
             await executor.execute(
                 "mcp__demo__inspect",
                 {"query": "side effect"},
                 run_id="ambiguous",
                 tool_call_id="once",
             )
+        self.assertEqual(self.session.calls, 1)
+
+    async def test_raw_transport_exception_is_not_exposed_or_persisted(self):
+        from contextlib import closing
+        import sqlite3
+
+        sentinel = "fixture-transport-secret"
+
+        async def fail(name, arguments=None):
+            self.session.calls += 1
+            raise ConnectionError(sentinel)
+
+        self.session.call_tool = fail
+        with self.assertRaises(MCPInvocationError) as error:
+            await self.executor.execute(
+                "mcp__demo__inspect", {"query": "safe"}, run_id="failure", tool_call_id="one"
+            )
+        self.assertEqual(str(error.exception), "mcp_execution_unresolved")
+        with closing(sqlite3.connect(self.root / "ledger.sqlite3")) as db:
+            stored = db.execute("SELECT error FROM tool_executions").fetchone()[0]
+        self.assertNotIn(sentinel, stored)
         self.assertEqual(self.session.calls, 1)

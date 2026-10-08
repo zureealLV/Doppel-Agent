@@ -881,6 +881,12 @@ Task 29 最终 claim/release 门禁仍未完成。详见
 
 ### Task 29: 发布门禁
 
+**2026-10-03 latest user sequencing:** Complete the v1.0 Local Mode
+implementation (including native Graph/Deep conversations and full Vue product
+parity) before real-model evaluation. The prior same-day deferral below is
+historical. Preserve Legacy compatibility and evaluation/release safety gates;
+see [the continuation implementation plan](2026-10-03-v1-local-completion-before-evaluation.md).
+
 **2026-10-03 Task 28 决策 /Task 29 补记：** 保留旧根 UI 与 Vue 并行，延后
 完整 replacement 与 Graph/Deep conversation-history parity；新持久页仍为
 Legacy chat，不偷换执行边界。最终隔离 EXE 已通过七项本地 scripted runtime、
@@ -1046,3 +1052,15 @@ v1.0 只有同时满足以下条件才算完成：
 - 20 个固定任务 × 3 次 × 3 runtime 的实验协议可复现；
 - 并发压测证明限额、背压和无重复 side effect；
 - README 的所有能力与指标都能指向测试或报告，不把计划写成已实现。
+
+### 2026-10-04 F 源码审计检查点（不修改上述完成定义）
+
+原始十二项 DoD 已逐项关联当前代码、测试和剩余 G/H 门禁；启动独占、
+checkpoint 保留、Skill/MCP 管理接口、总 deadline、跨轮次 retry budget、
+子任务/同步 worker/终态 IO 所有权及错误脱敏缺口已在同一未提交批次修复。
+冻结源码 Python **735 passed、2 skipped、1 warning**，前端 **56 passed**，
+F 的12项源码/静态门禁通过；full-mode 仍按预期 exit2 拒绝，非180次实验完成。
+详见 [F 审计与失败记录](../releases/2026-10-04-local-mode-dod-audit.md)。
+下一步仍按 A–H 续作计划进入 G：重新计数的整体验收、隔离打包和实际原生窗口
+验证，再到 H 的文档/一次批量提交推送/精确 CI。E 默认替换仍待真实打包 parity；
+不能把本次源码审计写成整个 v1 已完成，也不改变原始协议分母、能力排除或付费门禁。

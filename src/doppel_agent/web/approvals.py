@@ -14,10 +14,13 @@ class ApprovalBroker:
         self.condition = threading.Condition()
         self.pending: dict[str, dict[str, Any]] = {}
         self.decisions: dict[str, bool] = {}
+        self._closing = False
 
     def request(self, capability: str, tool_name: str, arguments: dict[str, Any]) -> bool:
         approval_id = uuid4().hex
         with self.condition:
+            if self._closing:
+                return False
             self.pending[approval_id] = {
                 "id": approval_id,
                 "capability": capability,
@@ -25,12 +28,19 @@ class ApprovalBroker:
                 "arguments": arguments,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
+            self.condition.notify_all()  # Publish original pending waiter to existing condition observers.
             approved = self.condition.wait_for(
-                lambda: approval_id in self.decisions,
+                lambda: self._closing or approval_id in self.decisions,
                 timeout=self.timeout_seconds,
             )
             self.pending.pop(approval_id, None)
-            return self.decisions.pop(approval_id, False) if approved else False
+            decision = self.decisions.pop(approval_id, False)
+            return decision if approved and not self._closing else False
+
+    def close(self) -> None:
+        with self.condition:
+            self._closing = True
+            self.condition.notify_all()  # Wake SAME pending waiters; never approve or cancel pool Futures.
 
     def list_pending(self) -> list[dict[str, Any]]:
         with self.condition:
@@ -38,7 +48,7 @@ class ApprovalBroker:
 
     def decide(self, approval_id: str, allow: bool) -> bool:
         with self.condition:
-            if approval_id not in self.pending or approval_id in self.decisions:
+            if self._closing or approval_id not in self.pending or approval_id in self.decisions:
                 return False
             self.decisions[approval_id] = allow
             self.condition.notify_all()
