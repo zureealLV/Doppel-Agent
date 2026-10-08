@@ -6,6 +6,8 @@ A local coding agent with a Windows desktop GUI, a browser-based console, and a 
 
 ## Local Coding Workbench prerelease — v0.15.0-rc.1
 
+Python package/import version: **v0.15.0rc1** (PEP 440); frontend/tag: **v0.15.0-rc.1** (SemVer).
+
 **Start here: [User guide](docs/USER_GUIDE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [中文使用指南](docs/USER_GUIDE_CN.md)**
 
 The prerelease carries durable native Graph/Deep/reviewed Legacy conversations,

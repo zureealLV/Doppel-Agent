@@ -6,6 +6,8 @@
 
 ## Local Coding Workbench 预发布 — v0.15.0-rc.1
 
+Python 包/导入版本：**v0.15.0rc1**（PEP 440）；前端/标签：**v0.15.0-rc.1**（SemVer）。
+
 **开始使用：[使用指南](docs/USER_GUIDE_CN.md) · [故障排除](docs/TROUBLESHOOTING_CN.md) · [English guide](docs/USER_GUIDE.md)**
 
 预发布包含原生 Graph/Deep/受审 Legacy 持久对话、计划与任务、显式上下文、
