@@ -1,0 +1,36 @@
+{
+  "release": "v0.15.0-rc.1",
+  "python_version": "0.15.0rc1",
+  "captured_on": "2026-10-08",
+  "source_commit": "c94b95ce0fa2d88a8607ea13931c0ae6d5c644ed",
+  "exe_sha256": "29bd8b9269abd8d45c77c435380be8f468dd139ec09ba3e8e2bff081ed4e07db",
+  "capture_kind": "native-window-original-jpeg",
+  "workspace": "isolated sample-project",
+  "submitted_runs": 0,
+  "images": [
+    {
+      "file": "doppel-agent-v015-rc1-workbench.jpg",
+      "size": [
+        1264,
+        811
+      ],
+      "sha256": "edf463c55abd5ab847303aa7408ee8dbc15fdbeff8ad73ab64ebae5d9af1b0bd"
+    },
+    {
+      "file": "doppel-agent-v015-rc1-plans.jpg",
+      "size": [
+        1264,
+        811
+      ],
+      "sha256": "a155b3e2aa44989e6ec1fb1703472d17d1e9ed69eb57ce564fd47fd7a1fc8351"
+    },
+    {
+      "file": "doppel-agent-v015-rc1-help.jpg",
+      "size": [
+        1264,
+        811
+      ],
+      "sha256": "5874e5d4be52a9ad75f9ca318d6499cf3430cb08143d53a12fd2dab88644345e"
+    }
+  ]
+}

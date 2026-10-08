@@ -1,178 +1,117 @@
 # Doppel Agent
 
-一个在本机运行的编程 Agent。可通过 Windows 桌面窗口、浏览器工作台或命令行连接模型、执行任务，并查看模型回合、工具调用与最终结果。
+一个在本机运行的编程 Agent，也是面向 Windows 的本地编码工作台。连接 OpenAI-compatible Chat Completions 模型，在同一项目里理解代码、审查变更、编排任务，并查看对话、显式上下文、审批和执行证据。
 
-**语言：简体中文 · [English](README.md)**
+**简体中文 · [English](README.md)**
 
-## Local Coding Workbench 预发布 — v0.15.0-rc.1
+**最新预发布：[v0.15.0-rc.1](https://github.com/zureealLV/Doppel-Agent/releases/tag/v0.15.0-rc.1)** · Windows x64 · Python 3.11+ · MIT
 
-Python 包/导入版本：**v0.15.0rc1**（PEP 440）；前端/标签：**v0.15.0-rc.1**（SemVer）。
+[下载 Windows 桌面版](https://github.com/zureealLV/Doppel-Agent/releases/download/v0.15.0-rc.1/DoppelAgent-v0.15.0-rc.1-windows-x64.zip) · [使用指南](docs/USER_GUIDE_CN.md) · [故障排除](docs/TROUBLESHOOTING_CN.md) · [发布范围](docs/releases/2026-10-08-help-prerelease.md)
 
-**开始使用：[使用指南](docs/USER_GUIDE_CN.md) · [故障排除](docs/TROUBLESHOOTING_CN.md) · [English guide](docs/USER_GUIDE.md)**
+![Doppel Agent v0.15.0-rc.1 原生 Windows 编码工作台](docs/images/doppel-agent-v015-rc1-workbench.jpg)
 
-预发布包含原生 Graph/Deep/受审 Legacy 持久对话、计划与任务、显式上下文、
-变更与验证、扩展、报告，以及 Lv 验收的紧凑桌面界面和标题栏帮助菜单。
-原生对话、独立 Runtime、旧版 Legacy 历史是不同入口，不自动转换历史。
-桌面 `/` 跳转 `/runtime/`，`/legacy/` 保留旧版；独立 `ui` 仍是轻量 Legacy console。
+*2026-10-08 在隔离示例项目中实拍预发布 EXE。这是新版 Vue 工作台，不是历史 v0.8.2 控制台；本组截图没有提交任务或模型请求。*
 
-**这是预发布，不是完整 S0–S10/原生矩阵验收完结或稳定 v1.0。**
-历史稳定源码版本仍为 v0.14.4。本次帮助/UI/构建精准回归不会把旧 FAIL/UNKNOWN、
-原生子集或 Mock 工程结果提升为模型质量、Token 节省或生产稳定性证明。
-未进行付费模型评测。详见[本次发布范围与回执](docs/releases/2026-10-08-help-prerelease.md)
-及[原整体目标交接](docs/plans/2026-10-06-new-session-whole-goal-handoff.md)。
+## 可以做什么
 
-复用已有依赖进行隔离构建：
+| 工作区 | 已实现的能力 |
+|---|---|
+| **持久对话** | 原生 Graph、Deep 与受审 Legacy 对话，`Ctrl+K` 搜索标题/消息，分组、归档、审查模板，按次选择模型档案与力度，按需展开执行详情。引擎在创建对话时固定。 |
+| **计划与任务** | 带版本的工作单、节点依赖、执行器与模型选择，显式批准派发，持久任务与运行队列。保存计划不会自动执行。 |
+| **上下文与笔记** | 文件片段、已接受快照、带来源的事实/约束/决策；上下文需显式绑定并在准入时冻结，不是打开面板就自动生效。 |
+| **变更与验证** | 分开查看当前 Git 快照与历史补丁，审阅带 base hash 的多文件 diff、审批和冲突。精确逆操作需要保留前像与新鲜检查；验证只用项目配置 argv，要求命令授权及单独审批。 |
+| **扩展中心** | MCP 配置/缓存目录与 Agent Skills 元数据，内置四个工程 Skill。连接探测和刷新需确认，打开页面不等于工具授权。 |
+| **执行与报告** | 持久事件、工具调用、审批、有界只读子任务、用量及声明单价估算。未知用量/费用不是零，也不是账单。 |
+| **项目与帮助** | 原生目录/最近项目选择与受保护的切换；紧凑侧栏和输入区、可选执行详情，标题栏提供文档、快捷键、故障排除与实际构建版本。 |
+
+## 新版界面
+
+**计划与任务：只读示例草稿，不是执行成果**
+
+![Doppel Agent v0.15.0-rc.1 计划编辑器与未执行示例](docs/images/doppel-agent-v015-rc1-plans.jpg)
+
+**帮助 / 关于：显示当前构建的真实版本**
+
+![Doppel Agent v0.15.0-rc.1 帮助与关于弹窗](docs/images/doppel-agent-v015-rc1-help.jpg)
+
+[截图来源](docs/images/README.md)。图片是未经修饰的原生窗口实拍，只用于展示界面，**不代表完整原生验收或模型质量结果**。
+
+## 运行时与技术架构
+
+- **三引擎**：Legacy 基线、持久化 LangGraph `graph` 主链、可选 Deep Agents `deep`，共用异步 Runtime 契约。Deep 使用项目自有 backend 和有界只读专家子任务，降级会记录事件。
+- **持久执行**：SQLite 对话/checkpoint、批准/拒绝/编辑中断、工具幂等账本、可续传 SSE、有界 FIFO 调度、工作区锁，以及取消/重启状态收敛。
+- **先审阅再产生副作用**：diff-first 多文件补丁、旧 base 拒绝、回滚与项目验证白名单；写文件、命令、MCP、委派按次显式授权，授权不替代单独审批。
+- **模型与扩展**：多 OpenAI-compatible 档案、有界重试/deadline/circuit breaker、受策略约束的 stdio/Streamable HTTP MCP 生命周期管理，以及渐进披露的 Skills。
+- **本地技术栈**：pywebview/WebView2 + PyInstaller 桌面；混合桌面服务上的 Vue 3 + TypeScript + Vite；FastAPI `/api/v1`；CLI 和 localhost JSON-RPC/NDJSON daemon。
+
+| 入口 | 含义 |
+|---|---|
+| 桌面 `/` → `/runtime/` | 当前默认 Vue 界面，包含原生对话、计划、上下文、变更、扩展与报告。 |
+| 界面里的**独立 Runtime** | 创建独立原生 run，不是续接现有对话。 |
+| **Legacy 历史** / `/legacy/` | 保留旧链路与旧数据，不自动转换为原生历史，也不绑定原生上下文。 |
+| `doppel.cmd ui` | 轻量旧浏览器控制台，不是新版默认桌面界面。 |
+| `doppel.cmd api` | 独立 API，此命令不提供桌面的前端资源/Legacy 混合代理。 |
+
+## 快速开始
+
+### 下载桌面预发布版
+
+1. 下载 [Windows x64 压缩包](https://github.com/zureealLV/Doppel-Agent/releases/download/v0.15.0-rc.1/DoppelAgent-v0.15.0-rc.1-windows-x64.zip)，**完整解压**；`DoppelAgent.exe` 必须与 `_internal` 同目录，不能只复制 EXE。
+2. Windows 10+ 需要 **Microsoft Edge WebView2 Runtime**；打包桌面版不要求另装 Python。
+3. 先选择可丢弃的示例项目，优先使用离线 Mock。在**模型与 API**中选择档案，再创建对话并明确发送任务。模板只填提示词；**测试连接可能发起付费请求**。
+
+```powershell
+# 在解压后的发布目录执行，替换为自己的项目路径。
+.\DoppelAgent.exe --workspace 'D:\your-project'
+```
+
+一个窗口只对应一个当前项目。切换/关闭会等待自有请求和 IO 清理；未解决的操作或未保存草稿可能阻止退出。隐藏面板不是取消运行，详见[使用指南](docs/USER_GUIDE_CN.md)。
+
+### 从源码运行
+
+需要 Python **3.11+**，在本仓库执行：
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[agent,desktop]"
+.\.venv\Scripts\python.exe -m doppel_agent desktop --workspace 'D:\your-project'
+```
+
+独立 API：在同一环境执行 `-m doppel_agent api --workspace 'D:\your-project' --port 8765`，OpenAPI 位于 `http://127.0.0.1:8765/api/docs`。旧浏览器控制台使用 `-m doppel_agent ui`，默认地址 `http://127.0.0.1:8766/`。
+
+离线 CLI 冒烟（Mock 是确定性替身，不具备通用编程能力）：
+
+```powershell
+.\.venv\Scripts\python.exe -m doppel_agent demo "read README.md"
+```
+
+### 隔离构建候选
 
 ```powershell
 ./scripts/build-candidate.ps1 -OutputDirectory '.artifacts/my-new-candidate'
 ```
 
-输出目录必须是新目录，包含 wheel、sdist、带 `_internal` 的 windowed onedir
-EXE、分阶段日志和源码/产物 manifest。该入口不安装依赖、不启动应用、不运行
-测试套件、不覆盖日常 `.dist/DoppelAgent`。
+复用已有依赖，输出目录必须是**新目录**。产出 wheel、sdist、onedir EXE、日志及源码/产物 manifest；不会安装依赖、启动应用、运行验收套件或覆盖日常 `.dist/DoppelAgent`。构建成功不等于验收完成。
 
-> 当前版本：`v0.14.4`。项目仍在开发中；已实现的功能与后续计划分开列出，不以参考项目的指标作为本项目成绩。
+## 发布状态与证据边界
 
-![Doppel Agent v0.8.2 桌面工作台](docs/images/doppel-agent-v082.png)
+**v0.15.0-rc.1 是预发布，不是稳定 v1.0，也不是 S0–S10/原生 N1–N6 全部验收完成。** Python 包/导入：**v0.15.0rc1**（PEP 440）；前端/标签：**v0.15.0-rc.1**（SemVer）。历史稳定源码版本：[v0.14.4](docs/releases/v0.14.4.md)。
 
-v0.14.4 修复 RunService 初始化/完成阶段取消漏接，以及协程首次执行前取消跳过收尾的竞态；等待自有 SQLite 写入完成后再发布取消终态。nav-04/tdd-01..04/patch-01 已有确定性真实路径 fixture，但不是付费模型质量结果。能力 eligibility 仍为原 180 中工厂 81、服务 126；full mode 继续阻断。详见 [更新与测试报告](docs/releases/v0.14.4.md)。历史失败 CI/标签不改写。
+发布源码提交：`c94b95c`。[main 分支 CI](https://github.com/zureealLV/Doppel-Agent/actions/runs/37758999503) 通过，但之后的[标签触发 CI](https://github.com/zureealLV/Doppel-Agent/actions/runs/37763221532) 出现 Python 3.12 集成测试超时（Python 3.11 取消、前端通过）。两次结果分别保留，不宣称发布全绿。详见[日期化发布范围与失败记录](docs/releases/2026-10-08-help-prerelease.md)及[预发布说明 / 产物哈希](https://github.com/zureealLV/Doppel-Agent/releases/tag/v0.15.0-rc.1)。
 
-**v0.15 未发布候选（2026-10-03）：** Task 5B 全部 13 fixture 已有本地确定性控制；增加并行 Vue 持久对话页、DeepSeek 官方非思考兼容，以及仅用于受控导航/盲审 runner 的共享人民币 ¥10 请求账本，不覆盖日常桌面对话，也不是账户级硬上限。最新 Python 门禁 **637 passed、2 skipped**；隔离新 EXE 的七项 scripted runtime、原生窗口检查、自有进程与 SQLite 释放检查通过。付费 Canary、人工裁判、干净候选提交与 exact-commit CI/发布仍待完成；full 180 和完整 UI replacement 继续阻断。详见[日期化证据、失败与边界](docs/releases/2026-10-02-v0.15-acceptance-progress.md#2026-10-03-deepseek预算与最终新-exe-补记)，不改变当前 v0.14.4 发布状态，不代表模型质量。
+工程测试、scripted fixture、离线 Mock 矩阵与截图**不能证明**模型质量、代码审查成功率、Token 节省或生产稳定性。付费评测与完整运行时/原生验收仍待完成；没有强操作系统沙箱、精确 Provider tokenizer 或 CLI/daemon 交互式审批。受控评测 runner 的预算账本不是日常桌面对话或 Provider 账户的硬额度上限。
 
-## 功能
+## 安全
 
-- **Agent Loop**：模型发起工具调用，Core 校验并执行，再把结果返回模型；单次运行有最大步数限制。
-- **三运行时**：保留 `legacy` ReAct 基线、LangGraph `graph` 主链，并增加可选 Deep Agents `deep` 模式；三者共用异步 Runtime 契约，Graph/Deep 使用 SQLite Checkpointer。
-- **Deep Agents 适配**：自定义 `BaseChatModel` 复用现有 OpenAI-compatible Provider；`DoppelBackend` 拒绝秘密文件、状态目录、路径逃逸和内置 shell；深度模式最多两个只读子 Agent，分别限制模型调用与 Token 预算，异常会记录后降级到 focused graph。
-- **Diff-first 可恢复审批**：Graph/Deep 只能先提交带 base hash 的多文件 unified diff；批准、拒绝、编辑均可 resume，旧 base 变化拒绝覆盖，多文件失败原子回滚，工具幂等账本阻止重复执行。
-- **项目验证流水线**：`.doppel/verification.json` 只允许项目预先配置的 argv；补丁批准后可自动运行测试/静态检查并返回结构化结果，不接受模型生成的 shell 字符串。
-- **可取消进程树**：Windows 优先 Job Object，无法绑定时显式记录 `taskkill /T` 降级；取消、超时和关闭服务都会清理命令及其后代进程。
-- **异步子 Agent API**：同进程后台子任务使用有界调度与 SQLite 生命周期；父 run 显式授予 `delegate` 后，可经 FastAPI 创建、列出、查询、追问和取消。请求固定只读并禁止递归委派，生命周期事件进入父 run 的持久时间线。
-- **异步 API 与事件流**：FastAPI `/api/v1` 提供提交、查询、取消和恢复；持久化 SSE 支持按 `after_seq` 断线续传。服务重启会把失去内存 lease 的 queued/running 记录原子收敛为失败终态并追加恢复事件。
-- **Vue Runtime Workbench**：Vue 3 + TypeScript + Vite 三栏运行时界面位于 `/runtime/`，可选择 legacy/graph/deep，实时展示队列与执行耗时、Graph/Skill/MCP/子 Agent/补丁事件、HITL 审批、真实 unified diff 和子 Agent 生命周期。
-- **受控并发**：有界 FIFO 队列、运行取消、工作区读写锁，以及 Provider profile/命令资源限流；队列满返回明确 429。
-- **Provider 可靠性**：Graph 模式使用长生命周期异步 HTTP client；429/5xx 有界退避、`Retry-After`、retry budget、deadline 和 circuit breaker 可测试；reset window 只允许一个 half-open probe。
-- **审查工具**：工作区文件图、递归文本检索、按行读取、普通读写与 argv 命令；审查优先窄化范围，减少整文件上下文浪费。
-- **权限**：默认只读；写文件和运行命令必须在本次任务中明确启用。命令工具不是操作系统沙箱。
-- **模型接入**：支持多个 OpenAI-compatible 模型档案（名称、Base URL、模型、Key 与可选单价），可在每个对话中切换，也提供离线 Mock。
-- **Agent 工作台**：Ghostty 风格三色窗口按钮与无白边圆角窗口，默认采用 Codex 式双栏布局；右上角菜单按需展开可调宽度的执行详情，模型选择位于输入区。
-- **持久对话**：消息自动写入 SQLite，支持 `Ctrl+K` 全局搜索标题与消息正文、重命名、分组、归档、删除和重启恢复；同一对话历史会继续参与模型推理。
-- **效率证据**：快速/均衡/深度三档限制 Agent 步数；执行面板显示耗时、工具调用、Token 与按模型单价估算的费用。成本结论仍需同模型同任务基线。
-- **安全保存模型配置**：Base URL 与模型名保存在当前工作区；API Key 使用 Windows DPAPI 按当前用户加密，明文不会返回浏览器。
-- **Windows GUI**：独立桌面窗口复用同一套本机工作台；无需使用 TUI，关闭窗口即停止该实例的本地服务。
-- **运行记录**：每次任务生成独立 ID，并写入 `events.jsonl`、`trace.jsonl`、`session.json`。
-- **任务与上下文**：SQLite 持久化任务依赖图；上下文到达估算水位时压缩旧工具回合并记录事件。
-- **Agent Skills Registry**：兼容 `.doppel/skills/`，并支持 `skills/`；校验 frontmatter、唯一名称、大小、链接路径和疑似明文密钥，通过 progressive disclosure 先暴露摘要、命中后再加载正文。仓库内置 code-review、bugfix、test-repair、mcp-operations 四个工作流 Skill。
-- **MCP SDK Gateway**：支持 stdio 与 Streamable HTTP；统一 session 生命周期、健康探针、重连、分页 catalog、按连接 generation 失效的 schema 缓存、每服务器 semaphore、参数校验、HITL、幂等、审计以及文本/图片/音频/resource/structured content。模型只看到规范化的 `mcp__server__tool`，不能绕过网关直连。
-- **只读子任务**：按次启用委派，子任务最多两次、每次最多四轮，只能读取工作区，不能继续委派；会产生额外模型调用与费用。
-- **常驻 Core**：CLI 与 daemon 使用 localhost JSON-RPC/NDJSON 通信。
+服务监听 loopback 并拒绝跨来源请求，文件工具受工作区/策略边界约束。写文件、命令、MCP、委派默认关闭；命令与 MCP 程序以当前用户运行，**不是操作系统沙箱**。模型可能收到选中或工具返回的文件内容，请使用可信工作区/Provider。
 
-## 快速开始
+项目状态位于所选工作区 `.doppel-agent/`。Windows 配置以当前用户 DPAPI 保护保存的 API Key，不向浏览器返回明文；以设置页面实际显示的保护状态为准。不要将凭据写进报告、截图或 Issues。
 
-要求：Windows 10、Python 3.11 或更新版本。旧 `legacy` CLI 仍可使用基础依赖；LangGraph/FastAPI 主链安装 `agent` 依赖组。
+## 更多文档
 
-```powershell
-cd '<你的 Doppel-Agent 仓库目录>'
-.\doppel.cmd doctor
-.\doppel.cmd ui
-```
+- [使用指南](docs/USER_GUIDE_CN.md) · [故障排除](docs/TROUBLESHOOTING_CN.md) · [MCP 网关](docs/MCP.md)
+- [更新记录](CHANGELOG.md) · [技术报告](docs/TECHNICAL_REPORT_ZH.md)
+- [评测策略](docs/BENCHMARK_STRATEGY.md) · [原运行时规划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)
+- [整体目标交接 / 待验收范围](docs/plans/2026-10-06-new-session-whole-goal-handoff.md)
 
-打开 [http://127.0.0.1:8766/](http://127.0.0.1:8766/)；点击左下角“模型与 API”，填写 API Base URL、模型名称和 API Key，测试后保存，再开始对话。`ui` 仅监听 `127.0.0.1`。配置保存在当前工作区 `.doppel-agent/`；Key 由 Windows DPAPI 加密，只能由同一台电脑上的当前 Windows 用户解密，接口不会把明文发回页面。
-
-### Windows 桌面 GUI（无需 TUI）
-
-已构建的程序位于 `D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe`。保留同目录的 `_internal` 文件夹；双击 EXE 即可打开独立窗口。默认把启动时的当前目录作为工作区；指定其他项目时：
-
-```powershell
-& 'D:\Codex Program files\Agent\Doppel-Agent\.dist\DoppelAgent\DoppelAgent.exe' --workspace 'D:\your-project'
-```
-
-桌面 GUI 需要系统安装 Microsoft Edge WebView2 Runtime；Windows 10 上如果缺少它，程序会显示启动错误。它复用 Web 控制台的功能和安全边界，但使用随机的 `127.0.0.1` 端口，关闭窗口会停止这个实例。对话和加密后的 API Key 会保存在所选工作区。
-
-左上三色按钮依次为关闭、最小化和最大化/还原，双击标题栏也可切换最大化；右上角菜单用于显示或隐藏执行详情。“新对话”和“代码审查”会分别复用尚未发送的空草稿。“代码审查”先显示全面审查、安全与权限、缺陷与异常、测试与回归四种模板，选择后才把提示词放入输入框，**不会自动消耗模型额度**；点击发送按钮后才会开始运行。按 `Ctrl+K` 可搜索全部对话及归档内容。
-
-重新构建：`./scripts/build-desktop.ps1`。脚本在项目 `.venv` 安装 `pywebview` 和 `PyInstaller`，产出无控制台窗口的 onedir EXE。也可通过 `python -m pip install -e '.[desktop]'` 后执行 `doppel-agent desktop --workspace 'D:\your-project'`。
-
-不想先配置模型，可在服务类型中选择“离线 Mock”。它用于测试 UI 和执行链路，**不具备通用编程能力**。
-
-### v0.14 Runtime API 与 Workbench
-
-```powershell
-python -m pip install -e ".[agent]"
-.\doppel.cmd api --workspace 'D:\your-project' --port 8765
-```
-
-打开 `http://127.0.0.1:8765/api/docs` 查看 OpenAPI。新接口位于 `/api/v1/*`；`POST /api/v1/runs` 默认使用 `graph`，可传 `mode: "legacy"` 做基线，或传 `mode: "deep"` 启用 Deep Agents。事件接口支持普通 JSON 回放，也支持 `?stream=true&after_seq=<序号>` 的 SSE 续传。桌面程序在同一 loopback origin 暴露新 API，并把尚未迁移的 v0.8 页面与接口代理到兼容服务。
-
-通过桌面程序或混合 API 服务访问 `/runtime/` 可打开 Vue Runtime Workbench。旧 `/` 对话界面保留并提供 **Runtime Lab** 入口，待持久对话与设置达到功能对齐后再决定是否替换，避免用“重写完成”掩盖功能回退。
-
-父 run 在 `permissions.delegate=true` 时，可使用 `/api/v1/runs/{run_id}/subagents` 创建或列出后台只读子任务，并通过 `/{subagent_id}`、`/follow-ups` 与 `/cancel` 查询、追问和取消。OpenAPI 给出完整请求 schema；不具备 delegate grant 的父 run 返回 403。
-
-### 固定矩阵与本地负载证据
-
-```powershell
-uv run --extra agent python bench/runtime_matrix.py --output .bench-results/runtime-protocol.json
-uv run --extra agent python bench/runtime_matrix.py --offline-smoke --output .bench-results/runtime-smoke.json
-uv run --extra agent python bench/run_load.py --output .bench-results/load.json
-uv run --extra agent python -m bench.fault_matrix --output .bench-results/fault-matrix.json
-```
-
-v0.12 固定了 20 个 case、三种 runtime、每题三次的 180-run 协议，并完成 180/180 次离线 Mock runtime-path smoke。该结果只证明三条执行链能跑通，`task_score` 明确保留为 `null`，不代表真实模型编程成功率。v0.14 又提交了 10/10 确定性故障场景，覆盖 Provider、MCP、SSE、重启 lease 与进程超时；它同样使用固定本地替身，只证明故障策略，不代表外部服务可用性或模型质量。
-
-### 命令行
-
-```powershell
-# 离线链路测试
-.\doppel.cmd demo "read README.md"
-
-# 真实模型：在当前 PowerShell 会话设置，不要提交密钥文件
-$env:DOPPEL_AGENT_BASE_URL = 'https://api.deepseek.com'
-$env:DOPPEL_AGENT_MODEL = 'deepseek-flash'
-$env:DOPPEL_AGENT_API_KEY = '<你的 API Key>'
-.\doppel.cmd ask '列出当前目录，并解释项目结构'
-
-# 需要修改文件时，单次显式授权
-.\doppel.cmd ask '创建 hello.py' --allow-write
-```
-
-Base URL 后会自动追加 `/chat/completions`。服务需要兼容 Chat Completions 的 `tools` / `tool_calls` 格式；不同提供商的模型名请以其文档为准。
-
-### MCP 扩展
-
-安装 `python -m pip install -e ".[agent]"`，再按 [MCP Gateway 配置说明](docs/MCP.md) 创建配置。Graph/Deep 只在本次运行授予 `mcp_execute` 后加载规范化工具，并在真实调用前持久化审批。HTTP 认证仅在环境变量中按 auth profile 提供；配置文件不保存令牌。**stdio 服务仍以当前用户运行，不是操作系统沙箱。**
-
-### 只读子任务
-
-Web 勾选“允许只读子任务”，或 CLI 添加 `--allow-delegate`。该能力默认关闭；子任务共享本次任务的模型连接，限制为读文件/列目录、四轮模型调用和 8000 字符的返回值。它不是并行执行器，也不会继承父任务的写入、命令或 MCP 权限。
-
-### 测试
-
-```powershell
-$env:PYTHONPATH = (Resolve-Path .\src).Path
-python -m pytest -q
-ruff check src tests
-```
-
-测试包含本地 HTTP 模型替身的完整工具回合、Web 控制台接口、daemon/client 通信、路径越界与权限拒绝。没有配置真实 API Key 时，这些测试**不能**证明某个付费提供商的在线可用性。
-
-### 真实代码审查验收
-
-`bench/` 提供独立的合成代码审查样本：运行时只把样本 `service.py` 放入临时工作区，答案键不会暴露给 Agent。若已拥有 DeepSeek Key，可运行：
-
-```powershell
-python bench/run_review.py --env-file '<你的本机 .env 路径>'
-```
-
-报告存入忽略提交的 `.bench-results/`；密钥不写入报告。三轮合成题与三个真实项目的分层结果、SWE-bench 接入边界见 [代码审查测试策略](docs/BENCHMARK_STRATEGY.md)，早期逐项结果见 [审查验收记录](bench/reports/2026-09-19-review-001.md)。一个样本不能证明通用成功率。
-
-## 安全边界
-
-Web 控制台只向本机开放，拒绝跨站来源请求；API Key 仅以 Windows DPAPI 密文持久化。模型可能收到工具读取的文件内容，因此应只对可信工作区和可信模型服务启用读取。文件工具拒绝常见密钥文件和自身状态目录，但黑名单不能替代工作区审查。`--allow-command` 允许以当前用户身份运行程序，不应在不可信代码目录使用。
-
-旧 Web 已提供写入/命令/MCP 的逐工具审批（120 秒超时自动拒绝）；LangGraph v1 API 的 interrupt 默认 900 秒过期并持久化。CLI/daemon 仍不提供交互审批，其显式授权会直接生效。取消同步 legacy Provider 的 await 不能强制停止已经进入系统线程的阻塞请求；Graph/Deep 的异步 Provider 可立即传播取消。当前仍没有强 OS 隔离、TUI、完整 Vue 对话/设置平替，或经真实模型裁判的三运行时质量成绩。Windows Job Object 负责进程树生命周期，但命令仍以当前用户权限运行。完整阶段与验收标准见 [实施规划](docs/PLAN.md)及 [LangGraph/Deep Agents 详细计划](docs/plans/2026-09-20-langgraph-deepagents-mcp-concurrency.md)。
-
-## 版本与来源
-
-版本按功能迭代发布；每次推送应更新版本号、[更新记录](CHANGELOG.md)并通过测试。项目独立开发，设计上参考了 [TackleClaude](https://github.com/Tackle-B/TackleClaude) 对本地 Agent 运行时的公开介绍；没有复制其源码，也不沿用其成本、成功率等数据。
-
-v0.14.0 的逐项发布证据、原始故障矩阵与 v0.15/v1.0 路线见 [v0.14.0 发布证据与下一阶段](docs/releases/v0.14.0.md)。
+本项目为独立实现，架构参考 [TackleClaude](https://github.com/Tackle-B/TackleClaude) 的公开描述，不声称使用其源码或取得其公开 benchmark 成绩。[MIT License](LICENSE)。
