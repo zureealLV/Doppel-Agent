@@ -324,3 +324,36 @@ textarea { resize: vertical; line-height: 1.55; }.helper { display: block; line-
 .codex-shell .conversation-messages > * { flex-shrink: 0; }
 .codex-shell .legacy-workspace .legacy-inspector { width: 100%; max-height: 55vh; overflow: auto; margin-top: 10px; }
 @media (max-height: 640px) { .codex-shell .classic-welcome { padding-block: 12px; }.codex-shell .classic-welcome h2 { font-size: 20px; }.codex-shell .classic-welcome > p:not(.sr-only) { margin-block: 8px; }.codex-shell .classic-suggestions { margin-top: 16px; gap: 8px; }.codex-shell .classic-suggestions button { min-height: 34px; padding: 8px 10px; }.codex-shell .conversation-messages { padding-block: 12px; } }
+
+/* Public progress stays in the transcript; only tool metadata is collapsed. */
+.run-activity { min-width: 0; }
+.activity-ack, .activity-tools { color: var(--muted, #a49cb3); margin: 16px 0; font-size: 13px; }
+.activity-tools summary { cursor: pointer; padding: 8px 2px; overflow-wrap: anywhere; }
+.activity-tools summary span { margin-left: 8px; opacity: .8; }
+.activity-tools ol { list-style: none; margin: 8px 0; padding: 0 12px; max-height: 220px; overflow-y: auto; }
+.activity-tools li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 7px 0; }
+.activity-tools small { opacity: .8; }
+.activity-tools > button { font-size: 12px; }
+.model-quick-picker { position: relative; min-width: 0; }
+.model-quick-trigger { display: flex; align-items: center; gap: 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.model-picker-backdrop { position: fixed; inset: 0; z-index: 110; border: 0 !important; border-radius: 0 !important; background: transparent !important; cursor: default; }
+.model-picker-panel { position: absolute; right: 0; bottom: calc(100% + 12px); width: min(350px, calc(100vw - 36px)); z-index: 111; padding: 12px; border: 1px solid #62596f; border-radius: 12px; background: #282430; color: #eee8f8; box-shadow: 0 12px 45px #0008; }
+.model-picker-panel input { width: 100%; background: #211e29; color: #eee8f8; }
+.model-picker-list { max-height: min(320px, 40dvh); overflow-y: auto; margin: 8px 0; }
+.model-picker-list h3 { margin: 14px 8px 5px; font-size: 11px; color: #b6acc8; text-transform: uppercase; letter-spacing: .06em; }
+.model-picker-panel button { color: inherit; }
+.model-picker-list button { width: 100%; display: flex; justify-content: space-between; text-align: left; padding: 9px; border: 0; background: transparent; }
+.model-picker-list button[aria-pressed="true"] { background: #494056; }
+.model-picker-list button strong, .model-picker-list button small { display: block; overflow-wrap: anywhere; }
+.model-picker-list button small { color: #b6acc8; font-size: 11px; margin-top: 3px; }
+.model-picker-panel footer { border-top: 1px solid #62596f; padding-top: 8px; display: grid; }
+.model-picker-panel footer button { text-align: left; border: 0; background: transparent; padding: 9px; }
+.model-picker-hint { color: #b6acc8; font-size: 11px; margin: 8px 5px 2px; }
+.model-picker-panel :is(button,input):focus-visible, .model-quick-trigger:focus-visible, .activity-tools summary:focus-visible { outline: 2px solid #c1a6f3; outline-offset: 2px; }
+.provider-preset-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.provider-preset-bar [aria-pressed="true"] { border-color: #c1a6f3; background: #494056; }
+
+.codex-shell .model-quick-trigger { background: transparent; color: #c8bed3; border: 0; border-radius: 7px; min-height: 28px; padding: 4px 8px; font-size: 12px; }
+.codex-shell .model-quick-trigger:hover { background: #ffffff0a; }
+.codex-shell .activity-tools > button { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 9px; }
+.model-picker-panel { max-height: calc(100dvh - 190px); overflow-y: auto; }

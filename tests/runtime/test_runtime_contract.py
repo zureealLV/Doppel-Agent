@@ -47,9 +47,9 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.runtime, "legacy")
         self.assertEqual(result.thread_id, "thread-1")
         self.assertEqual([kind for kind, _ in sink.events], [
-            "runtime.started", "provider.call_started", "provider.call_finished", "runtime.finished",
+            "runtime.started", "provider.call_started", "assistant.turn", "provider.call_finished", "runtime.finished",
         ])
-        started, finished = sink.events[1][1], sink.events[2][1]
+        started, finished = sink.events[1][1], sink.events[3][1]
         self.assertEqual(started['call_id'], finished['call_id'])
         self.assertEqual(finished['outcome'], 'returned')
         self.assertFalse(finished['billing_complete'])

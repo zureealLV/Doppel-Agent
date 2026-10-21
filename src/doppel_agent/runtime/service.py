@@ -848,7 +848,7 @@ class RunService:
                 limits=self.resources,
             )
         options = {
-            "max_steps": {"quick": 6, "balanced": 8, "deep": 12}[request.get("effort", "balanced")],
+            "max_steps": None,  # No product turn cap; deadlines/cancellation/permissions still apply.
             "allow_write": request["permissions"].get("workspace_write", False),
             "allow_command": request["permissions"].get("command_execute", False),
             "allow_mcp": request["permissions"].get("mcp_execute", False),

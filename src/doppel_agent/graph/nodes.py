@@ -73,8 +73,8 @@ class FocusedGraphNodes:
     async def reason(self, state: DoppelState) -> dict[str, Any]:
         messages = [deserialize_message(item) for item in state["messages"]]
         step = state.get("step_count", 1)
-        max_steps = state.get("max_steps", 8)
-        final_turn = step >= max_steps
+        max_steps = state.get("max_steps")
+        final_turn = max_steps is not None and step >= max_steps
         messages, _ = self.context.compact(messages)
         schemas = [] if final_turn else self.tools.schemas()
         if final_turn:

@@ -80,6 +80,7 @@ describe("native archived composer boundary", () => {
     const form = descendants(mounted.root).find(node => node.tag === "form" && node.props.class === "chat-composer")!;
     const selects = descendants(form).filter(node => node.tag === "select" && node.parent?.tag === "label");
     expect(selects).toHaveLength(2);
+    expect(descendants(form).some(node => node.props["aria-label"] === "快速切换模型")).toBe(true);
     for (const select of selects) expect(select.props.disabled).toBe(false);
     expect(nativeWorkspaceApi.update).not.toHaveBeenCalled(); expect(nativeWorkspaceApi.start).not.toHaveBeenCalled();
   });

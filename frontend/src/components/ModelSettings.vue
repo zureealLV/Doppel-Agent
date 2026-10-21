@@ -7,7 +7,7 @@ import type { ModelProfile, PublicSettings } from "../workspaceTypes";
 import { canonicalTariff, emptyTariffEdit, tariffEditFromSaved, tariffErrorMessage, type BillingTariff } from '../billingTariff';
 import { modelSettingsLifetimeKey, type ModelSettingsReply } from '../modelSettingsLifetime';
 
-const props = defineProps<{ settings: PublicSettings }>();
+const props = defineProps<{ settings: PublicSettings; initialProfileId?: string }>();
 const emit = defineEmits<{ close: []; changed: [settings: PublicSettings] }>();
 const owner = inject(modelSettingsLifetimeKey);
 if (!owner) throw new Error('settings_owner_missing'); // Production MUST use the original App owner, never a dialog-local flight.
@@ -114,7 +114,7 @@ async function remove(): Promise<void> {
   finally { form.api_key = ""; visibleKey.value = false; busy.value = false; }
 }
 
-onMounted(() => { fill(props.settings.active_profile_id); dialog.value?.showModal(); });
+onMounted(() => { fill(props.initialProfileId || props.settings.active_profile_id); dialog.value?.showModal(); });
 onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billing_tariff_edit = emptyTariffEdit(); savedTariff.value = null; savedProfile.value = null; dialog.value?.close(); });
 </script>
 
@@ -130,9 +130,11 @@ onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billin
         <button v-if="lifetime.state.uncertain" type="button" :disabled="replyBlocked || lifetime.state.deferred" @click="readCurrent">明确只读查看当前设置（不解除未知门禁）</button></div>
       <fieldset :disabled="blocked">
         <div class="inline-form"><label class="sr-only" for="profile-selector">模型档案</label><select id="profile-selector" :value="profileId" @change="fill(($event.target as HTMLSelectElement).value)"><option v-for="profile in props.settings.profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option><option v-if="profileId === '__new__'" value="__new__">新模型</option></select><button type="button" @click="fill('__new__')">新建</button><button type="button" class="danger-button" :disabled="props.settings.profiles.length <= 1 || profileId === '__new__'" @click="remove">删除</button></div>
+        <nav class="provider-preset-bar" aria-label="提供商配置入口"><button v-for="preset in [{id:'deepseek',name:'DeepSeek'}, {id:'openai',name:'OpenAI 兼容'}, {id:'local',name:'本地 / Ollama 兼容'}, {id:'custom',name:'自定义提供商'}]" :key="preset.id" type="button" :aria-pressed="form.preset === preset.id" @click="form.preset = preset.id">{{ preset.name }}</button></nav>
+        <p class="helper">预设只选择协议类别，不覆盖服务地址、模型名称或 Key。自定义提供商支持 OpenAI-compatible Chat Completions；请填写提供商的实际 Base URL 与模型 ID。</p>
         <div class="field-grid settings-fields">
           <label><span class="field-label">档案名称</span><input v-model="form.name" maxlength="60" required /></label>
-          <label><span class="field-label">服务预设</span><select id="profile-preset" v-model="form.preset"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI-compatible</option><option value="local">本地服务</option><option value="mock">离线 Mock</option></select></label>
+          <label><span class="field-label">服务预设</span><select id="profile-preset" v-model="form.preset"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI-compatible</option><option value="custom">自定义提供商（OpenAI-compatible）</option><option value="local">本地服务</option><option value="mock">离线 Mock</option></select></label>
           <label><span class="field-label">模型名称</span><input id="profile-model" v-model="form.model" :required="form.preset !== 'mock'" /></label>
           <label><span class="field-label">API Base URL</span><input v-model="form.base_url" type="url" :required="form.preset !== 'mock'" /></label>
           <label><span class="field-label">旧兼容输入数值（不是计费声明）</span><input v-model.number="form.input_price" type="number" min="0" step="any" /></label>

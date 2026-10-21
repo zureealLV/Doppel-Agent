@@ -16,6 +16,22 @@ from .provider_observation import BODY_LIMIT, _finite_float, _reject_constant, _
 
 StreamCallback = Callable[[str], Awaitable[None] | None]
 _callback: ContextVar[StreamCallback | None] = ContextVar('doppel_model_stream', default=None)
+_public_output: ContextVar[bool] = ContextVar('doppel_public_model_output', default=True)
+
+
+@contextmanager
+def delegated_model_scope():
+    """Child calls keep their receipts but are not root public conversation turns."""
+    token = _public_output.set(False)
+    try:
+        yield
+    finally:
+        _public_output.reset(token)
+
+
+def public_model_output() -> bool:
+    return _public_output.get()
+
 
 
 @contextmanager

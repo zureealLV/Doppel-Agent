@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from pathlib import Path
+import sys
 from typing import Any
 
 from deepagents import (
@@ -14,12 +15,15 @@ from deepagents import (
     register_harness_profile,
 )
 from deepagents.middleware.filesystem import FilesystemPermission
+from deepagents.graph import DeepAgentState
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage
 from langchain.agents.middleware import ModelCallLimitMiddleware
+from langchain.agents.middleware.types import AgentState
 from langgraph.types import Command
 
 from ..concurrency.limits import ResourceLimits
+from ..loop import PUBLIC_PROGRESS_PROMPT
 from ..persistence import sqlite_checkpointer
 from ..persistence.tool_ledger import ToolExecutionLedger
 from ..provider import Provider, bounded_run_retries
@@ -50,6 +54,14 @@ register_harness_profile(
 )
 
 
+class _FullSnapshotState(DeepAgentState, AgentState):
+    """Keep message checkpoints self-contained for bounded checkpoint retention.
+
+    Deep's default DeltaChannel needs older checkpoints to replay messages.
+    Doppel prunes those checkpoints, so use AgentState's full add_messages
+    channel independently of any optional model-call limit.
+    """
+
 class _DeepEventBridge(AsyncCallbackHandler):
     def __init__(self, sink: EventSink):
         self.sink = sink
@@ -67,17 +79,21 @@ class _DeepEventBridge(AsyncCallbackHandler):
             kind = "deep.skill_loaded"
         else:
             kind = "deep.tool_started"
-        await self.sink.emit(kind, tool=name, input_preview=input_str[:500])
+        await self.sink.emit(kind, tool=name, tool_call_id=callback_id, input_preview=input_str[:500])
 
     async def on_tool_end(self, output: Any, **kwargs: Any) -> None:
-        name = self._tool_names.pop(str(kwargs.get("run_id", "")), "unknown")
+        callback_id = str(kwargs.get("run_id", ""))
+        name = self._tool_names.pop(callback_id, "unknown")
         kind = "deep.subagent_finished" if name == "task" else "deep.tool_finished"
-        await self.sink.emit(kind, tool=name, output_preview=str(output)[:500])
+        await self.sink.emit(kind, tool=name, tool_call_id=callback_id, output_preview=str(output)[:500])
         # Patch effects are emitted by the owned tool immediately after actual
         # ledger sealing, before optional verification, not inferred from repr.
 
     async def on_tool_error(self, error: BaseException, **kwargs: Any) -> None:
-        await self.sink.emit("deep.tool_failed", error=f"{type(error).__name__}: tool execution failed")
+        callback_id = str(kwargs.get("run_id", ""))
+        name = self._tool_names.pop(callback_id, "unknown")
+        await self.sink.emit("deep.tool_failed", tool=name, tool_call_id=callback_id,
+                             error=f"{type(error).__name__}: tool execution failed")
         if type(error).__name__ == "PatchConflictError":
             await self.sink.emit("patch.conflict", error=str(error))
 
@@ -100,7 +116,7 @@ class DeepAgentRuntime:
         provider: Provider,
         *,
         checkpoint_path: Path | None = None,
-        max_steps: int = 12,
+        max_steps: int | None = None,
         allow_write: bool = False,
         allow_command: bool = False,
         require_verification_review: bool = False,
@@ -146,7 +162,7 @@ class DeepAgentRuntime:
             self.workspace,
             provider,
             checkpoint_path=root.with_name("focused-fallback.sqlite3"),
-            max_steps=min(max_steps, 8),
+            max_steps=None if max_steps is None else min(max_steps, 8),
             resource_limits=resource_limits,
             provider_receipt_fault=self.provider_receipt_fault,
             billing_price_receipt=self._billing_price_receipt,
@@ -193,7 +209,7 @@ class DeepAgentRuntime:
                 ),
                 "model": model("deep_builtin_investigator", "doppel-investigator"),
                 "tools": [],
-                "middleware": [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
+                "middleware": [] if self.max_steps is None else [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
                 "permissions": [
                     FilesystemPermission(operations=["write"], paths=["/**"], mode="deny")
                 ],
@@ -207,7 +223,7 @@ class DeepAgentRuntime:
                 ),
                 "model": model("deep_builtin_verifier", "doppel-verifier"),
                 "tools": [],
-                "middleware": [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
+                "middleware": [] if self.max_steps is None else [ModelCallLimitMiddleware(run_limit=6, exit_behavior="end")],
                 "permissions": [
                     FilesystemPermission(operations=["write"], paths=["/**"], mode="deny")
                 ],
@@ -230,7 +246,7 @@ class DeepAgentRuntime:
         return create_deep_agent(
             model=model,
             tools=tools,
-            system_prompt=(
+            system_prompt=PUBLIC_PROGRESS_PROMPT + (
                 "You are Doppel deep mode. Use progressive disclosure, keep work inside the workspace, "
                 "delegate at most two read-only investigations, and ground the final answer in evidence paths. "
                 "For workspace changes, use propose_patch and provide only its changes field."
@@ -240,7 +256,8 @@ class DeepAgentRuntime:
             permissions=self._permissions(),
             backend=backend,
             interrupt_on=interrupt_on or None,
-            middleware=[ModelCallLimitMiddleware(run_limit=self.max_steps, exit_behavior="end")],
+            state_schema=_FullSnapshotState,
+            middleware=[] if self.max_steps is None else [ModelCallLimitMiddleware(run_limit=self.max_steps, exit_behavior="end")],
             checkpointer=checkpointer,
             name="doppel-deep",
         )
@@ -310,7 +327,7 @@ class DeepAgentRuntime:
                     {"messages": messages},
                     config={
                         "configurable": {"thread_id": request.thread_id},
-                        "recursion_limit": max(40, self.max_steps * 8),
+                        "recursion_limit": sys.maxsize if self.max_steps is None else max(40, self.max_steps * 8),
                         "callbacks": [_DeepEventBridge(sink)],
                     },
                 )

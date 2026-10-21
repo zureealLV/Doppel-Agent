@@ -36,7 +36,7 @@ export interface ProfileForm {
 
 export type ProfileConfiguration = Omit<ProfileForm, 'billing_tariff_edit'> & TariffPatch & { provider: 'mock' | 'openai' };
 
-export interface ChatSubmission { prompt: string; effort: Effort; permissions: Permissions }
+export interface ChatSubmission { prompt: string; effort: Effort; permissions: Permissions; deadline_seconds?: number }
 export interface PersistentRunRequest {
   prompt: string; mode: "agent" | "review"; effort: Effort; conversation_id: string;
   config: { profile_id: string }; allow_write: boolean; allow_command: boolean; allow_mcp: boolean; allow_delegate: boolean;

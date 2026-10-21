@@ -107,10 +107,18 @@ class LegacyRuntime:
 
         # The specialized patch already owns its optional command slot. Generic
         # command calls use the same resource gate without reserving twice.
-        if self.resource_limits is not None and tools.capability(call.name) == "command_execute":
-            async with self.resource_limits.command():
-                return await operation()
-        return await operation()
+        await sink.emit("legacy.tool_started", tool=call.name, tool_call_id=call.id)
+        try:
+            if self.resource_limits is not None and tools.capability(call.name) == "command_execute":
+                async with self.resource_limits.command():
+                    output = await operation()
+            else:
+                output = await operation()
+        except BaseException:
+            await sink.emit("legacy.tool_failed", tool=call.name, tool_call_id=call.id)
+            raise
+        await sink.emit("legacy.tool_finished", tool=call.name, tool_call_id=call.id)
+        return output
 
     async def _invoke(self, request: RunRequest, sink: EventSink, *,
                       continuation: LoopContinuation | None = None,
@@ -143,7 +151,7 @@ class LegacyRuntime:
             if decision is not None and (continuation is None or call.id != continuation.pending_calls[0].id
                                          or call.name != continuation.pending_calls[0].name):
                 raise RuntimeError("legacy_review_invalid_pending_boundary")
-            if frame.step >= int(self.core_options.get("max_steps", 8)):
+            if self.core_options.get("max_steps") is not None and frame.step >= self.core_options["max_steps"]:
                 raise RuntimeError("legacy_final_turn_tool_requested")
             try:
                 capability = tools.capability(call.name)

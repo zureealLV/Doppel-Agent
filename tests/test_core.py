@@ -63,7 +63,7 @@ class CoreTests(unittest.TestCase):
         self.assertIn("Tool error", result["answer"])
 
     def test_loop_budget(self):
-        result = Core(self.root, RepeatingProvider()).run("go")
+        result = Core(self.root, RepeatingProvider(), max_steps=8).run("go")
         self.assertEqual(result["status"], "failed")
         self.assertIn("max_steps_exceeded", result["answer"])
 

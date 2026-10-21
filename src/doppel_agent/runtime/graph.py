@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Any
 
 from langgraph.types import Command
@@ -49,7 +50,7 @@ class GraphRuntime:
         *,
         tools: ToolRegistry | None = None,
         checkpoint_path: Path | None = None,
-        max_steps: int = 8,
+        max_steps: int | None = None,
         context_limit_tokens: int = 32_000,
         resource_limits: ResourceLimits | None = None,
         provider_receipt_fault: ProviderReceiptFault | None = None,
@@ -139,7 +140,8 @@ class GraphRuntime:
                 state["messages"] = [*snapshot.values["messages"], {"role": "user", "content": request.input_prompt}]
             result = await graph.ainvoke(
                 state,
-                config={"configurable": {"thread_id": request.thread_id}},
+                config={"configurable": {"thread_id": request.thread_id},
+                        "recursion_limit": sys.maxsize if self.max_steps is None else max(40, self.max_steps * 4)},
             )
         runtime_result = self._result(request.run_id, request.thread_id, result)
         await sink.emit(
@@ -173,9 +175,13 @@ class GraphRuntime:
                 cleanup_failure=self.provider_receipt_fault.retain_cleanup,
                 cleanup_check=self.provider_receipt_fault.check_cleanup) as checkpointer:
             graph = self._build_graph(checkpointer, sink)
+            # Old interrupted checkpoints may contain the previous 6/8/12-step cap.
+            await graph.aupdate_state({"configurable": {"thread_id": command.thread_id}},
+                                      {"max_steps": self.max_steps})
             result = await graph.ainvoke(
                 Command(resume=command.value),
-                config={"configurable": {"thread_id": command.thread_id}},
+                config={"configurable": {"thread_id": command.thread_id},
+                        "recursion_limit": sys.maxsize if self.max_steps is None else max(40, self.max_steps * 4)},
             )
         runtime_result = self._result(command.run_id, command.thread_id, result)
         await sink.emit(

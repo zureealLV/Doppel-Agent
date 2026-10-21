@@ -19,6 +19,6 @@ class DoppelState(TypedDict, total=False):
     answer: str
     status: Literal["running", "completed", "failed", "interrupted", "cancelled"]
     step_count: int
-    max_steps: int
+    max_steps: int | None
     error: dict[str, Any] | None
     approval: dict[str, Any] | None

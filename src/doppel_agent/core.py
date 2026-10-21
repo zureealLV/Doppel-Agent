@@ -33,7 +33,7 @@ class Core:
         allow_delegate: bool = False,
         approver: Callable[[str, str, dict[str, Any]], bool] | None = None,
         state_root: Path | None = None,
-        max_steps: int = 8,
+        max_steps: int | None = None,
         review_mode: bool = False,
         reviewed_tools: bool = False,
         require_verification_review: bool = False,
@@ -265,7 +265,7 @@ class Core:
             for tool in skill_tools(SkillLoader(self.workspace)):
                 tools.register(tool)
             if "delegate_readonly" in self.allowed_capabilities:
-                tools.register(delegate_tool(DelegateManager(self.workspace, self.provider, bus)))
+                tools.register(delegate_tool(DelegateManager(self.workspace, self.provider, bus, check_cancelled=self._check_original_admission)))
         status = "completed"
         metadata: dict[str, Any] = {}
         try:

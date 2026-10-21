@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { FolderPlus, MessageSquarePlus, Search, Settings2, ChevronDown, MoreHorizontal, PanelRight, Archive, Plus, ArrowUp, ScanLine, Network, FlaskConical, ShieldCheck, Pencil, Trash2, Workflow } from "lucide-vue-next";
 
 import ModelSettings from "./ModelSettings.vue";
+import RunActivity from "./RunActivity.vue";
+import ModelQuickPicker from "./ModelQuickPicker.vue";
 import CodingTemplates from "./CodingTemplates.vue";
 import RunInspector from "./RunInspector.vue";
 import { nativeWorkspaceApi as workspaceApi } from "../workspaceApi";
@@ -20,11 +22,14 @@ const state = controller.state;
 const prompt = ref("");
 const includeContext = ref(false);
 const effort = ref<Effort>("balanced");
+const deadline = ref(600);
 const grants = reactive<Permissions>({ workspace_write: false, command_execute: false, mcp_execute: false, delegate: false });
 const inspector = ref(false);
 const messagesElement = ref<HTMLElement | null>(null);
 const followingOutput = ref(true);
 const settingsOpen = ref(false);
+const settingsProfile = ref<string | undefined>();
+function openSettings(id = state.profileId): void { settingsProfile.value = id; settingsOpen.value = true; }
 const searchDialog = ref<HTMLDialogElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const query = ref("");
@@ -77,7 +82,7 @@ async function draft(mode: "agent" | "review"): Promise<void> {
 async function submit(): Promise<void> {
   if (composerBlocked.value || !prompt.value.trim()) return;
   await attempt(async () => {
-    await controller.submit({ prompt: prompt.value, effort: effort.value, permissions: { ...grants } }, includeContext.value);
+    await controller.submit({ prompt: prompt.value, effort: effort.value, deadline_seconds: deadline.value, permissions: { ...grants } }, includeContext.value);
     if (state.current?.active_run_id) { prompt.value = ""; await controller.refreshRun(); }
   });
 }
@@ -92,11 +97,6 @@ function keySend(event: KeyboardEvent): void {
 
 function changedSettings(settings: PublicSettings): void { controller.updateSettings(settings); emit("settings", settings); }
 
-async function selectProfile(event: Event): Promise<void> {
-  const select = event.target as HTMLSelectElement;
-  await attempt(() => controller.chooseProfile(select.value));
-  select.value = state.profileId;
-}
 
 async function filterArchive(archived: boolean): Promise<void> {
   state.archived = archived;
@@ -201,7 +201,7 @@ function searchKey(event: KeyboardEvent): void {
 
 watch(() => props.sharedSettings, settings => { if (settings) controller.updateSettings(settings); });
 watch(() => state.current?.id, async () => { prompt.value = ""; followingOutput.value = true; await nextTick(); scrollToLatest(); });
-watch(() => [state.current?.messages.length, state.current?.messages.at(-1)?.content, state.streamingText, props.active], async () => {
+watch(() => [state.current?.messages.length, state.current?.messages.at(-1)?.content, state.streamingText, JSON.stringify(state.activities), props.active], async () => {
   if (!followingOutput.value || !props.active) return;
   await nextTick();
   if (followingOutput.value) scrollToLatest();
@@ -251,7 +251,7 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
       </div>
       <div class="filter-row codex-recents"><button type="button" title="最近对话" :aria-pressed="!state.archived" @click="filterArchive(false)">最近</button><button type="button" class="icon-button" title="已归档" aria-label="已归档" :aria-pressed="state.archived" @click="filterArchive(true)"><Archive :size="16" aria-hidden="true" /><span class="sr-only">已归档</span></button></div>
       <nav class="conversation-list" aria-label="对话列表"><button v-for="item in rows" :key="item.id" type="button" :title="`${item.title} · ${item.mode} · ${item.group_name || item.updated_at} · ${item.message_count} 条消息`" :aria-current="state.current?.id === item.id ? 'page' : undefined" @click="attempt(() => controller.open(item.id))"><strong>{{ item.title }}</strong><span class="sr-only">{{ item.mode }} · {{ item.group_name || item.updated_at }} · {{ item.message_count }} 条消息</span></button><p v-if="!rows.length" class="helper">{{ state.loading ? '加载中…' : '这里还没有对话。' }}</p></nav>
-      <div class="classic-sidebar-bottom"><button type="button" class="classic-model-card" title="模型与 API" aria-label="模型与 API" :disabled="!state.settings" @click="settingsOpen = true"><Settings2 :size="18" aria-hidden="true" /><span class="sr-only">模型与 API</span><small>{{ state.settings?.profiles.find(p => p.id === state.profileId)?.name || '模型设置' }}</small></button></div>
+      <div class="classic-sidebar-bottom"><button type="button" class="classic-model-card" title="模型与 API" aria-label="模型与 API" :disabled="!state.settings" @click="openSettings()"><Settings2 :size="18" aria-hidden="true" /><span class="sr-only">模型与 API</span><small>{{ state.settings?.profiles.find(p => p.id === state.profileId)?.name || '模型设置' }}</small></button></div>
     </aside>
 
     <main :id="props.active ? 'main-content' : undefined" class="conversation-main" tabindex="-1">
@@ -261,9 +261,9 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
       <header class="section-heading classic-chat-header"><div :title="state.workspace"><h2>{{ state.current?.title || '新对话' }}</h2></div><div class="button-row"><button type="button" class="icon-button" title="管理对话" aria-label="管理对话" :disabled="!state.current || controller.busy" @click="openManage"><MoreHorizontal :size="18" aria-hidden="true" /><span class="sr-only">管理对话</span></button><button type="button" class="icon-button" title="执行详情" aria-label="执行详情" :aria-pressed="inspector" aria-controls="native-inspector" @click="inspector = !inspector"><PanelRight :size="18" aria-hidden="true" /><span class="sr-only">执行详情</span></button></div></header>
       <p v-if="state.loading" role="status">加载原生历史…</p><button v-if="state.error" type="button" @click="controller.initialize()">重试加载</button>
       <section ref="messagesElement" class="conversation-messages" aria-live="polite" aria-label="对话消息" @scroll="readScrollPosition">
-        <template v-if="state.current?.messages.length"><article v-for="item in state.current.messages" :key="item.id" class="chat-message" :data-role="item.role"><header>{{ item.role === 'user' ? '你' : `Doppel${item.model ? ' · ' + item.model : ''}` }} · {{ item.status }} <button type="button" class="icon-button" title="查看此轮运行" aria-label="查看此轮运行" @click="controller.selectRun(item.run_id); inspector = true"><Workflow :size="15" aria-hidden="true" /><span class="sr-only">查看此轮运行</span></button></header><div v-if="item.role === 'assistant'" class="chat-markdown" v-html="safeMarkdown(item.content)" /><pre v-else>{{ item.content }}</pre></article></template>
+        <template v-if="state.current?.messages.length"><template v-for="item in state.current.messages" :key="item.id"><article class="chat-message" :data-role="item.role"><header>{{ item.role === 'user' ? '你' : `Doppel${item.model ? ' · ' + item.model : ''}` }} · {{ item.status }} <button type="button" class="icon-button" title="查看此轮运行" aria-label="查看此轮运行" @click="controller.selectRun(item.run_id); inspector = true"><Workflow :size="15" aria-hidden="true" /><span class="sr-only">查看此轮运行</span></button></header><div v-if="item.role === 'assistant'" class="chat-markdown" v-html="safeMarkdown(item.content)" /><pre v-else>{{ item.content }}</pre></article><RunActivity v-if="item.role === 'user'" :items="state.activities[item.run_id] || []" :active="state.current.active_run_id === item.run_id && runNotice?.status === 'running'" :answer="state.current.messages.find(message => message.run_id === item.run_id && message.role === 'assistant')?.content" @inspect="controller.selectRun(item.run_id); inspector = true" /></template></template>
         <div v-else class="empty-inline classic-welcome"><p class="eyebrow sr-only">LOCAL CODE AGENT</p><h2>{{ reviewDraft ? '选择一种审查方式。' : '今天想完成什么？' }}</h2><p>从一个任务开始。</p><p class="sr-only">模板只填入提示词，不会自动启动模型。</p><div class="classic-suggestions"><button type="button" :disabled="composerBlocked" @click="prompt = '先绘制项目结构，再定向搜索高风险代码。只读审查可复现问题，按严重度给出文件、行号、证据和最小修复建议。'"><ScanLine :size="19" aria-hidden="true" /><strong>审查当前项目</strong></button><button type="button" :disabled="composerBlocked" @click="prompt = '阅读项目结构和入口文件，说明模块与数据流。'"><Network :size="19" aria-hidden="true" /><strong>理解代码库</strong></button><button type="button" :disabled="composerBlocked" @click="prompt = '检查测试策略和失败风险，列出最值得补充的三个测试。'"><FlaskConical :size="19" aria-hidden="true" /><strong>检查测试</strong></button><button v-if="reviewDraft" type="button" :disabled="composerBlocked" @click="prompt = '只读审查安全与权限边界，优先检查凭据、路径越界、注入、鉴权与危险命令。'"><ShieldCheck :size="19" aria-hidden="true" /><strong>安全审查</strong></button></div></div>
-        <article v-if="state.streamingText && state.current?.active_run_id" class="chat-message" data-role="assistant" :data-streaming="true"><header>Doppel · 输出中</header><div class="chat-markdown" v-html="safeMarkdown(state.streamingText)" /></article>
+        <article v-if="state.streamingText && state.current?.active_run_id && !state.activities[state.current.active_run_id]?.length" class="chat-message" data-role="assistant" :data-streaming="true"><header>Doppel · 输出中</header><div class="chat-markdown" v-html="safeMarkdown(state.streamingText)" /></article>
       </section>
       <div v-if="!followingOutput" class="conversation-scroll-actions"><button type="button" @click="scrollToLatest">回到底部 ↓</button></div>
       <section v-if="runNotice || state.budgetNotice" class="conversation-run-notice" aria-label="运行提醒" :data-status="runNotice?.status">
@@ -276,11 +276,13 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
         <details class="classic-composer-options"><summary aria-label="运行权限、上下文与任务模板" title="运行权限、上下文与任务模板"><Plus :size="19" aria-hidden="true" /></summary><div class="classic-permission-popover">
         <CodingTemplates v-if="!reviewDraft" :blocked="composerBlocked" :has-draft="!!prompt" @choose="prompt = $event" />
         <div class="button-row"><button type="button" :disabled="composerBlocked" @click="prompt = '先绘制项目结构，再定向搜索高风险代码。只读审查可复现问题，按严重度给出文件、行号、证据和最小修复建议。'">全面审查</button><button type="button" :disabled="composerBlocked" @click="prompt = '只读审查安全与权限边界，优先检查凭据、路径越界、注入、鉴权与危险命令。'">安全审查</button></div>
+        <label><span class="field-label">任务超时（不限工具轮次）</span><select v-model.number="deadline" :disabled="composerBlocked" title="任务超时"><option :value="600">10 分钟</option><option :value="1800">30 分钟</option><option :value="3600">60 分钟</option></select></label>
+        <p class="helper">不设固定思考 / 检查步数上限。可在执行详情中取消；超时、权限与资源保护仍有效。</p>
         <fieldset class="permissions" :disabled="composerBlocked"><legend>显式权限</legend><label v-for="(name, key) in permissionLabels" :key="key"><input v-model="grants[key]" type="checkbox" /><span>{{ name }}</span></label></fieldset>
         <label class="context-confirm"><input v-model="includeContext" type="checkbox" :disabled="composerBlocked" />本次绑定已接受的项目上下文 / 已选笔记版本</label>
         <p class="helper">默认不绑定。勾选后先等待项目作用域选择保存；服务接收时检查来源并冻结输入，不随面板改选。权限仍由上方显式开关决定。</p>
         </div></details>
-        <div class="field-grid"><label><span class="field-label">模型档案</span><select title="模型档案" :value="state.profileId" :disabled="composerBlocked || !state.settings" @change="selectProfile"><option v-for="profile in state.settings?.profiles" :key="profile.id" :value="profile.id">{{ profile.name }} · {{ profile.model }}</option></select></label><label><span class="field-label">推理力度</span><select title="推理力度" v-model="effort" :disabled="composerBlocked"><option value="quick">quick</option><option value="balanced">balanced</option><option value="deep">deep</option></select></label></div>
+        <div class="field-grid"><ModelQuickPicker :settings="state.settings" :selected="state.profileId" :disabled="composerBlocked" @select="id => attempt(() => controller.chooseProfile(id))" @configure="openSettings()" @add="openSettings('__new__')" /><label><span class="field-label">推理力度</span><select title="推理力度" v-model="effort" :disabled="composerBlocked"><option value="quick">quick</option><option value="balanced">balanced</option><option value="deep">deep</option></select></label></div>
         <button class="primary-button classic-send" type="submit" :disabled="composerBlocked || !prompt.trim() || !state.profileId" title="发送任务"><ArrowUp :size="19" aria-hidden="true" /><span class="sr-only">{{ controller.busy ? '运行 / 提交中…' : '发送任务' }}</span></button>
         </div>
         <div v-if="controller.submissionUncertain" class="order-warning" role="alert">上次回复未知；不得改请求另发任务。<button type="button" :disabled="state.submitting || state.closing" @click="retrySubmission">重试原请求（相同上下文与 key）</button></div>
@@ -296,6 +298,6 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
     <dialog ref="searchDialog" class="workspace-dialog" aria-labelledby="native-workspace-search-title"><section class="workspace-dialog-content"><header class="section-heading"><h2 id="native-workspace-search-title">搜索标题与消息（包括归档）</h2><button type="button" class="icon-button" aria-label="关闭搜索" @click="searchDialog?.close()">×</button></header><label class="sr-only" for="native-workspace-search">关键词</label><input id="native-workspace-search" ref="searchInput" v-model="query" type="search" autocomplete="off" @keydown="searchKey" /><p role="status">{{ state.searching ? '搜索中…' : state.searchResults.length + ' 个结果 · ↑↓ 选择，Enter 打开' }}</p><nav class="conversation-list" aria-label="搜索结果"><button v-for="(row, index) in state.searchResults" :key="row.id" type="button" :class="{ selected: index === selectedResult }" @click="chooseResult(row)"><strong>{{ row.title }} {{ row.archived ? '· 已归档' : '' }}</strong><small>{{ row.preview }}</small></button></nav></section></dialog>
     <dialog ref="manageDialog" class="workspace-dialog" aria-labelledby="native-manage-conversation-title"><form class="workspace-dialog-content" @submit.prevent="saveManage"><header class="section-heading"><h2 id="native-manage-conversation-title">管理对话</h2><button type="button" class="icon-button" aria-label="关闭对话管理" @click="manageDialog?.close()">×</button></header><label><span class="field-label">标题</span><input v-model="manage.title" maxlength="80" required /></label><label><span class="field-label">分组</span><select v-model="manage.groupId"><option value="">未分组</option><option v-for="group in state.groups" :key="group.id" :value="group.id">{{ group.name }}</option></select></label><footer class="button-row"><button type="button" class="danger-button" @click="deleteCurrent">删除可见历史</button><button type="button" @click="archiveCurrent">{{ state.current?.archived ? '取消归档' : '归档' }}</button><button type="submit" class="primary-button">保存</button></footer></form></dialog>
     <dialog id="native-group-rename-dialog" ref="groupRenameDialog" class="workspace-dialog" aria-labelledby="native-group-rename-title" @cancel="groupRename.busy && $event.preventDefault()"><form @submit.prevent="saveGroupRename"><header class="dialog-heading"><h2 id="native-group-rename-title">重命名原生分组</h2><button type="button" :disabled="groupRename.busy" @click="groupRenameDialog?.close()">关闭</button></header><label class="field-label" for="native-group-rename-input">新的分组名称</label><input id="native-group-rename-input" ref="groupRenameInput" v-model="groupRename.name" maxlength="200" required :disabled="groupRename.busy" /><p v-if="state.error" role="alert">{{ state.error }}</p><footer class="button-row"><button type="submit" :disabled="groupRename.busy || !groupRename.name.trim()">保存分组名称</button></footer></form></dialog>
-    <ModelSettings v-if="settingsOpen && state.settings" :settings="state.settings" @close="settingsOpen = false" @changed="changedSettings" />
+    <ModelSettings v-if="settingsOpen && state.settings" :settings="state.settings" :initial-profile-id="settingsProfile" @close="settingsOpen = false" @changed="changedSettings" />
   </section>
 </template>

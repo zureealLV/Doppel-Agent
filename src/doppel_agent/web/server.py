@@ -293,7 +293,7 @@ class JobManager:
         effort = data.get("effort", "balanced")
         if effort not in {"quick", "balanced", "deep"}:
             raise ValueError("effort must be quick, balanced or deep")
-        max_steps = {"quick": 6, "balanced": 8, "deep": 12}[effort]
+        max_steps = None  # Effort controls model reasoning, not a fixed tool-turn cap.
         profile_id = config.get("profile_id")
         model = config.get("model", "mock")
         if isinstance(profile_id, str):

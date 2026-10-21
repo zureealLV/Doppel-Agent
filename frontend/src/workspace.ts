@@ -3,7 +3,7 @@ import { reactive } from "vue";
 import { nativeWorkspaceApi, workspaceApi } from "./workspaceApi";
 import type { RunMode, RunRequest, PrepareContext } from "./types";
 import { RunSubmissionController } from "./runSubmission";
-import { NativeReplyStream } from "./replyStream";
+import { NativeReplyStream, type RunActivity } from "./replyStream";
 import type { NativeConversation, NativeConversationSummary } from "./workspaceTypes";
 import type { ChatSubmission, Conversation, ConversationGroup, ConversationSummary, LegacyApproval, LegacyEvent,
   PersistentRun, ProfileForm, ProfileConfiguration, PublicSettings } from "./workspaceTypes";
@@ -300,7 +300,7 @@ export class NativeWorkspaceController {
     current: null as NativeConversation | null, archived: false, groupId: null as string | null,
     profileId: "", mode: "graph" as RunMode, loading: false, opening: false, transition: false, submitting: false,
     error: "", selectionError: "", selectionSaving: false, closing: false,
-    streamingText: "", streamingCallId: "", budgetNotice: "",
+    streamingText: "", streamingCallId: "", budgetNotice: "", activities: {} as Record<string, RunActivity[]>,
     selectedRunId: "", searchResults: [] as NativeConversationSummary[], searching: false });
   private readonly replyStream = new NativeReplyStream(this.state);
   private selectionEpoch = 0;
@@ -394,7 +394,7 @@ export class NativeWorkspaceController {
   }
   private select(conversation: NativeConversation): void {
     this.state.current = conversation; this.state.mode = conversation.mode;
-    this.replyStream.follow(conversation.id, conversation.active_run_id || "");
+    this.replyStream.follow(conversation.id, conversation.active_run_id || "", conversation.runs.map(run => run.run_id));
     this.state.archived = Boolean(conversation.archived);
     this.remember("doppel.native.conversation", conversation.id);
     const remembered = conversation.selected_run_id !== undefined ? conversation.selected_run_id
@@ -479,7 +479,7 @@ export class NativeWorkspaceController {
       }
       const current = this.state.current!;
       const body = { ...draftInput, prompt: draftInput.prompt.trim(), mode: current.mode, conversation_id: current.id,
-        profile_id: profileId, deadline_seconds: 600, ...(context === undefined ? {} : { context }) };
+        profile_id: profileId, deadline_seconds: draftInput.deadline_seconds ?? 600, ...(context === undefined ? {} : { context }) };
       const accepted = await this.admission.submit(body);
       if (accepted) await this.ownAccepted(accepted);
     } finally { if (!this.disposed) this.state.submitting = false; }
@@ -502,7 +502,7 @@ export class NativeWorkspaceController {
     current.active_run_id = active ? accepted.run_id : null;
     if (!current.runs.some(run => run.run_id === accepted.run_id)) current.runs.push({ run_id: accepted.run_id, mode: current.mode, status: accepted.status, lease_active: active ? 1 : 0 });
     this.state.selectedRunId = accepted.run_id;
-    this.replyStream.follow(current.id, current.active_run_id || "");
+    this.replyStream.follow(current.id, current.active_run_id || "", current.runs.map(run => run.run_id));
     await this.refreshRun();
   }
   async refreshRun(): Promise<void> {
@@ -515,7 +515,7 @@ export class NativeWorkspaceController {
       if (this.disposed || epoch !== this.selectionEpoch) return;
       const changed = JSON.stringify(current) !== JSON.stringify(next);
       this.state.current = next;
-      this.replyStream.follow(next.id, next.active_run_id || "");
+      this.replyStream.follow(next.id, next.active_run_id || "", next.runs.map(run => run.run_id));
       if (!next.runs.some(r => r.run_id === this.state.selectedRunId)) this.selectRun(next.active_run_id || next.runs.at(-1)?.run_id || "");
       if (changed) await this.refreshList();
     } finally { this.polling = false; }

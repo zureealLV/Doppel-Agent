@@ -1,8 +1,9 @@
-"""Bounded model -> tool -> model loop."""
+"""Cancellable model -> tool -> model loop with optional explicit turn budget."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import count
 from typing import Callable
 
 from .events import EventBus
@@ -11,7 +12,15 @@ from .tools import ToolRegistry
 from .context.policy import ContextPolicy
 
 
-SYSTEM_PROMPT = (
+PUBLIC_PROGRESS_PROMPT = (
+    "Use the same language as the user. Before the first tool call, give a brief public acknowledgement "
+    "and concrete next action. After meaningful findings or a change of plan, provide a concise public "
+    "progress update, then continue using tools as needed. Do not narrate every tool call. These updates "
+    "are user-facing plans and evidence summaries, not private chain-of-thought. Do not expose private "
+    "reasoning. Finish with a separate evidence-grounded summary and any remaining gaps. "
+)
+
+SYSTEM_PROMPT = PUBLIC_PROGRESS_PROMPT + (
     "You are Doppel Agent, a local coding assistant. Use tools to inspect the workspace "
     "before editing. For code review, start with workspace_map, narrow candidates with "
     "search_text, then inspect only relevant line ranges; avoid reading whole files without need. "
@@ -19,11 +28,11 @@ SYSTEM_PROMPT = (
     "its result confirms success. Stay within the workspace and respect denied permissions."
 )
 
-REVIEW_SYSTEM_PROMPT = (
+REVIEW_SYSTEM_PROMPT = PUBLIC_PROGRESS_PROMPT + (
     "You are Doppel Agent in focused, read-only code-review mode. Start with exactly one "
     "workspace_map call, use search_text to locate a concrete risk, then read_file_range only "
     "for the smallest relevant ranges. Do not inventory directories repeatedly. Stop inspecting "
-    "once evidence is sufficient and answer with at most two findings, each including severity, "
+    "when the requested scope has been checked or no further useful inspection remains, and report supported findings, each including severity, "
     "file, line, reproduction reasoning and a minimal fix. If evidence does not support a high-priority "
     "finding, say so. Never invent evidence."
 )
@@ -56,8 +65,8 @@ class LoopInterrupted(Exception):
 
 
 class AgentLoop:
-    def __init__(self, provider: Provider, tools: ToolRegistry, bus: EventBus, max_steps: int = 8, context_limit_tokens: int = 32_000, system_prompt: str = SYSTEM_PROMPT):
-        if max_steps < 1:
+    def __init__(self, provider: Provider, tools: ToolRegistry, bus: EventBus, max_steps: int | None = None, context_limit_tokens: int = 32_000, system_prompt: str = SYSTEM_PROMPT):
+        if max_steps is not None and (type(max_steps) is not int or max_steps < 1):
             raise ValueError("max_steps must be positive")
         self.provider = provider
         self.tools = tools
@@ -74,7 +83,8 @@ class AgentLoop:
         if any(message.role not in ("user", "assistant") or message.tool_calls or message.tool_call_id for message in history):
             raise ValueError("conversation history may contain only plain user/assistant messages")
         if continuation is not None:
-            if not 1 <= continuation.step <= self.max_steps or not continuation.pending_calls:
+            if (continuation.step < 1 or (self.max_steps is not None and continuation.step > self.max_steps)
+                    or not continuation.pending_calls):
                 raise ValueError("invalid loop continuation")
             messages = list(continuation.messages)
             start_step, pending = continuation.step, continuation.pending_calls
@@ -83,7 +93,7 @@ class AgentLoop:
             messages = [Message("system", self.system_prompt), *history, Message("user", prompt)]
             start_step, pending = 1, ()
             self.bus.emit("run_started", prompt=prompt)
-        for step in range(start_step, self.max_steps + 1):
+        for step in count(start_step):
             if check_cancelled is not None:
                 check_cancelled()
             if pending:

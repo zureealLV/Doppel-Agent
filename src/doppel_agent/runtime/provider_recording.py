@@ -24,7 +24,7 @@ from ..provider import (
 )
 from ..provider_observation import RequestAttempt, TRANSPORT_BOUNDARY, canonical_usage_details, transport_scope
 from ..provider_usage import MAX_SAFE, parse_usage
-from ..provider_streaming import model_stream
+from ..provider_streaming import model_stream, public_model_output
 from .provider_adapter import ProviderAdapter
 
 
@@ -428,6 +428,13 @@ class RecordedProvider:
             raise ProviderReceiptError() from None
 
     @staticmethod
+    def _public_turn(start: dict, turn: ModelTurn) -> dict:
+        # Public answer/progress content only: never reasoning, arguments, or
+        # provider internals. Keep it distinct from strict billing receipts.
+        return {"call_id": start["call_id"], "actor": start["actor"],
+                "phase": "progress" if turn.tool_calls else "final", "text": turn.content}
+
+    @staticmethod
     def _link(turn: Any, call_id: str) -> ModelTurn:
         if not isinstance(turn, ModelTurn):
             raise _InvalidModelTurn()
@@ -458,8 +465,10 @@ class RecordedProvider:
                     def delta(text: str) -> None:
                         self._append_sync("provider.content_delta", {"call_id": start["call_id"],
                             "engine": self.engine, "actor": self.actor, "text": text})
-                    with model_stream(delta) if self.stream_content else nullcontext():
+                    with model_stream(delta) if self.stream_content and public_model_output() else nullcontext():
                         turn = self._link(method(messages, tools), start["call_id"])
+                    if self.stream_content and public_model_output():
+                        self._append_sync("assistant.turn", self._public_turn(start, turn))
                 except ProviderReceiptError:
                     self.fault.mark_failed()
                     raise
@@ -500,8 +509,10 @@ class RecordedProvider:
                     async def delta(text: str) -> None:
                         await self._append("provider.content_delta", {"call_id": start["call_id"],
                             "engine": self.engine, "actor": self.actor, "text": text})
-                    with model_stream(delta) if self.stream_content else nullcontext():
+                    with model_stream(delta) if self.stream_content and public_model_output() else nullcontext():
                         turn = self._link(await method(messages, tools), start["call_id"])
+                    if self.stream_content and public_model_output():
+                        await self._append("assistant.turn", self._public_turn(start, turn))
                 except ProviderReceiptError:
                     self.fault.mark_failed()
                     raise
