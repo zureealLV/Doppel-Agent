@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import CancelledError as FutureCancelledError
+from contextlib import nullcontext
 from dataclasses import replace
 from threading import Event, Lock
 from typing import Any
@@ -23,6 +24,7 @@ from ..provider import (
 )
 from ..provider_observation import RequestAttempt, TRANSPORT_BOUNDARY, canonical_usage_details, transport_scope
 from ..provider_usage import MAX_SAFE, parse_usage
+from ..provider_streaming import model_stream
 from .provider_adapter import ProviderAdapter
 
 
@@ -183,7 +185,7 @@ class _CallTransport:
         self.recorder.fault.check()
         with self._lock:
             self._check_open()
-            if transport not in {"urllib_urlopen", "httpx_post"} or len(self._active) >= 64 or self._intents >= MAX_SAFE:
+            if transport not in {"urllib_urlopen", "httpx_post", "urllib_sse", "httpx_sse"} or len(self._active) >= 64 or self._intents >= MAX_SAFE:
                 self.recorder.fault.mark_failed()
                 raise ProviderReceiptError()
             self._intents += 1
@@ -326,13 +328,15 @@ class RecordedProvider:
     """
 
     def __init__(self, provider: Any, sink: EventSink, *, fault: ProviderReceiptFault,
-                 engine: str, actor: str = "runtime_model", billing_price_receipt: dict | None = None):
+                 engine: str, actor: str = "runtime_model", billing_price_receipt: dict | None = None,
+                 stream_content: bool = False):
         if engine not in {"legacy", "graph", "deep"} or actor not in {
             "runtime_model", "deep_builtin_investigator", "deep_builtin_verifier",
         } or engine != "deep" and actor != "runtime_model":
             raise ValueError("provider_receipt_scope_invalid")
         self.provider, self.sink, self.fault = provider, sink, fault
         self.engine, self.actor = engine, actor
+        self.stream_content = stream_content
         self._billing_price_receipt = (None if billing_price_receipt is None
                                        else validate_price_receipt(billing_price_receipt))
         self.loop = asyncio.get_running_loop()
@@ -451,7 +455,11 @@ class RecordedProvider:
                     if not callable(method):
                         raise _InvalidModelTurn()
                     entered = True
-                    turn = self._link(method(messages, tools), start["call_id"])
+                    def delta(text: str) -> None:
+                        self._append_sync("provider.content_delta", {"call_id": start["call_id"],
+                            "engine": self.engine, "actor": self.actor, "text": text})
+                    with model_stream(delta) if self.stream_content else nullcontext():
+                        turn = self._link(method(messages, tools), start["call_id"])
                 except ProviderReceiptError:
                     self.fault.mark_failed()
                     raise
@@ -489,7 +497,11 @@ class RecordedProvider:
                     if not callable(method):
                         raise _InvalidModelTurn()
                     entered = True
-                    turn = self._link(await method(messages, tools), start["call_id"])
+                    async def delta(text: str) -> None:
+                        await self._append("provider.content_delta", {"call_id": start["call_id"],
+                            "engine": self.engine, "actor": self.actor, "text": text})
+                    with model_stream(delta) if self.stream_content else nullcontext():
+                        turn = self._link(await method(messages, tools), start["call_id"])
                 except ProviderReceiptError:
                     self.fault.mark_failed()
                     raise
@@ -512,7 +524,8 @@ class RecordedProvider:
 
 
 def record_provider(provider: Any, sink: EventSink, *, fault: ProviderReceiptFault,
-                    engine: str, actor: str = "runtime_model", billing_price_receipt: dict | None = None) -> Any:
+                    engine: str, actor: str = "runtime_model", billing_price_receipt: dict | None = None,
+                    stream_content: bool = False) -> Any:
     """Preserve ORIGINAL resource admission OUTSIDE original raw call recording.
 
     Exact original ProviderAdapter is re-created, never mutated. Other adapters
@@ -521,15 +534,16 @@ def record_provider(provider: Any, sink: EventSink, *, fault: ProviderReceiptFau
     """
     if type(provider) is ProviderAdapter:
         return ProviderAdapter(record_provider(provider.provider, sink, fault=fault, engine=engine, actor=actor,
-                                               billing_price_receipt=billing_price_receipt),
+                                               billing_price_receipt=billing_price_receipt, stream_content=stream_content),
                                profile_id=provider.profile_id, limits=provider.limits)
     if isinstance(provider, RecordedProvider):
         if (provider.sink is sink and provider.fault is fault and provider.engine == engine
                 and provider.actor == actor and provider.loop is asyncio.get_running_loop()
+                and provider.stream_content == stream_content
                 and provider._price_snapshot() == (None if billing_price_receipt is None
                                                    else validate_price_receipt(billing_price_receipt))):
             return provider
         fault.mark_failed()
         raise ProviderReceiptError()
     return RecordedProvider(provider, sink, fault=fault, engine=engine, actor=actor,
-                            billing_price_receipt=billing_price_receipt)
+                            billing_price_receipt=billing_price_receipt, stream_content=stream_content)

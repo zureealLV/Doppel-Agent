@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import random
 import time
@@ -18,6 +19,7 @@ from urllib.request import Request, urlopen
 
 from .persistence.owned import await_durable
 from .provider_observation import BODY_LIMIT, begin_async, begin_sync, finish_async, finish_sync, native_entered
+from .provider_streaming import SSEModelStream, StreamLimitError, stream_callback
 
 
 @dataclass
@@ -177,11 +179,14 @@ class OpenAICompatibleProvider:
 
     def next_turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> ModelTurn:
         native_entered(self)  # Context-local only; direct unrecorded API unchanged.
+        callback = stream_callback()
         body = {
             "model": self.model,
             "messages": [message.to_api() for message in messages],
-            "stream": False,
+            "stream": callback is not None,
         }
+        if callback is not None:
+            body["stream_options"] = {"include_usage": True}
         if self.temperature is not None:
             body["temperature"] = self.temperature
         body.update(self.completion_options)
@@ -197,7 +202,8 @@ class OpenAICompatibleProvider:
             headers=headers,
             method="POST",
         )
-        attempt = begin_sync("urllib_urlopen")
+        attempt = begin_sync("urllib_sse" if callback is not None else "urllib_urlopen")
+        buffered_stream = False
         try:
             try:
                 if attempt is not None:
@@ -209,9 +215,19 @@ class OpenAICompatibleProvider:
                             status = getattr(response, "status", None)
                             attempt.http_status = status if type(status) is int and 100 <= status <= 599 else None
                             attempt.response_state = "unavailable"
-                        raw = response.read(BODY_LIMIT + 1)
-                        if attempt is not None:
-                            attempt.observe(raw, getattr(response, "status", None))
+                        content_type = getattr(response, "headers", {}).get("Content-Type", "")
+                        buffered_stream = callback is not None and _json_content_type(content_type)
+                        if callback is None or buffered_stream:
+                            raw = response.read(BODY_LIMIT + 1)
+                            if attempt is not None:
+                                attempt.observe(raw, getattr(response, "status", None))
+                        else:
+                            parser = _stream_parser(attempt, getattr(response, "status", None))
+                            read = getattr(response, "read1", response.read)
+                            while chunk := read(4096):
+                                for text in parser.feed(chunk):
+                                    _emit_sync_content(callback, text)
+                            raw = parser.finish()
                     except BaseException as exc:
                         response_error = exc
                     finally:
@@ -222,6 +238,8 @@ class OpenAICompatibleProvider:
                 if attempt is not None:
                     attempt.failure = "transport_failure"  # Original close settled.
                 if response_error is not None:
+                    if callback is not None and isinstance(response_error, RuntimeError) and attempt is not None:
+                        attempt.failure = "response_limit" if isinstance(response_error, StreamLimitError) else "invalid_response"
                     raise response_error
             except HTTPError as exc:
                 kind = "rate_limited" if exc.code == 429 else "http_status"
@@ -266,6 +284,8 @@ class OpenAICompatibleProvider:
             if attempt is not None:
                 attempt.failure = "invalid_response"
             turn = parse_model_turn(raw)
+            if buffered_stream and turn.content:
+                _emit_sync_content(callback, turn.content)
             if attempt is not None:
                 attempt.outcome, attempt.failure = "returned", None
             return turn
@@ -300,6 +320,29 @@ def _completion_options(base_url: str, thinking: str | None, max_tokens: int | N
     if max_tokens is not None:
         options["max_tokens"] = max_tokens
     return options
+
+
+def _json_content_type(value: str) -> bool:
+    media_type = value.partition(";")[0].strip().lower()
+    return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _emit_sync_content(callback, text):
+    pending = callback(text)
+    if inspect.isawaitable(pending):
+        if inspect.iscoroutine(pending):
+            pending.close()
+        raise RuntimeError("sync provider stream requires a synchronous sink")
+
+
+def _stream_parser(attempt, status) -> SSEModelStream:
+    def observe(raw, payload):
+        if attempt is not None:
+            # Preserve only the ORIGINAL JSON usage event's numeric projection.
+            # Later empty/no-usage events must not erase that actual receipt.
+            if payload.get("usage") is not None or attempt.usage is None:
+                attempt.observe(raw, status)
+    return SSEModelStream(observe=observe)
 
 
 def parse_model_turn(raw: bytes | str | dict[str, Any]) -> ModelTurn:
@@ -550,6 +593,92 @@ class AsyncOpenAICompatibleProvider:
             await finish_async(attempt)
         return result
 
+    async def _request_stream_turn(self, body: dict[str, Any], headers: dict[str, str]) -> ModelTurn:
+        """One original streaming request; never retry an exposed partial turn."""
+        import httpx
+
+        callback = stream_callback()
+        attempt = await begin_async("httpx_sse")
+        response = None
+        parser = None
+        try:
+            try:
+                request = self._client.build_request("POST", self.endpoint, json=body, headers=headers)
+                if attempt is not None:
+                    attempt.entered = True
+                response = await self._client.send(request, stream=True)
+                if attempt is not None:
+                    attempt.http_status = response.status_code
+                    attempt.response_state = "unavailable"
+                buffered = _json_content_type(response.headers.get("content-type", ""))
+                if not response.is_success or buffered:
+                    # Bound error observation without switching to an eager,
+                    # unbounded aread. This is the SAME response and attempt.
+                    raw = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        raw.extend(chunk[:BODY_LIMIT + 1 - len(raw)])
+                        if len(raw) > BODY_LIMIT:
+                            break
+                    if attempt is not None:
+                        attempt.observe(bytes(raw), response.status_code)
+                    response.raise_for_status()
+                    if len(raw) > BODY_LIMIT:
+                        if attempt is not None:
+                            attempt.failure = "response_limit"
+                        raise RuntimeError("provider response exceeds 4 MiB")
+                    if attempt is not None:
+                        attempt.failure = "invalid_response"
+                    result = parse_model_turn(bytes(raw))
+                    if callback is not None and result.content:
+                        pending = callback(result.content)
+                        if inspect.isawaitable(pending):
+                            await pending
+                else:
+                    parser = _stream_parser(attempt, response.status_code)
+                    if attempt is not None:
+                        attempt.failure = "invalid_response"
+                    async for chunk in response.aiter_bytes():
+                        for text in parser.feed(chunk):
+                            pending = callback(text) if callback is not None else None
+                            if inspect.isawaitable(pending):
+                                await pending
+                    result = parse_model_turn(parser.finish())
+                if attempt is not None:
+                    attempt.outcome, attempt.failure = "returned", None
+                return result
+            except StreamLimitError:
+                if attempt is not None:
+                    attempt.failure = "response_limit"
+                raise
+            except httpx.HTTPStatusError:
+                if attempt is not None:
+                    attempt.failure = "rate_limited" if response.status_code == 429 else "http_status"
+                raise
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                if attempt is not None:
+                    attempt.failure = "timeout" if isinstance(exc, httpx.TimeoutException) else "connection"
+                if parser is not None and parser.started:
+                    raise RuntimeError("provider stream interrupted after partial output; retry disabled") from exc
+                raise
+            finally:
+                if response is not None:
+                    async def close_original_response():
+                        try:
+                            await response.aclose()
+                        except BaseException as exc:
+                            if attempt is not None:
+                                attempt.outcome, attempt.failure = "failed", "response_cleanup"
+                            if isinstance(exc, Exception):
+                                raise RuntimeError("provider_response_cleanup_failed") from None
+                            raise
+                    await await_durable(close_original_response())
+        except asyncio.CancelledError:
+            if attempt is not None and attempt.failure != "response_cleanup" and attempt.outcome != "returned":
+                attempt.outcome, attempt.failure = "cancelled", "cancelled"
+            raise
+        finally:
+            await finish_async(attempt)
+
     async def anext_turn(self, messages: list[Message], tools: list[dict[str, Any]]) -> ModelTurn:
         native_entered(self)
         lease = await self._enter_circuit()
@@ -569,8 +698,10 @@ class AsyncOpenAICompatibleProvider:
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [message.to_api() for message in messages],
-            "stream": False,
+            "stream": stream_callback() is not None,
         }
+        if body["stream"]:
+            body["stream_options"] = {"include_usage": True}
         if self.temperature is not None:
             body["temperature"] = self.temperature
         body.update(self.completion_options)
@@ -583,7 +714,8 @@ class AsyncOpenAICompatibleProvider:
         last_error: Exception | None = None
         for attempt in range(self.max_attempts):
             try:
-                result = await self._request_turn(body, headers)
+                result = await (self._request_stream_turn(body, headers) if body["stream"]
+                                else self._request_turn(body, headers))
             except (
                 httpx.TimeoutException,
                 httpx.NetworkError,

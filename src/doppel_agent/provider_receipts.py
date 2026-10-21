@@ -96,7 +96,7 @@ def _frame(payload, *, request, finish):
     keys = ["version", "call_id", "engine", "actor", "boundary"]
     if request:
         if (not _identifier(payload.get("attempt_id")) or not _integer(payload.get("attempt_index"), positive=True)
-                or not _enum(payload.get("transport"), {"urllib_urlopen", "httpx_post"})
+                or not _enum(payload.get("transport"), {"urllib_urlopen", "httpx_post", "urllib_sse", "httpx_sse"})
                 or payload.get("boundary") != TRANSPORT_BOUNDARY):
             return None
         keys += ["attempt_id", "attempt_index", "transport"]

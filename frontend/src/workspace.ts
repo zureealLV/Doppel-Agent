@@ -3,6 +3,7 @@ import { reactive } from "vue";
 import { nativeWorkspaceApi, workspaceApi } from "./workspaceApi";
 import type { RunMode, RunRequest, PrepareContext } from "./types";
 import { RunSubmissionController } from "./runSubmission";
+import { NativeReplyStream } from "./replyStream";
 import type { NativeConversation, NativeConversationSummary } from "./workspaceTypes";
 import type { ChatSubmission, Conversation, ConversationGroup, ConversationSummary, LegacyApproval, LegacyEvent,
   PersistentRun, ProfileForm, ProfileConfiguration, PublicSettings } from "./workspaceTypes";
@@ -299,7 +300,9 @@ export class NativeWorkspaceController {
     current: null as NativeConversation | null, archived: false, groupId: null as string | null,
     profileId: "", mode: "graph" as RunMode, loading: false, opening: false, transition: false, submitting: false,
     error: "", selectionError: "", selectionSaving: false, closing: false,
+    streamingText: "", streamingCallId: "", budgetNotice: "",
     selectedRunId: "", searchResults: [] as NativeConversationSummary[], searching: false });
+  private readonly replyStream = new NativeReplyStream(this.state);
   private selectionEpoch = 0;
   private listEpoch = 0;
   private searchEpoch = 0;
@@ -320,6 +323,7 @@ export class NativeWorkspaceController {
   clearSelection(): void {
     if (this.state.closing || this.state.submitting || this.submissionUncertain) return;
     this.selectionEpoch++; this.state.current = null; this.state.selectedRunId = "";
+    this.replyStream.follow("", "");
     this.remember("doppel.native.conversation", "");
     this.persistSelection(null, null);
   }
@@ -390,6 +394,7 @@ export class NativeWorkspaceController {
   }
   private select(conversation: NativeConversation): void {
     this.state.current = conversation; this.state.mode = conversation.mode;
+    this.replyStream.follow(conversation.id, conversation.active_run_id || "");
     this.state.archived = Boolean(conversation.archived);
     this.remember("doppel.native.conversation", conversation.id);
     const remembered = conversation.selected_run_id !== undefined ? conversation.selected_run_id
@@ -497,6 +502,7 @@ export class NativeWorkspaceController {
     current.active_run_id = active ? accepted.run_id : null;
     if (!current.runs.some(run => run.run_id === accepted.run_id)) current.runs.push({ run_id: accepted.run_id, mode: current.mode, status: accepted.status, lease_active: active ? 1 : 0 });
     this.state.selectedRunId = accepted.run_id;
+    this.replyStream.follow(current.id, current.active_run_id || "");
     await this.refreshRun();
   }
   async refreshRun(): Promise<void> {
@@ -509,9 +515,10 @@ export class NativeWorkspaceController {
       if (this.disposed || epoch !== this.selectionEpoch) return;
       const changed = JSON.stringify(current) !== JSON.stringify(next);
       this.state.current = next;
+      this.replyStream.follow(next.id, next.active_run_id || "");
       if (!next.runs.some(r => r.run_id === this.state.selectedRunId)) this.selectRun(next.active_run_id || next.runs.at(-1)?.run_id || "");
       if (changed) await this.refreshList();
     } finally { this.polling = false; }
   }
-  dispose(): void { this.disposed = true; this.selectionEpoch++; this.listEpoch++; this.searchEpoch++; }
+  dispose(): void { this.replyStream.dispose(); this.disposed = true; this.selectionEpoch++; this.listEpoch++; this.searchEpoch++; }
 }

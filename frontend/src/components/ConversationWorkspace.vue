@@ -22,6 +22,8 @@ const includeContext = ref(false);
 const effort = ref<Effort>("balanced");
 const grants = reactive<Permissions>({ workspace_write: false, command_execute: false, mcp_execute: false, delegate: false });
 const inspector = ref(false);
+const messagesElement = ref<HTMLElement | null>(null);
+const followingOutput = ref(true);
 const settingsOpen = ref(false);
 const searchDialog = ref<HTMLDialogElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -41,6 +43,26 @@ let mounted = true;
 const rows = computed(() => state.conversations.filter((item) => !state.groupId || item.group_id === state.groupId));
 const reviewDraft = computed(() => !state.current?.messages.length && state.current?.title === "代码审查");
 const composerBlocked = computed(() => controller.busy || !!state.current?.archived);
+const runNotice = computed(() => {
+  const id = state.current?.active_run_id;
+  if (!id) return null;
+  const status = state.current?.runs.find(run => run.run_id === id)?.status;
+  if (status && ["completed", "failed", "cancelled", "interrupted_expired"].includes(status)) return null;
+  return { id, status, text: status === "interrupted" ? "等待审批" : status === "queued" ? "任务排队中" : status === "running" ? "正在执行" : "正在同步运行状态" };
+});
+function readScrollPosition(): void {
+  const element = messagesElement.value;
+  if (element) followingOutput.value = element.scrollHeight - element.clientHeight - element.scrollTop <= 80;
+}
+function scrollToLatest(): void {
+  followingOutput.value = true;
+  const element = messagesElement.value;
+  if (element && Number.isFinite(element.scrollHeight)) element.scrollTop = element.scrollHeight;
+}
+function openActiveRun(): void {
+  if (state.current?.active_run_id) controller.selectRun(state.current.active_run_id);
+  inspector.value = true;
+}
 const permissionLabels: Record<keyof Permissions, string> = { workspace_write: "写入", command_execute: "命令", mcp_execute: "MCP", delegate: "委派" };
 async function attempt(operation: () => Promise<unknown>): Promise<void> {
   state.error = "";
@@ -178,7 +200,12 @@ function searchKey(event: KeyboardEvent): void {
 }
 
 watch(() => props.sharedSettings, settings => { if (settings) controller.updateSettings(settings); });
-watch(() => state.current?.id, () => { prompt.value = ""; });
+watch(() => state.current?.id, async () => { prompt.value = ""; followingOutput.value = true; await nextTick(); scrollToLatest(); });
+watch(() => [state.current?.messages.length, state.current?.messages.at(-1)?.content, state.streamingText, props.active], async () => {
+  if (!followingOutput.value || !props.active) return;
+  await nextTick();
+  if (followingOutput.value) scrollToLatest();
+}, { flush: "post" });
 watch(query, () => {
   window.clearTimeout(searchTimer);
   // Invalidate older responses immediately, including clearing a query.
@@ -233,11 +260,16 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
       <p v-if="state.selectionError" class="global-alert" role="alert">{{ state.selectionError }}</p>
       <header class="section-heading classic-chat-header"><div :title="state.workspace"><h2>{{ state.current?.title || '新对话' }}</h2></div><div class="button-row"><button type="button" class="icon-button" title="管理对话" aria-label="管理对话" :disabled="!state.current || controller.busy" @click="openManage"><MoreHorizontal :size="18" aria-hidden="true" /><span class="sr-only">管理对话</span></button><button type="button" class="icon-button" title="执行详情" aria-label="执行详情" :aria-pressed="inspector" aria-controls="native-inspector" @click="inspector = !inspector"><PanelRight :size="18" aria-hidden="true" /><span class="sr-only">执行详情</span></button></div></header>
       <p v-if="state.loading" role="status">加载原生历史…</p><button v-if="state.error" type="button" @click="controller.initialize()">重试加载</button>
-      <section class="conversation-messages" aria-live="polite" aria-label="对话消息">
+      <section ref="messagesElement" class="conversation-messages" aria-live="polite" aria-label="对话消息" @scroll="readScrollPosition">
         <template v-if="state.current?.messages.length"><article v-for="item in state.current.messages" :key="item.id" class="chat-message" :data-role="item.role"><header>{{ item.role === 'user' ? '你' : `Doppel${item.model ? ' · ' + item.model : ''}` }} · {{ item.status }} <button type="button" class="icon-button" title="查看此轮运行" aria-label="查看此轮运行" @click="controller.selectRun(item.run_id); inspector = true"><Workflow :size="15" aria-hidden="true" /><span class="sr-only">查看此轮运行</span></button></header><div v-if="item.role === 'assistant'" class="chat-markdown" v-html="safeMarkdown(item.content)" /><pre v-else>{{ item.content }}</pre></article></template>
         <div v-else class="empty-inline classic-welcome"><p class="eyebrow sr-only">LOCAL CODE AGENT</p><h2>{{ reviewDraft ? '选择一种审查方式。' : '今天想完成什么？' }}</h2><p>从一个任务开始。</p><p class="sr-only">模板只填入提示词，不会自动启动模型。</p><div class="classic-suggestions"><button type="button" :disabled="composerBlocked" @click="prompt = '先绘制项目结构，再定向搜索高风险代码。只读审查可复现问题，按严重度给出文件、行号、证据和最小修复建议。'"><ScanLine :size="19" aria-hidden="true" /><strong>审查当前项目</strong></button><button type="button" :disabled="composerBlocked" @click="prompt = '阅读项目结构和入口文件，说明模块与数据流。'"><Network :size="19" aria-hidden="true" /><strong>理解代码库</strong></button><button type="button" :disabled="composerBlocked" @click="prompt = '检查测试策略和失败风险，列出最值得补充的三个测试。'"><FlaskConical :size="19" aria-hidden="true" /><strong>检查测试</strong></button><button v-if="reviewDraft" type="button" :disabled="composerBlocked" @click="prompt = '只读审查安全与权限边界，优先检查凭据、路径越界、注入、鉴权与危险命令。'"><ShieldCheck :size="19" aria-hidden="true" /><strong>安全审查</strong></button></div></div>
+        <article v-if="state.streamingText && state.current?.active_run_id" class="chat-message" data-role="assistant" :data-streaming="true"><header>Doppel · 输出中</header><div class="chat-markdown" v-html="safeMarkdown(state.streamingText)" /></article>
       </section>
-      <p v-if="state.current?.active_run_id" role="status">此对话有进行中或待审批运行：{{ state.current.active_run_id }}。在统一执行详情中取消 / 恢复。</p>
+      <div v-if="!followingOutput" class="conversation-scroll-actions"><button type="button" @click="scrollToLatest">回到底部 ↓</button></div>
+      <section v-if="runNotice || state.budgetNotice" class="conversation-run-notice" aria-label="运行提醒" :data-status="runNotice?.status">
+        <div role="status"><strong v-if="runNotice">{{ runNotice.text }}</strong><p v-if="state.budgetNotice">{{ state.budgetNotice }}</p><span v-else-if="runNotice?.status === 'interrupted'">请在执行详情中处理审批，或取消运行。</span></div>
+        <button type="button" :title="runNotice?.id" aria-controls="native-inspector" :aria-expanded="inspector" @click="openActiveRun">查看执行详情</button>
+      </section>
       <form class="chat-composer" @submit.prevent="submit">
         <label class="sr-only" for="native-chat-prompt">任务 · Enter 发送，Shift Enter 换行</label><textarea id="native-chat-prompt" v-model="prompt" maxlength="100000" rows="2" placeholder="给 Doppel 一个任务" :disabled="composerBlocked" required @keydown="keySend" />
         <div class="classic-composer-toolbar">
@@ -257,7 +289,7 @@ defineExpose({ openSearch, prepareClose: () => controller.prepareClose(), finish
     </main>
 
     <aside v-if="inspector && props.active" id="native-inspector" class="native-inspector">
-      <label class="field-label" for="native-run-select">此对话的运行审计</label><select id="native-run-select" :value="state.selectedRunId" @change="controller.selectRun(($event.target as HTMLSelectElement).value)"><option value="">尚无运行</option><option v-for="item in state.current?.runs" :key="item.run_id" :value="item.run_id">{{ item.status }} · {{ item.run_id }}</option></select>
+      <header class="section-heading"><label class="field-label" for="native-run-select">此对话的运行审计</label><button type="button" class="icon-button" title="关闭执行详情" aria-label="关闭执行详情" @click="inspector = false">×</button></header><select id="native-run-select" :value="state.selectedRunId" @change="controller.selectRun(($event.target as HTMLSelectElement).value)"><option value="">尚无运行</option><option v-for="item in state.current?.runs" :key="item.run_id" :value="item.run_id">{{ item.status }} · {{ item.run_id }}</option></select>
       <button v-if="state.selectedRunId && state.current?.runs.some(item => item.run_id === state.selectedRunId)" type="button" :disabled="state.closing" @click="emit('open-changes', state.selectedRunId)">查看该原生运行的变更证据</button>
       <RunInspector :run-id="state.selectedRunId" :conversation-id="state.current?.id" />
     </aside>

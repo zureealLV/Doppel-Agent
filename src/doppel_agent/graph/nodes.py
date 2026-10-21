@@ -10,7 +10,7 @@ from langgraph.types import interrupt
 from ..concurrency.limits import ResourceLimits
 from ..context.policy import ContextPolicy
 from ..events import EventSink, NullEventSink
-from ..loop import SYSTEM_PROMPT
+from ..loop import FINAL_TURN_PROMPT, SYSTEM_PROMPT
 from ..persistence.tool_ledger import ToolExecutionLedger
 from ..persistence.owned import await_durable
 from ..provider import Message, ModelTurn, Provider, ToolCall, next_model_turn
@@ -18,12 +18,15 @@ from ..tools import ToolRegistry
 from ..workspace.patching import PatchConflictError
 from .state import DoppelState, SerializedMessage
 
-FINAL_TURN_PROMPT = (
-    "Tool access is now closed. Do not emit tool calls. "
-    "Using only the evidence already collected, write the final answer now."
-)
-
 SENSITIVE_CAPABILITIES = {"workspace_write", "command_execute", "mcp_execute"}
+
+RUN_START_PROMPT = (
+    "This is a new execution of the latest user request. Inspection step limits are scoped "
+    "to each execution and do not carry over from earlier answers. Historical messages about "
+    "a final synthesis turn or closed tool access describe only that earlier execution, not "
+    "the current one. Use the tools supplied in this request when more evidence is needed, "
+    "while continuing to respect actual permission denials and tool errors."
+)
 
 
 def serialize_message(message: Message) -> SerializedMessage:
@@ -72,11 +75,21 @@ class FocusedGraphNodes:
         step = state.get("step_count", 1)
         max_steps = state.get("max_steps", 8)
         final_turn = step >= max_steps
-        if final_turn:
-            messages.append(Message("user", FINAL_TURN_PROMPT))
         messages, _ = self.context.compact(messages)
         schemas = [] if final_turn else self.tools.schemas()
-        turn: ModelTurn = await next_model_turn(self.provider, messages, schemas)
+        if final_turn:
+            await self.sink.emit("graph.budget_exhausted", step=step, max_steps=max_steps, reason="step_limit")
+        # This temporary system message must not pollute the saved conversation
+        # or replace the latest user request when a checkpoint is reused.
+        turn_messages = messages
+        if final_turn:
+            turn_messages = [*messages, Message("system", FINAL_TURN_PROMPT)]
+        elif step == 1:
+            # Older checkpoints may contain the former user-role budget prompt.
+            # Re-establish this run's scope without rewriting their evidence or
+            # changing the final user message expected by compatible providers.
+            turn_messages = [*messages[:-1], Message("system", RUN_START_PROMPT), messages[-1]]
+        turn: ModelTurn = await next_model_turn(self.provider, turn_messages, schemas)
         # Compatibility completion remains raw usage; canonical logical call
         # receipt is separate. Exact scope-linked report dedup is S8 B2b4.
         receipt = {"provider_call_id": turn.provider_call_id} if turn.provider_call_id is not None else {}

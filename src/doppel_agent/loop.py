@@ -28,6 +28,17 @@ REVIEW_SYSTEM_PROMPT = (
     "finding, say so. Never invent evidence."
 )
 
+FINAL_TURN_PROMPT = (
+    "The configured inspection step budget has been reached normally; this turn is reserved "
+    "for synthesis. This is not a tool permission or connection failure. Do not emit tool calls "
+    "or tool-call markup. Answer the original user request with a substantive final response "
+    "using only the evidence already collected. Separate supported findings from unchecked "
+    "areas; do not invent evidence or refuse the entire task merely because inspection ended. "
+    "Use the same language as the original user request. If inspection is incomplete, briefly "
+    "state the step limit and what remains unchecked, without claiming that tools were revoked "
+    "or broken."
+)
+
 
 @dataclass(frozen=True)
 class LoopContinuation:
@@ -75,12 +86,6 @@ class AgentLoop:
         for step in range(start_step, self.max_steps + 1):
             if check_cancelled is not None:
                 check_cancelled()
-            if step == self.max_steps and not pending:
-                messages.append(Message(
-                    "user",
-                    "Tool access is now closed. Do not emit tool calls or tool-call markup. "
-                    "Using only the evidence already collected, write the final review report now.",
-                ))
             if pending:
                 calls, pending = pending, ()
             else:
@@ -90,7 +95,12 @@ class AgentLoop:
                     self.bus.emit("context_compacted", step=step, **waterline)
                 # Reserve the final model turn for synthesis.
                 schemas = [] if step == self.max_steps else self.tools.schemas()
-                turn = self.provider.next_turn(messages, schemas)
+                if step == self.max_steps:
+                    self.bus.emit("run.budget_exhausted", step=step, max_steps=self.max_steps, reason="step_limit")
+                # Runtime guidance is not a new user goal or conversation history.
+                turn_messages = ([*messages, Message("system", FINAL_TURN_PROMPT)]
+                                 if step == self.max_steps else messages)
+                turn = self.provider.next_turn(turn_messages, schemas)
                 self.bus.emit("model_turn", step=step, tool_call_count=len(turn.tool_calls))
                 if turn.usage:
                     self.bus.emit("model_usage", step=step, **turn.usage)
@@ -99,6 +109,10 @@ class AgentLoop:
                 if not turn.tool_calls:
                     self.bus.emit("run_completed", answer=turn.content)
                     return turn.content
+                if step == self.max_steps:
+                    # An uncooperative provider cannot spend the synthesis
+                    # turn on more tools, even when it ignores empty schemas.
+                    raise RuntimeError("max_steps_exceeded")
                 messages.append(Message("assistant", turn.content, tool_calls=turn.tool_calls))
                 calls = turn.tool_calls
             for index, call in enumerate(calls):

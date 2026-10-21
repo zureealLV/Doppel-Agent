@@ -158,6 +158,10 @@ def body(inputs=7, outputs=3, *, malformed=False):
 
 class Response(io.BytesIO):
     status = 200
+    # This offline endpoint deliberately returns buffered JSON even when a
+    # native root requests SSE. Declare the real response media type so the
+    # provider exercises its explicit JSON fallback, not invalid SSE bytes.
+    headers = {"Content-Type": "application/json"}
 
 
 def offline_transports(monkeypatch, client, journal):

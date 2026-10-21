@@ -74,7 +74,7 @@ class GraphRuntime:
         return build_focused_graph(
             (self.provider if sink is None else record_provider(
                 self.provider, sink, fault=self.provider_receipt_fault, engine="graph",
-                billing_price_receipt=self._billing_price_receipt,
+                billing_price_receipt=self._billing_price_receipt, stream_content=True,
             )),
             self.tools,
             checkpointer=checkpointer,

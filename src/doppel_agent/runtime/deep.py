@@ -218,7 +218,7 @@ class DeepAgentRuntime:
     def _build_graph(self, checkpointer: Any, sink: EventSink):
         model = DoppelChatModel(provider=record_provider(
             self.provider, sink, fault=self.provider_receipt_fault, engine="deep",
-            billing_price_receipt=self._billing_price_receipt,
+            billing_price_receipt=self._billing_price_receipt, stream_content=True,
         ))
         backend = DoppelBackend(
             self.workspace,

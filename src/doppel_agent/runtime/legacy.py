@@ -121,7 +121,7 @@ class LegacyRuntime:
         # Core's original JSONL bus stays intact. New canonical call receipts
         # join the SAME original async sink from inside the owned Core worker.
         provider = record_provider(self.provider, sink, fault=self.provider_receipt_fault, engine="legacy",
-                                   billing_price_receipt=self._billing_price_receipt)
+                                   billing_price_receipt=self._billing_price_receipt, stream_content=True)
         decision = resumed
 
         def check_cancelled() -> None:
