@@ -15,8 +15,9 @@ from uuid import uuid4
 
 from ..conversations import ConversationStore, ConversationPersistenceError
 from ..core import Core
+from ..model_discovery import discover_models
 from ..provider import Message, MockProvider, OpenAICompatibleProvider
-from ..settings import SettingsStore, SettingsPersistenceError
+from ..settings import SettingsStore, SettingsPersistenceError, credential_identity
 from ..storage import RunStore, LegacyStorageReadError
 from ..tasks.manager import TaskManager, TaskPersistenceError
 from ..workspace.process_supervisor import ProcessSupervisor
@@ -243,6 +244,72 @@ class JobManager:
     def probe(self, config: dict) -> dict:
         with self.owned_request():
             return self._probe_owned(config)
+
+    def discover_models(self, config: dict) -> dict:
+        with self.owned_request():
+            return self._discover_models_owned(config)
+
+    def _discover_models_owned(self, config: dict) -> dict:
+        self._assert_effect_admission()  # Before saved metadata/key/transport lookup.
+        allowed = {"provider", "preset", "region", "plan", "base_url", "profile_id", "api_key",
+                   "strategy", "credential_revision"}
+        if not isinstance(config, dict) or set(config) - allowed:
+            raise ValueError("invalid_discovery_config")
+        if "strategy" in config and config["strategy"] not in ("manual", "openai-list", "ollama-tags"):
+            raise ValueError("invalid_discovery_strategy")
+        if not isinstance(config.get("api_key", ""), str):
+            raise ValueError("invalid_discovery_config")
+        profile_id = config.get("profile_id")
+        requested = {"provider": "openai", "preset": "openai", "region": "", "plan": "", **config}
+        if profile_id is not None:
+            if not isinstance(profile_id, str):
+                raise ValueError("profile_id must be a string")
+            saved = next((item for item in self.settings.public()["profiles"] if item["id"] == profile_id), None)
+            if saved is None:
+                raise ValueError("model profile not found")
+            # Public-only first pass chooses metadata strategy without decrypting
+            # keys for manual/unsupported discovery. Resolve again against this
+            # exact revision+destination immediately before nonmanual transport.
+            requested = {**saved, **{key: value for key, value in config.items()
+                                     if value not in (None, "") or key in ("region", "plan")}}
+        if requested["provider"] not in ("openai", "mock"):
+            raise ValueError("invalid_discovery_config")
+        if requested["provider"] == "mock":
+            return self._call_model_discovery("", "", "manual")
+        try:
+            scheme, host, port, path = credential_identity(requested)["endpoint"]
+            if port == 0 or (scheme == "http" and host not in ("localhost", "127.0.0.1", "::1")):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ValueError("invalid_discovery_destination") from None
+        # Exact documented recipes, never infer that every compatible service
+        # implements /models. Custom services require an explicit enum strategy.
+        known = None
+        if scheme == "https" and port == 443:
+            if host == "api.deepseek.com" and path in ("", "/v1"):
+                known = "openai-list"
+            elif host == "api.openai.com" and path == "/v1":
+                known = "openai-list"
+        elif host in ("localhost", "127.0.0.1", "::1") and port == 11434 and path in ("", "/v1"):
+            known = "ollama-tags"
+        strategy = config.get("strategy", known or "manual")
+        if known is not None and strategy not in ("manual", known):
+            raise ValueError("discovery_strategy_mismatch")
+        if strategy == "manual":
+            return self._call_model_discovery(requested["base_url"], "", strategy)
+        key = config.get("api_key", "")
+        if profile_id is not None:
+            key = self.settings.resolve_profile(profile_id, requested)["api_key"]
+        return self._call_model_discovery(requested["base_url"], key, strategy)
+
+    @staticmethod
+    def _call_model_discovery(base_url: str, key: str, strategy: str) -> dict:
+        try:
+            return discover_models(base_url, key, strategy)
+        except Exception:
+            # Never expose arbitrary DNS/HTTP/child/SDK exception or credentials.
+            # This is metadata-only, not generation or tool-call verification.
+            raise RuntimeError("provider_model_discovery_unavailable") from None
 
     def _probe_owned(self, config: dict) -> dict:
         self._assert_effect_admission()
@@ -724,6 +791,8 @@ class ConsoleHandler(BaseHTTPRequestHandler):
                 self.server.manager._assert_effect_admission()
             if path == "/api/probe":
                 self._json(200, self.server.manager.probe(body.get("config", {})))
+            elif path == "/api/models/discover":
+                self._json(200, self.server.manager.discover_models(body.get("config", {})))
             elif path == "/api/settings":
                 self._json(200, self.server.manager.save_settings(body))
             elif path == "/api/workspace-selection":
