@@ -16,7 +16,7 @@ from uuid import uuid4
 from ..conversations import ConversationStore, ConversationPersistenceError
 from ..core import Core
 from ..model_discovery import discover_models
-from ..provider import Message, MockProvider, OpenAICompatibleProvider
+from ..provider import Message, MockProvider, OpenAICompatibleProvider, ProviderRequestError
 from ..settings import SettingsStore, SettingsPersistenceError, credential_identity
 from ..storage import RunStore, LegacyStorageReadError
 from ..tasks.manager import TaskManager, TaskPersistenceError
@@ -321,9 +321,14 @@ class JobManager:
 
     def _probe_owned(self, config: dict) -> dict:
         self._assert_effect_admission()
-        provider = self._provider(config)
+        if not isinstance(config, dict):
+            raise ValueError("config must be an object")
+        saved_probe = self._saved_probe_profile(config)
+        provider_config = {**config, "credential_revision": saved_probe["credential_revision"]} if saved_probe else config
+        provider = self._provider(provider_config)
         if isinstance(provider, MockProvider):
-            return {"ok": True, "reply": "Mock provider is ready (offline only)."}
+            result = {"ok": True, "reply": "Mock provider is ready (offline only)."}
+            return self._finish_probe_receipt(result, saved_probe, kind="mock-probe")
         try:
             with self._original_probe_operation():
                 turn = self._admitted_provider(provider).next_turn(
@@ -334,11 +339,51 @@ class JobManager:
                 reply = content[:1000]
         except LegacyOperationEvidenceError:
             raise
+        except ProviderRequestError as exc:
+            # Classification is only known returned HTTP/transport evidence, not
+            # a retry/no-charge grant. Original ownership/fault latches survive.
+            codes = {401: "authentication", 403: "permission", 429: "rate_limited",
+                     404: "model_or_endpoint", 400: "request_or_protocol", 422: "request_or_protocol"}
+            code = codes.get(exc.status_code, {
+                "connection": "network", "timeout": "timeout", "protocol": "request_or_protocol",
+                "invalid_response": "request_or_protocol", "rate_limited": "rate_limited",
+            }.get(exc.kind, "unavailable"))
+            raise RuntimeError("provider_probe_" + code) from None
         except Exception:
             # Method entry failed/lost result isn't no-charge/no-effect. Never
             # echo arbitrary SDK/body/key errors or retry an explicit probe.
             raise RuntimeError('provider_probe_unavailable') from None
-        return {"ok": True, "reply": reply}
+        return self._finish_probe_receipt({"ok": True, "reply": reply}, saved_probe, kind="text-probe")
+
+    def _saved_probe_profile(self, config: dict) -> dict | None:
+        profile_id = config.get("profile_id")
+        if not isinstance(profile_id, str) or config.get("api_key"):
+            return None  # Unsaved drafts/typed keys cannot validate a saved connection.
+        saved = next((item for item in self.settings.public()["profiles"] if item["id"] == profile_id), None)
+        if saved is None:
+            return None  # Original _provider still owns missing-profile validation.
+        candidate = {**saved, **{key: value for key, value in config.items()
+                                 if value not in (None, "") or key in ("region", "plan")}}
+        try:
+            if (credential_identity(candidate) == credential_identity(saved)
+                    and candidate["model"] == saved["model"]
+                    and candidate["credential_revision"] == saved["credential_revision"]
+                    and not saved["credential_reentry_required"]):
+                return saved
+        except ValueError:
+            pass  # Original provider validation remains authoritative; never invent a receipt.
+        return None
+
+    def _finish_probe_receipt(self, result: dict, expected: dict | None, *, kind: str) -> dict:
+        if expected is not None:
+            # A mocked adapter substituted for a cloud connection is not cloud
+            # validation; likewise a non-Mock object must not attest a Mock config.
+            matching_kind = "mock-probe" if expected["provider"] == "mock" else "text-probe"
+            if kind == matching_kind:
+                receipt = self.settings.save_validation_receipt(expected["id"], expected, kind=kind)
+                if receipt is not None:
+                    result["validation_receipt"] = receipt
+        return result
 
     def submit(self, data: dict) -> dict:
         with self.owned_request():

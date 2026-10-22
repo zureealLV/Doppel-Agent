@@ -12,6 +12,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from ctypes import wintypes
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import unquote, urlsplit
@@ -65,6 +66,32 @@ def _credential_matches(profile: dict, requested: dict | None = None) -> bool:
         return binding == original and binding == credential_identity(requested or profile)
     except ValueError:
         return False
+
+
+def _validation_receipt(profile: dict) -> dict | None:
+    """Whitelist a historical probe receipt for this exact CURRENT contract.
+
+    A local timestamp/receipt is not official provider, tool-call or billing
+    certification. Corrupt or mismatched historical receipts remain unverified.
+    """
+    receipt = profile.get("validation_receipt")
+    fields = {"protocol", "identity", "model", "credential_revision", "kind", "verified_at", "tools"}
+    if not isinstance(receipt, dict) or set(receipt) != fields:
+        return None
+    expected_kind = "mock-probe" if profile.get("provider", "openai") == "mock" else "text-probe"
+    revision = profile.get("credential_revision", "legacy" if profile.get("api_key_dpapi") else "")
+    try:
+        identity = credential_identity(profile)
+        valid_date = (isinstance(receipt["verified_at"], str)
+                      and datetime.fromisoformat(receipt["verified_at"]).utcoffset() == timedelta(0))
+    except (ValueError, TypeError):
+        return None
+    if (receipt["protocol"] != "openai-chat-completions" or receipt["identity"] != identity
+            or receipt["model"] != profile.get("model", "") or receipt["credential_revision"] != revision
+            or receipt["kind"] != expected_kind or receipt["tools"] != "unknown" or not valid_date
+            or profile.get("api_key_dpapi") and not _credential_matches(profile)):
+        return None
+    return {key: identity if key == "identity" else receipt[key] for key in fields}
 
 
 class _Blob(ctypes.Structure):
@@ -379,6 +406,9 @@ class SettingsStore:
             "api_key_saved": bool(profile.get("api_key_dpapi")),
             "credential_reentry_required": bool(profile.get("api_key_dpapi")) and not _credential_matches(profile),
             "credential_revision": profile.get("credential_revision", "legacy" if profile.get("api_key_dpapi") else ""),
+            "validation_receipt": _validation_receipt(profile),
+            "validation_invalidated": bool(profile.get("validation_invalidated")) or (
+                bool(profile.get("validation_receipt")) and _validation_receipt(profile) is None),
         }
 
     def public(self) -> dict:
@@ -437,6 +467,39 @@ class SettingsStore:
 
     def api_key(self, profile_id: str | None = None) -> str:
         return self.resolve_profile(profile_id)["api_key"]
+
+    def save_validation_receipt(self, profile_id: str, expected_profile: dict, *, kind: str) -> dict | None:
+        """Publish success only if the SAME saved config survived original probe.
+
+        No raw model response, credentials, latest-default adoption or secret
+        decryption is involved. A concurrent edit cannot validate its successor.
+        """
+        with self._mutation_lock:
+            self._check_admission()
+            data = self._normalized()
+            profile = next((item for item in data["profiles"] if item["id"] == profile_id), None)
+            if profile is None:
+                return None
+            current = self._public_profile(profile)
+            try:
+                identity = credential_identity(current)
+                if (identity != credential_identity(expected_profile)
+                        or current["model"] != expected_profile.get("model")
+                        or current["credential_revision"] != expected_profile.get("credential_revision")
+                        or current["credential_reentry_required"]):
+                    return None
+            except ValueError:
+                return None
+            receipt = {"protocol": "openai-chat-completions", "identity": identity,
+                       "model": current["model"], "credential_revision": current["credential_revision"],
+                       "kind": kind, "verified_at": datetime.now(UTC).isoformat(), "tools": "unknown"}
+            candidate = {**profile, "validation_receipt": receipt}
+            if _validation_receipt(candidate) is None:
+                raise ValueError("invalid_validation_receipt")
+            profile["validation_receipt"] = receipt
+            profile.pop("validation_invalidated", None)
+            self._write(data)
+            return receipt
 
     @staticmethod
     def _decrypt_profile(profile: dict) -> str:
@@ -541,6 +604,15 @@ class SettingsStore:
             profile["credential_revision"] = uuid4().hex
         elif forget_key:
             profile["credential_revision"] = uuid4().hex
+        if existing.get("validation_receipt"):
+            candidate = {**profile, "validation_receipt": existing["validation_receipt"]}
+            valid_receipt = _validation_receipt(candidate)
+            if valid_receipt is not None:
+                profile["validation_receipt"] = valid_receipt
+            else:
+                profile["validation_invalidated"] = True
+        elif existing.get("validation_invalidated"):
+            profile["validation_invalidated"] = True
         data["profiles"] = [profile if item["id"] == wanted else item for item in data["profiles"]]
         if make_default:
             data["active_profile_id"] = wanted
