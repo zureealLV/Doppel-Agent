@@ -141,7 +141,7 @@ def test_http_discovery_route_and_fixed_error_without_secret(fixture, monkeypatc
             headers={'Content-Type': 'application/json', 'X-Doppel-UI': '1'}), timeout=5)
     try:
         with post({'config': config(strategy='openai-list', api_key=KEY)}) as response:
-            assert json.load(response) == RESULT
+            assert json.load(response) == {**RESULT, 'credential_revision': ''}
         def broken(*args, **kwargs):
             raise RuntimeError(KEY + ' private-provider-error')
         monkeypatch.setattr('doppel_agent.web.server.discover_models', broken)
@@ -174,3 +174,20 @@ def test_discovery_failure_is_fixed_even_for_manual_branch(fixture, monkeypatch,
     monkeypatch.setattr('doppel_agent.web.server.discover_models', broken)
     with pytest.raises(RuntimeError, match='^provider_model_discovery_unavailable$'):
         server.manager.discover_models(config(strategy=strategy, api_key=KEY))
+
+
+def test_saved_discovery_reply_identifies_actual_credential_revision(fixture):
+    server, calls = fixture
+    saved = server.manager.settings.save_profile({**config(), 'model': 'stored'}, api_key=KEY)
+    result = server.manager.discover_models({'profile_id': saved['id'], 'strategy': 'openai-list',
+                                            'credential_revision': saved['credential_revision']})
+    assert result['credential_revision'] == saved['credential_revision']
+
+
+def test_typed_discovery_reply_keeps_opaque_draft_revision_without_key_hash(fixture):
+    server, calls = fixture
+    result = server.manager.discover_models(config(strategy='openai-list', api_key=KEY,
+                                                   credential_revision='draft:2'))
+    assert result['credential_revision'] == 'draft:2'
+    assert KEY not in json.dumps(result)
+

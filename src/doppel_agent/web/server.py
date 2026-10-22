@@ -299,8 +299,16 @@ class JobManager:
             return self._call_model_discovery(requested["base_url"], "", strategy)
         key = config.get("api_key", "")
         if profile_id is not None:
-            key = self.settings.resolve_profile(profile_id, requested)["api_key"]
-        return self._call_model_discovery(requested["base_url"], key, strategy)
+            resolved = self.settings.resolve_profile(profile_id, requested)
+            key = resolved["api_key"]
+        # Correlate metadata with the exact key generation. Draft generations are
+        # caller-owned opaque IDs, never hashes of entered secrets. Saved callers
+        # omitting this field retain legacy current-revision behavior.
+        revision = requested.get("credential_revision", "")
+        if not isinstance(revision, str) or len(revision) > 128 or (key and key in revision):
+            revision = ""
+        return {**self._call_model_discovery(requested["base_url"], key, strategy),
+                "credential_revision": revision}
 
     @staticmethod
     def _call_model_discovery(base_url: str, key: str, strategy: str) -> dict:
