@@ -1,43 +1,71 @@
-# New-conversation navigation flash
+# 界面闪烁修复说明（2026-10-22）
 
-## Cause and fix
+## 修复了什么
 
-The previous polling fix stopped repeated preference writes but a legitimate new
-conversation still saves its selection once. That save inserted a temporary
-paragraph above the chat header, resizing the flex message area. Disabling and
-reenabling busy controls also changed their opacity immediately.
+本次处理了两种不同的闪烁：
 
-The native chat now keeps a permanent, fixed-width selection-status slot in its
-header. Saving never inserts a new layout row. Its visual reveal waits 300 ms;
-fast successful writes stay visually quiet, while a slow save is still announced.
-Transient disabled-button/input dimming has the same delay. Actual disabled
-states, serialized persistence, close flushing and save-failure alerts remain.
-Reduced-motion users retain the delay without the opacity fade.
+1. **空白新对话持续闪烁“正在保存历史选择…”**。
+2. **点击“新对话”时，页面短暂跳动、按钮瞬间变灰**。
 
-## Current evidence (2026-10-22)
+这两种问题都来自前端状态与布局处理，不是模型流式输出故障。
 
-- Regression-first: the mounted layout/status test and style contract failed
-  before the fix. Tests now retain the same header/message/composer nodes during
-  a pending new-conversation save, assert exactly one write, and preserve failure
-  alerts. These synthetic tests are not pixel-layout acceptance.
-- Full frontend suite: **549 passed**, 57 files. Typecheck and Vite build passed.
-- Used a **separate hidden in-app browser**, not the user's Edge browser, against
-  a disposable native API workspace with MockProvider. No task/model was run.
-- Fast click: 90 animation-frame samples, including two pending-save frames;
-  header/message/composer geometry had one unique value and node identities were
-  retained. Status opacity stayed 0; suggestion-button opacity stayed 1.
-- Injected 800 ms selection-PUT delay: 180 samples, 174 pending-save frames; one
-  unique geometry, retained nodes, saving indicator reached opacity 1. A later
-  DOM snapshot confirmed completion and cleared status.
-- Three UI clicks produced three conversation POSTs and three selection PUTs;
-  subsequent polling did not add writes. No run-start request was made.
-- Local frame logs and screenshot:
-  `.bench-results/new-chat-flash-ui-20261022/{fast-frames.json,slow-frames.json,stable-new-chat.png}`.
-- Isolated candidate `.artifacts/new-chat-flash-20261022-01` built successfully;
-  all recorded source hashes matched and the daily app directory was unchanged.
-  Frozen executable `--help` exited 0. Desktop shortcut was backed up and pointed
-  at this candidate, retaining arguments and working directory.
+## 问题一：空白对话反复保存
 
-This is browser/API and frozen CLI evidence, not full native-window acceptance.
-The user's running desktop window was not terminated; reopen through the desktop
-shortcut to load the new assets. No Python source changed or backend suite reran.
+页面每 700 毫秒轮询一次历史。空白对话没有运行记录，此时“当前选择”
+和“备用选择”都为空，但原来的代码仍将它视为选择失效，反复提交同一个
+历史选择，导致保存提示不停出现、消失。
+
+现在后台刷新只有在备用选择与当前选择确实不同时才触发保存。正常的用户
+选择、保存失败提示、显式重试以及退出前等待保存等行为均保留。
+
+对应修复提交：`7546c8b`。
+
+## 问题二：点击新对话时闪一下
+
+前一个修复消除了重复保存，但点击“新对话”仍然需要正常保存一次选择。
+原先保存时会在聊天标题上方临时插入一行提示，改变消息区域高度；同时，
+忙碌状态会立即降低按钮透明度，操作完成后又恢复，形成可见的跳动和闪烁。
+
+本次调整：
+
+- 将保存状态放入标题栏的固定宽度区域，不再临时插入布局行。
+- 保存提示延迟 300 毫秒显示，快速成功的保存不再闪一下。
+- 按钮和输入控件的禁用变灰效果同样延迟显示，减少短暂操作的视觉干扰。
+- 实际禁用状态立即生效，防重复提交与点击保护没有移除。
+- 慢保存仍会显示状态，保存失败仍会给出错误提醒。
+- 尊重系统“减少动态效果”设置，保留延迟但取消透明度渐变。
+
+对应修复提交：`ef0c53b`。
+
+## 验证结果
+
+- 先补充回归测试并确认失败，再实现修复；测试覆盖保存过程中布局节点
+  保持不变、每次操作只保存一次以及保存失败仍显示提醒。
+- 修复完成时的完整前端测试：**57 个测试文件、549 项测试全部通过**。
+- TypeScript 类型检查及 Vite 构建通过。
+- 使用独立、后台运行的内置浏览器和隔离工作区复测，没有操作用户的 Edge。
+- 普通新建操作采样 90 帧，其中包含 2 帧保存中状态：标题、消息区域与输入框
+  的位置和尺寸不变，节点未重建；保存提示透明度保持 0，推荐按钮透明度保持 1。
+- 将保存接口人为延迟 800 毫秒后采样 180 帧，其中 174 帧处于保存中：布局
+  仍保持不变，慢保存提示能够正常显示；后续页面检查确认保存完成、提示清空。
+- 3 次新建点击对应 3 次对话请求和 3 次选择保存，后续轮询没有额外触发保存。
+
+验证使用 MockProvider，没有启动模型任务、产生付费模型请求或读取密钥。
+以上是浏览器/API 验证和打包程序命令行冒烟检查，**不等同于原生窗口完整验收**。
+修复未修改 Python 后端源码，也未重新运行后端全量测试。本次中文说明更新仅改文档，
+没有重新运行上述测试。
+
+## 桌面版本与使用方式
+
+隔离构建目录：`.artifacts/new-chat-flash-20261022-01`。
+
+构建成功，记录的源码哈希与构建输入一致，原有日常应用目录没有被覆盖。
+打包程序运行 `--help` 正常退出，退出码为 0。
+
+桌面快捷方式已备份并指向修复版，原有启动参数和工作目录保持不变。
+用户正在运行的旧窗口没有被强制关闭；**关闭旧窗口，再从桌面
+“Doppel Agent”快捷方式打开，即可加载新版资源**。
+
+本地验证截图和逐帧记录保存在忽略目录
+`.bench-results/new-chat-flash-ui-20261022/`；截图本身不能证明不存在闪烁，
+需结合逐帧布局、透明度采样和回归测试判断。
