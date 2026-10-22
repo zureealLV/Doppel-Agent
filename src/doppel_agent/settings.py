@@ -519,7 +519,10 @@ class SettingsStore:
             "region": region, "plan": plan,
             "model": model, "input_price": input_price, "output_price": output_price,
         }
-        if not tariff_supplied and all(existing.get(key) == profile[key] for key in ("provider", "base_url", "model")):
+        tariff_identity = ("provider", "base_url", "model", "preset", "region", "plan")
+        if not tariff_supplied and all(
+            existing.get(key, "openai" if key == "preset" else "") == profile[key] for key in tariff_identity
+        ):
             # Editing a name/compatibility float cannot change declared rates.
             # Identity changes cannot silently apply old tariffs to another model.
             declared = self._public_profile(existing)["billing_tariff"]

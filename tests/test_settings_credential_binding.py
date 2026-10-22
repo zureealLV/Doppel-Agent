@@ -292,3 +292,15 @@ def test_explicit_replacement_run_does_not_decrypt_original_for_display_model(st
         assert response['run_id']
     finally:
         server.server_close()
+
+
+@pytest.mark.parametrize('change', [{'preset': 'other'}, {'region': 'global'}, {'plan': 'coding'}])
+def test_contract_change_with_replacement_key_clears_old_tariff(store, change):
+    from test_billing_tariff import tariff
+    before = store.save_profile({**config(), 'billing_tariff': tariff(), 'billing_tariff_confirmed': True})
+    assert before['billing_tariff']
+    saved = store.save_profile({**config(), **change}, api_key='synthetic-replacement')
+    assert saved['billing_tariff'] is None
+    confirmed = store.save_profile({**config(), **change,
+        'billing_tariff': tariff(), 'billing_tariff_confirmed': True})
+    assert confirmed['billing_tariff'] == before['billing_tariff']
