@@ -439,12 +439,17 @@ class JobManager:
         config = data.get("config")
         if not isinstance(config, dict):
             raise ValueError("config must be an object")
+        config = dict(config)  # Request-owned draft is not consumed by save.
         key = config.pop("api_key", "")
         forget = data.get("forget_key", False)
+        make_default = data.get("make_default", True)  # Legacy callers preserve their old default behavior.
+        if type(make_default) is not bool:
+            raise ValueError("make_default_must_be_boolean")
         if not isinstance(key, str) or not isinstance(forget, bool):
             raise ValueError("invalid key settings")
         return self.settings.save_profile(
             config, profile_id=data.get("profile_id"), api_key=key, forget_key=forget,
+            make_default=make_default,
         )
 
     def events(self, run_id: str) -> list[dict] | None:

@@ -448,21 +448,26 @@ class SettingsStore:
         except (ValueError, OSError):
             raise RuntimeError("saved API key cannot be decrypted by this Windows user") from None
 
-    def save(self, config: dict, *, api_key: str = "", forget_key: bool = False) -> dict:
-        return self.save_profile(config, api_key=api_key, forget_key=forget_key)
+    def save(self, config: dict, *, api_key: str = "", forget_key: bool = False, make_default: bool = True) -> dict:
+        return self.save_profile(config, api_key=api_key, forget_key=forget_key, make_default=make_default)
 
     def save_profile(
         self, config: dict, *, profile_id: str | None = None,
         api_key: str = "", forget_key: bool = False,
+        make_default: bool = True,
     ) -> dict:
         # SAME store/read-modify-write/public response, not just replace lock.
         with self._mutation_lock:
             self._check_admission()  # Before new private payload/key/DPAPI work.
-            return self._save_profile(config, profile_id=profile_id, api_key=api_key, forget_key=forget_key)
+            if type(make_default) is not bool:
+                raise ValueError("make_default_must_be_boolean")
+            return self._save_profile(config, profile_id=profile_id, api_key=api_key,
+                                      forget_key=forget_key, make_default=make_default)
 
     def _save_profile(
         self, config: dict, *, profile_id: str | None = None,
         api_key: str = "", forget_key: bool = False,
+        make_default: bool = True,
     ) -> dict:
         provider = config.get("provider")
         preset = config.get("preset", "deepseek")
@@ -534,9 +539,10 @@ class SettingsStore:
         elif forget_key:
             profile["credential_revision"] = uuid4().hex
         data["profiles"] = [profile if item["id"] == wanted else item for item in data["profiles"]]
-        data["active_profile_id"] = wanted
+        if make_default:
+            data["active_profile_id"] = wanted
         self._write(data)
-        return self.public()
+        return {**self.public(), "saved_profile_id": wanted}
 
     def delete_profile(self, profile_id: str) -> dict:
         with self._mutation_lock:
