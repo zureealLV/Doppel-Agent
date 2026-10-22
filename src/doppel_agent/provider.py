@@ -15,11 +15,25 @@ from functools import wraps
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen as _stdlib_urlopen
 
 from .persistence.owned import await_durable
 from .provider_observation import BODY_LIMIT, begin_async, begin_sync, finish_async, finish_sync, native_entered
 from .provider_streaming import SSEModelStream, StreamLimitError, stream_callback
+
+
+class _NoCredentialRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Fail closed for ALL credentialed redirects, including semantic path
+        # changes. No hidden resend of Authorization outside its bound endpoint.
+        return None
+
+
+def urlopen(request, *, timeout):
+    """Original sync transport entry; preserve observation and test injection."""
+    if request.has_header("Authorization"):
+        return build_opener(_NoCredentialRedirect()).open(request, timeout=timeout)
+    return _stdlib_urlopen(request, timeout=timeout)
 
 
 @dataclass
@@ -444,7 +458,12 @@ class AsyncOpenAICompatibleProvider:
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(connect=10, read=60, write=30, pool=10),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            follow_redirects=False,
         )
+        # Real HTTPX clients can be injected with follow_redirects=True; override
+        # per request without mutating a caller's client. Opaque fixture transports
+        # retain their existing signature (they have no HTTP redirect machinery).
+        self._redirect_options = {"follow_redirects": False} if isinstance(self._client, httpx.AsyncClient) else {}
 
     @staticmethod
     def _retry_after(value: str | None) -> float | None:
@@ -536,7 +555,7 @@ class AsyncOpenAICompatibleProvider:
             try:
                 if attempt is not None:
                     attempt.entered = True
-                response = await self._client.post(self.endpoint, json=body, headers=headers)
+                response = await self._client.post(self.endpoint, json=body, headers=headers, **self._redirect_options)
                 observe_response()
                 if response.status_code == 429 or 500 <= response.status_code < 600:
                     raise httpx.HTTPStatusError(
@@ -606,7 +625,7 @@ class AsyncOpenAICompatibleProvider:
                 request = self._client.build_request("POST", self.endpoint, json=body, headers=headers)
                 if attempt is not None:
                     attempt.entered = True
-                response = await self._client.send(request, stream=True)
+                response = await self._client.send(request, stream=True, **self._redirect_options)
                 if attempt is not None:
                     attempt.http_status = response.status_code
                     attempt.response_state = "unavailable"

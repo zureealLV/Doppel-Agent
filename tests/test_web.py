@@ -231,11 +231,11 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("api_key", public)
         trusted = self.server.manager._provider({"profile_id": saved["active_profile_id"]})
         self.assertEqual(trusted.api_key, key)
-        redirected = self.server.manager._provider({
-            "profile_id": saved["active_profile_id"],
-            "base_url": "https://attacker.invalid", "model": "other-model",
-        })
-        self.assertEqual(redirected.api_key, "")
+        with self.assertRaisesRegex(ValueError, '^credential_reentry_required$'):
+            self.server.manager._provider({
+                "profile_id": saved["active_profile_id"],
+                "base_url": "https://attacker.invalid", "model": "other-model",
+            })
 
     def test_rejects_cross_origin(self):
         with self.assertRaises(HTTPError) as caught:

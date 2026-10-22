@@ -224,18 +224,11 @@ class JobManager:
 
     def _provider(self, config: dict):
         self._assert_effect_admission()  # Before profile/key/client lookup.
-        requested = dict(config)
         profile_id = config.get("profile_id")
-        profile_key = ""
-        allow_saved_key = False
         if profile_id is not None:
             if not isinstance(profile_id, str):
                 raise ValueError("profile_id must be a string")
-            stored = self.settings.profile(profile_id)
-            profile_key = stored.pop("api_key", "")
-            requested_base = requested.get("base_url")
-            allow_saved_key = not requested_base or requested_base == stored.get("base_url")
-            config = {**stored, **{key: value for key, value in config.items() if value not in (None, "")}}
+            config = self.settings.resolve_profile(profile_id, config)
         if config.get("provider") == "mock":
             return MockProvider()
         if config.get("provider") != "openai":
@@ -243,8 +236,6 @@ class JobManager:
         base_url = config.get("base_url")
         model = config.get("model")
         key = config.get("api_key", "")
-        if not key and allow_saved_key:
-            key = profile_key
         if not isinstance(base_url, str) or not isinstance(model, str) or not isinstance(key, str):
             raise ValueError("base_url, model and api_key must be strings")
         return OpenAICompatibleProvider(base_url, model, key)
@@ -297,8 +288,10 @@ class JobManager:
         profile_id = config.get("profile_id")
         model = config.get("model", "mock")
         if isinstance(profile_id, str):
-            profile = self.settings.profile(profile_id)
-            model = profile.get("model", "mock")
+            # Metadata projection is not another credential resolution. The
+            # provider above already resolved this exact saved/unsaved draft.
+            profile = next(item for item in self.settings.public()["profiles"] if item["id"] == profile_id)
+            model = config.get("model") or profile.get("model", "mock")
         allow_write = data.get("allow_write", False)
         allow_command = data.get("allow_command", False)
         allow_mcp = data.get("allow_mcp", False)

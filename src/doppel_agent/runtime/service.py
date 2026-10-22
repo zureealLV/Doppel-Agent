@@ -441,6 +441,8 @@ class RunService:
     @staticmethod
     def _freeze_public_profile(profile: dict) -> dict:
         snapshot = {key: profile[key] for key in ("id", "provider", "model", "base_url")}
+        snapshot.update({key: profile[key] for key in ("preset", "region", "plan", "credential_revision")
+                         if key in profile})
         # Snapshot clock date, not a claim of atomic identity with DB created_at.
         # No latest-profile read at resume/report and no credentials/reference in
         # this numeric receipt. Future-effective tariff conservatively unknown.
@@ -789,17 +791,27 @@ class RunService:
         self._assert_provider_admission()  # BEFORE override/settings/key/client lookup.
         if self.provider_override is not None:
             return self.provider_override
-        profile = snapshot or self.settings.profile(profile_id)
+        if snapshot:
+            # Public snapshots contain no key. Resolve the CURRENT secret only
+            # if its original destination AND revision still match this snapshot,
+            # BEFORE cached-client lookup. A replacement is not a replay grant.
+            profile = self.settings.resolve_profile(snapshot["id"], {
+                **snapshot, "credential_revision": snapshot.get("credential_revision", "legacy"),
+            })
+        else:
+            profile = self.settings.profile(profile_id)
         if profile["provider"] == "mock":
             return MockProvider()
         if profile["provider"] != "openai":
             raise ValueError("explicit provider override is required to continue this run")
-        cache_key = f"{mode}:" + json.dumps({key: profile.get(key) for key in ('id', 'base_url', 'model')}, sort_keys=True)
+        cache_key = f"{mode}:" + json.dumps({key: profile.get(key) for key in (
+            'id', 'base_url', 'model', 'provider', 'preset', 'region', 'plan', 'credential_revision',
+        )}, sort_keys=True)
         if cache_key not in self._providers:
             provider_type = OpenAICompatibleProvider if mode == "legacy" else AsyncOpenAICompatibleProvider
             self._providers[cache_key] = provider_type(
                 profile["base_url"], profile["model"],
-                self.settings.api_key(profile["id"]) if snapshot else profile["api_key"],
+                profile["api_key"],
             )
         return self._providers[cache_key]
 

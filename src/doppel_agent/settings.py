@@ -14,9 +14,57 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
+from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 from .billing_tariff import canonical_tariff
+
+
+def credential_identity(profile: dict) -> dict:
+    """Canonical destination/contract, never a credential hash or model identity.
+
+    Only normalize equivalent URL spelling. Path case and semantic path, provider
+    preset, region and plan remain significant. Ambiguous URL syntax is rejected
+    instead of guessing how a remote HTTP server will interpret it.
+    """
+    fields = ("provider", "preset", "region", "plan")
+    result = {key: profile.get(key, "openai" if key in ("provider", "preset") else "") for key in fields}
+    if any(not isinstance(value, str) for value in result.values()):
+        raise ValueError("invalid_credential_destination")
+    base = profile.get("base_url", "")
+    if not isinstance(base, str):
+        raise ValueError("invalid_credential_destination")
+    if result["provider"] == "mock" and not base:
+        result["endpoint"] = []
+        return result
+    try:
+        url = urlsplit(base)
+        host = url.hostname
+        if (url.scheme not in ("http", "https") or not host or url.username is not None
+                or url.password is not None or url.query or url.fragment
+                or any(char.isspace() or ord(char) < 32 for char in base)
+                or "\\" in base):
+            raise ValueError
+        port = url.port if url.port is not None else (443 if url.scheme == "https" else 80)
+        path = url.path.rstrip("/")
+        # Encoded delimiters/dot segments can be interpreted differently by
+        # proxies. Require an unambiguous base path, not a permissive URL repair.
+        decoded = unquote(path)
+        if decoded != path or any(part in (".", "..") for part in path.split("/")):
+            raise ValueError
+        result["endpoint"] = [url.scheme, host.lower().encode("idna").decode("ascii"), port, path]
+    except (ValueError, UnicodeError):
+        raise ValueError("invalid_credential_destination") from None
+    return result
+
+
+def _credential_matches(profile: dict, requested: dict | None = None) -> bool:
+    try:
+        original = credential_identity(profile)
+        binding = profile.get("credential_binding", original)  # Legacy original ownership only.
+        return binding == original and binding == credential_identity(requested or profile)
+    except ValueError:
+        return False
 
 
 class _Blob(ctypes.Structure):
@@ -321,12 +369,16 @@ class SettingsStore:
             "name": profile.get("name", profile.get("model", "未命名模型")),
             "provider": profile.get("provider", "openai"),
             "preset": profile.get("preset", "openai"),
+            "region": profile.get("region", ""),
+            "plan": profile.get("plan", ""),
             "base_url": profile.get("base_url", ""),
             "model": profile.get("model", ""),
             "input_price": input_price,
             "output_price": output_price,
             "billing_tariff": tariff,
             "api_key_saved": bool(profile.get("api_key_dpapi")),
+            "credential_reentry_required": bool(profile.get("api_key_dpapi")) and not _credential_matches(profile),
+            "credential_revision": profile.get("credential_revision", "legacy" if profile.get("api_key_dpapi") else ""),
         }
 
     def public(self) -> dict:
@@ -341,21 +393,53 @@ class SettingsStore:
         }
 
     def profile(self, profile_id: str | None = None) -> dict:
+        return self.resolve_profile(profile_id)
+
+    def resolve_profile(self, profile_id: str | None = None, overrides: dict | None = None) -> dict:
+        """Resolve saved/unsaved config against the SAME original key ownership.
+
+        Validate destination before decrypting. Explicit replacement credentials
+        do not need old credentials; an empty draft key is never a rebind grant.
+        """
+        with self._mutation_lock:
+            return self._resolve_profile(profile_id, overrides or {})
+
+    def _resolve_profile(self, profile_id: str | None, overrides: dict) -> dict:
         data = self._normalized()
         wanted = profile_id or data["active_profile_id"]
         profile = next((item for item in data["profiles"] if item["id"] == wanted), None)
         if profile is None:
             raise ValueError("model profile not found")
         result = self._public_profile(profile)
-        result["api_key"] = self.api_key(profile["id"])
+        original_revision = result["credential_revision"]
+        if ("credential_revision" in overrides
+                and overrides["credential_revision"] != original_revision
+                and (profile.get("api_key_dpapi") or original_revision)
+                and not overrides.get("api_key")):
+            raise ValueError("credential_reentry_required")
+        # Empty legacy form fields still mean use saved configuration. Region
+        # and plan are identity fields: an explicit empty value means changing
+        # that contract, and therefore requires replacement/removal of the key.
+        result.update({key: value for key, value in overrides.items()
+                       if value not in (None, "") or key in ("region", "plan")})
+        supplied = overrides.get("api_key", "")
+        if not isinstance(supplied, str):
+            raise ValueError("base_url, model and api_key must be strings")
+        if supplied:
+            result["api_key"] = supplied
+        elif profile.get("api_key_dpapi"):
+            if not _credential_matches(profile, result):
+                raise ValueError("credential_reentry_required")
+            result["api_key"] = self._decrypt_profile(profile)
+        else:
+            result["api_key"] = ""
         return result
 
     def api_key(self, profile_id: str | None = None) -> str:
-        data = self._normalized()
-        wanted = profile_id or data["active_profile_id"]
-        profile = next((item for item in data["profiles"] if item["id"] == wanted), None)
-        if profile is None:
-            raise ValueError("model profile not found")
+        return self.resolve_profile(profile_id)["api_key"]
+
+    @staticmethod
+    def _decrypt_profile(profile: dict) -> str:
         encrypted = profile.get("api_key_dpapi")
         if not encrypted:
             return ""
@@ -382,6 +466,8 @@ class SettingsStore:
     ) -> dict:
         provider = config.get("provider")
         preset = config.get("preset", "deepseek")
+        region = config.get("region", "")
+        plan = config.get("plan", "")
         base_url = config.get("base_url", "")
         model = config.get("model", "")
         name = config.get("name", model or "未命名模型")
@@ -406,7 +492,7 @@ class SettingsStore:
             raise ValueError("model prices must be finite nonnegative numbers") from exc
         if (
             provider not in ("openai", "mock")
-            or not all(isinstance(item, str) for item in (preset, base_url, model, name, api_key))
+            or not all(isinstance(item, str) for item in (preset, region, plan, base_url, model, name, api_key))
             or not math.isfinite(input_price) or not math.isfinite(output_price)
             or input_price < 0 or output_price < 0
         ):
@@ -418,9 +504,14 @@ class SettingsStore:
             wanted = uuid4().hex
             existing = {"id": wanted}
             data["profiles"].append(existing)
+        # New identity fields omitted by old callers preserve the original
+        # contract. An explicit empty string is an identity change, not omission.
+        region = config.get("region", existing.get("region", ""))
+        plan = config.get("plan", existing.get("plan", ""))
         profile = {
             "id": wanted, "name": " ".join(name.split())[:60] or model,
             "provider": provider, "preset": preset, "base_url": base_url,
+            "region": region, "plan": plan,
             "model": model, "input_price": input_price, "output_price": output_price,
         }
         if not tariff_supplied and all(existing.get(key) == profile[key] for key in ("provider", "base_url", "model")):
@@ -428,10 +519,20 @@ class SettingsStore:
             # Identity changes cannot silently apply old tariffs to another model.
             declared = self._public_profile(existing)["billing_tariff"]
         profile["billing_tariff"] = declared
+        if "credential_revision" in existing:
+            profile["credential_revision"] = existing["credential_revision"]
         if not forget_key and existing.get("api_key_dpapi"):
+            if not api_key and not _credential_matches(existing, profile):
+                raise ValueError("credential_reentry_required")
             profile["api_key_dpapi"] = existing["api_key_dpapi"]
+            if not api_key:
+                profile["credential_binding"] = credential_identity(profile)
         if api_key and not forget_key:
+            profile["credential_binding"] = credential_identity(profile)
             profile["api_key_dpapi"] = _protect(api_key)
+            profile["credential_revision"] = uuid4().hex
+        elif forget_key:
+            profile["credential_revision"] = uuid4().hex
         data["profiles"] = [profile if item["id"] == wanted else item for item in data["profiles"]]
         data["active_profile_id"] = wanted
         self._write(data)
