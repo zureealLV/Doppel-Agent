@@ -425,3 +425,17 @@ textarea { resize: vertical; line-height: 1.55; }.helper { display: block; line-
 .provider-center .provider-model-hints { margin-bottom: 12px; gap: 5px; }
 .provider-boundary { color: var(--muted); font-size: 11px; margin: 8px 0 0; line-height: 1.4; }
 .provider-advanced > label { display: block; margin: 12px 0; }
+.provider-security, .provider-more { color: var(--muted); font-size: 12px; margin: 6px 0; }
+.provider-security summary, .provider-more summary, .provider-management summary, .provider-footer summary { cursor: pointer; padding: 6px 0; }
+.provider-service { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
+.provider-management { margin-top: 18px; border-top: 1px solid var(--border); font-size: 12px; }
+.provider-management button { margin: 6px 8px 0 0; }
+.provider-unsaved { border: 1px solid var(--accent); padding: 8px; font-size: 12px; flex-shrink: 0; }
+.provider-unsaved button { margin-left: 8px; }
+.provider-footer details[open] { display: flex; flex-wrap: wrap; }
+@media (max-height: 540px) {
+  .provider-center-content { padding: 12px; }
+  .provider-center .provider-boundary, .provider-more { margin: 2px 0; font-size: 10px; }
+  .provider-footer { margin-top: 6px; gap: 5px; }
+  .provider-sections { padding: 4px 0; }
+}

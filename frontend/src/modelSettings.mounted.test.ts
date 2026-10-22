@@ -82,7 +82,7 @@ it('key-only action preserves stored provider even when a legacy preset label di
 });
 it('switching/new profile clears source draft and consent; clear tariff sends explicit null without a probe', async () => {
   const m = fixture(); await flushVue(); await value(m.root, 'tariff-action', 'replace');
-  await checkLabel(m.root, '我确认本次声明'); await click(button(m.root, '新建')); await flushVue();
+  await checkLabel(m.root, '我确认本次声明'); await click(button(m.root, '新建')); await click(button(m.root, '放弃并切换')); await flushVue();
   expect(m.root.textContent).not.toContain('PRIVATE_OFFLINE_REFERENCE');
   await value(m.root, 'tariff-action', 'clear'); await value(m.root, 'profile-preset', 'mock'); await submit(m.root);
   expect(vi.mocked(workspaceApi.saveProfile).mock.calls[0]![1].billing_tariff).toBeNull();
@@ -137,7 +137,7 @@ it('opens a searchable provider directory without touching the saved custom draf
   expect(descendants(m.root).find(node => node.props.id === 'profile-base-url')?.value).toBe('https://gateway.example/v1');
   expect(workspaceApi.saveProfile).not.toHaveBeenCalled(); expect(workspaceApi.probe).not.toHaveBeenCalled();
   await click(button(m.root, '添加 DeepSeek')); await flushVue();
-  expect(descendants(m.root).find(node => node.props.id === 'profile-base-url')?.value).toBe('https://api.deepseek.com');
+  expect(descendants(m.root).some(node => node.props.id === 'profile-base-url')).toBe(false);
   expect(descendants(m.root).find(node => node.props.id === 'profile-model')?.value).toBe('');
   expect(m.root.textContent).toContain('建议模型');
   expect(m.root.textContent).toContain('尚未保存');
@@ -226,4 +226,26 @@ it('save and apply uses saved_profile_id rather than unrelated default', async (
   await submit(m.root);
   expect(workspaceApi.saveProfile).toHaveBeenCalledWith('fixture', expect.anything(), false, false);
   expect(applyProfile).toHaveBeenCalledExactlyOnceWith('fixture');
+});
+
+it('preset address has an explicit editor and entry switching protects an unsaved key draft', async () => {
+  const m = fixture(); await flushVue(); await click(button(m.root, 'API 密钥')); await click(button(m.root, '添加 DeepSeek')); await flushVue();
+  expect(descendants(m.root).some(n => n.props.id === 'profile-base-url')).toBe(false);
+  await click(button(m.root, '编辑地址')); await flushVue();
+  expect(descendants(m.root).find(n => n.props.id === 'profile-base-url')?.value).toBe('https://api.deepseek.com');
+  await value(m.root, 'profile-key', 'MEMORY_ONLY_FIXTURE');
+  await click(button(m.root, '添加 OpenAI')); await flushVue();
+  expect(m.root.textContent).toContain('未保存修改');
+  await click(button(m.root, '保留当前编辑')); await flushVue();
+  expect(descendants(m.root).find(n => n.props.id === 'profile-key')?.value).toBe('MEMORY_ONLY_FIXTURE');
+  await click(button(m.root, '添加 OpenAI')); await click(button(m.root, '放弃并切换')); await flushVue();
+  expect(descendants(m.root).find(n => n.props.id === 'profile-key')?.value).toBe('');
+  expect(workspaceApi.probe).not.toHaveBeenCalled();
+});
+
+it('successful replacement clears pending unsaved-switch action rather than retaining a stale discard target', async () => {
+  const m = fixture(); await flushVue(); await value(m.root, 'profile-key', 'SYNTHETIC_DRAFT');
+  await click(button(m.root, '新建')); expect(m.root.textContent).toContain('未保存修改');
+  await click(button(m.root, '仅保存')); await flushVue();
+  expect(m.root.textContent).not.toContain('未保存修改');
 });
