@@ -326,6 +326,14 @@ textarea { resize: vertical; line-height: 1.55; }.helper { display: block; line-
 @media (max-height: 640px) { .codex-shell .classic-welcome { padding-block: 12px; }.codex-shell .classic-welcome h2 { font-size: 20px; }.codex-shell .classic-welcome > p:not(.sr-only) { margin-block: 8px; }.codex-shell .classic-suggestions { margin-top: 16px; gap: 8px; }.codex-shell .classic-suggestions button { min-height: 34px; padding: 8px 10px; }.codex-shell .conversation-messages { padding-block: 12px; } }
 
 /* Public progress stays in the transcript; only tool metadata is collapsed. */
+/* Preference writes must not insert a row or flash during local navigation.
+   The stable slot stays accessible; only its visual reveal is delayed. */
+.classic-chat-header > div:first-child { flex: 1; }
+.selection-save-status { flex: 0 0 clamp(0px, 15vw, 10em); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--muted); font-size: 12px; opacity: 0; transition: opacity .1s; }
+.selection-save-status[data-saving="true"] { opacity: 1; transition-delay: .3s; }
+.native-workspace :is(button, input):disabled { transition: opacity .12s .3s; }
+@media (prefers-reduced-motion: reduce) { .selection-save-status { transition-duration: 0s; }.native-workspace :is(button, input):disabled { transition-duration: 0s; } }
+
 .run-activity { min-width: 0; }
 .activity-ack, .activity-tools { color: var(--muted, #a49cb3); margin: 16px 0; font-size: 13px; }
 .activity-tools summary { cursor: pointer; padding: 8px 2px; overflow-wrap: anywhere; }

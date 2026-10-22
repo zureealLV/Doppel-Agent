@@ -25,6 +25,39 @@ beforeEach(() => {
 });
 afterEach(() => { mounts.splice(0).forEach(item => item.unmount()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("conversation run notice", () => {
+  it("keeps the same layout and status slot throughout a new-conversation save", async () => {
+    vi.mocked(nativeWorkspaceApi.selection).mockResolvedValue({ saved: true, conversation_id: null, run_id: null });
+    const mounted = await mount();
+    const main = descendants(mounted.root).find(node => node.tag === "main")!;
+    const elements = () => main.children.filter(node => !node.tag.startsWith("#"));
+    const before = elements();
+    const status = descendants(main).find(node => node.props.class === "selection-save-status");
+    expect(status?.parent?.tag).toBe("header");
+    let finishSave!: () => void;
+    vi.mocked(nativeWorkspaceApi.saveSelection).mockImplementationOnce(async (conversation_id, run_id) => {
+      await new Promise<void>(resolve => { finishSave = resolve; });
+      return { saved: true, conversation_id, run_id };
+    });
+    vi.spyOn(nativeWorkspaceApi, "draft").mockResolvedValue({ ...current("completed"), id: "draft", title: "新对话", runs: [], active_run_id: null });
+    const pending = click(button(mounted.root, "新对话")); await flushVue();
+    expect(host.controller!.state.selectionSaving).toBe(true);
+    expect(elements()).toEqual(before);
+    expect(descendants(main).find(node => node.props.class === "selection-save-status")).toBe(status);
+    expect(status?.props['data-saving']).toBe(true);
+    expect(status?.textContent).toContain("正在保存历史选择");
+    finishSave(); await pending; await flushVue();
+    expect(elements()).toEqual(before);
+    expect(status?.props['data-saving']).toBe(false);
+    expect(nativeWorkspaceApi.saveSelection).toHaveBeenCalledExactlyOnceWith("draft", null);
+  });
+  it("continues to surface a failed new-conversation save as an alert", async () => {
+    vi.mocked(nativeWorkspaceApi.selection).mockResolvedValue({ saved: true, conversation_id: null, run_id: null });
+    const mounted = await mount();
+    vi.spyOn(nativeWorkspaceApi, "draft").mockResolvedValue({ ...current("completed"), runs: [], active_run_id: null });
+    vi.mocked(nativeWorkspaceApi.saveSelection).mockRejectedValueOnce(new Error("offline"));
+    await click(button(mounted.root, "新对话")); await flushVue();
+    expect(descendants(mounted.root).some(node => node.props.role === "alert" && node.textContent.includes("历史选择保存失败"))).toBe(true);
+  });
   it("keeps the empty draft stable across polls without flashing selection-save status", async () => {
     const mounted = await mount();
     vi.mocked(nativeWorkspaceApi.conversation).mockResolvedValue({ ...current("completed"),

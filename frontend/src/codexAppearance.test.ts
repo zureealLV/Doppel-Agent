@@ -9,6 +9,13 @@ import ContextPanel from "./components/ContextPanel.vue";
 import DesktopControls from "./components/DesktopControls.vue";
 
 describe("Codex-reference appearance (not native acceptance)", () => {
+  it("keeps preference saving in a stable header slot and delays transient dimming", () => {
+    const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+    expect(css).toContain('.selection-save-status[data-saving="true"]');
+    expect(css).toContain("transition-delay: .3s");
+    expect(css).toContain("flex: 0 0 clamp(0px, 15vw, 10em)");
+    expect(css).toContain(".native-workspace :is(button, input):disabled { transition: opacity .12s .3s; }");
+  });
   it("keeps the sidebar compact and the composer centered at the bottom without a busy canvas", () => {
     const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
     expect(css).toContain(".codex-shell .codex-sidebar-heading");
