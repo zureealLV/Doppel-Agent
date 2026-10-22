@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.spyOn(nativeWorkspaceApi, 'conversations').mockResolvedValue([]); vi.spyOn(nativeWorkspaceApi, 'groups').mockResolvedValue([]);
   vi.spyOn(nativeWorkspaceApi, 'conversation').mockResolvedValue(conversation());
   vi.spyOn(nativeWorkspaceApi, 'update').mockImplementation(async (_id, body) => conversation(body.profile_id));
-  const saved = settings(); saved.active_profile_id = 'next';
+  const saved = settings(); saved.saved_profile_id = 'next';
   vi.spyOn(workspaceApi, 'saveProfile').mockResolvedValue(saved);
   vi.spyOn(workspaceApi, 'probe').mockRejectedValue(new Error('no paid tests allowed'));
 });
@@ -68,14 +68,14 @@ it.each(['native', 'legacy'] as const)('%s failed profile binding preserves old 
   api.mockRejectedValue(new Error('PRIVATE_BIND_FAILURE')); await save(m.root);
   const controller = kind === 'native' ? host.native! : host.legacy!;
   expect(controller.state.current?.profile_id).toBe('old'); expect(controller.state.profileId).toBe('old');
-  expect(controller.state.settings?.active_profile_id).toBe('next');
-  expect(m.root.textContent).toContain('已保存为默认'); expect(m.root.textContent).toContain('应用未确认');
+  expect(controller.state.settings?.active_profile_id).toBe('old');
+  expect(m.root.textContent).toContain('已保存'); expect(m.root.textContent).toContain('应用未确认');
   expect(m.root.textContent).not.toContain('PRIVATE_BIND_FAILURE'); expect(api).toHaveBeenCalledOnce(); expect(workspaceApi.saveProfile).toHaveBeenCalledOnce();
 });
 it.each(['native', 'legacy'] as const)('%s archived profile center saves defaults but cannot apply or probe automatically', async kind => {
   const m = await mount(kind); const controller = kind === 'native' ? host.native! : host.legacy!;
   controller.state.current!.archived = 1; await flushVue();
-  expect(button(m.root, '使用已存档案').props.disabled).toBe(true); expect(button(m.root, '保存为默认').props.disabled).toBe(false);
+  expect(button(m.root, '使用已存档案').props.disabled).toBe(true); expect(button(m.root, '保存并使用').props.disabled).toBe(false);
   await save(m.root); expect(workspaceApi.saveProfile).toHaveBeenCalledOnce();
   expect(nativeWorkspaceApi.update).not.toHaveBeenCalled(); expect(workspaceApi.setProfile).not.toHaveBeenCalled(); expect(workspaceApi.probe).not.toHaveBeenCalled();
   expect(controller.state.current!.profile_id).toBe('old'); expect(m.root.textContent).toContain('尚未应用');
@@ -90,4 +90,29 @@ it('legacy does not report application when the server returns the old profile',
   expect(m.root.textContent).toContain('应用未确认');
   expect(m.root.textContent).not.toContain('已保存并应用');
   expect(workspaceApi.setProfile).toHaveBeenCalledOnce();
+});
+
+it('native rejects unacknowledged application before replacing local state', async () => {
+  const m = await mount('native');
+  vi.mocked(nativeWorkspaceApi.update).mockResolvedValue(conversation('old'));
+  await save(m.root);
+  expect(host.native!.state.current?.profile_id).toBe('old');
+  expect(host.native!.state.profileId).toBe('old');
+  expect(m.root.textContent).toContain('应用未确认');
+});
+
+it.each(['native', 'legacy'] as const)('%s new conversation uses changed default without rebinding the old conversation', async kind => {
+  const m = await mount(kind), controller = kind === 'native' ? host.native! : host.legacy!;
+  const nextDefault = settings(); nextDefault.active_profile_id = 'next'; controller.updateSettings(nextDefault);
+  expect(controller.state.current?.profile_id).toBe('old'); expect(controller.state.profileId).toBe('old');
+  if (kind === 'native') {
+    vi.spyOn(nativeWorkspaceApi, 'draft').mockImplementation(async (_mode, profile) => ({ ...conversation(profile), id: 'new' }));
+    await host.native!.prepareDraft();
+    expect(nativeWorkspaceApi.draft).toHaveBeenCalledWith('graph', 'next', '新对话');
+  } else {
+    vi.spyOn(workspaceApi, 'draft').mockResolvedValue({ ...conversation(), id: 'new' });
+    await host.legacy!.prepareDraft('agent');
+    expect(workspaceApi.setProfile).toHaveBeenCalledWith('new', 'next');
+  }
+  expect(controller.state.profileId).toBe('next');
 });

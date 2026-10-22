@@ -5,6 +5,24 @@ import { WorkspaceController, profileConfiguration, safeMarkdown, searchIndex } 
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('default updates cannot silently replace a deleted named profile on an existing legacy conversation', () => {
+  const controller = new WorkspaceController();
+  controller.state.current = { ...conversation('c'), profile_id: 'removed' };
+  controller.state.profileId = 'removed';
+  controller.updateSettings({ active_profile_id: 'new-default', key_protection: 'fixture', profiles: [{ id: 'new-default', name: 'default', provider: 'mock', preset: 'mock', model: 'mock', base_url: '', input_price: 0, output_price: 0, api_key_saved: false }] });
+  expect(controller.state.profileId).toBe('');
+  expect(controller.state.current.profile_id).toBe('removed');
+});
+
+it('opening a legacy conversation with a missing profile clears the previous conversation selection', async () => {
+  const c = new WorkspaceController();
+  c.updateSettings({ active_profile_id: 'valid', key_protection: 'fixture', profiles: [{ id: 'valid', name: 'valid', provider: 'mock', preset: 'mock', model: 'mock', base_url: '', input_price: 0, output_price: 0, api_key_saved: false }] });
+  vi.spyOn(workspaceApi, 'conversation').mockResolvedValue({ ...conversation('removed-conversation'), profile_id: 'removed' });
+  vi.spyOn(workspaceApi, 'saveSelection').mockResolvedValue({ saved: true, conversation_id: 'removed-conversation' });
+  await c.open('removed-conversation');
+  expect(c.state.profileId).toBe('');
+});
+
 const conversation = (id: string) => ({ id, title: id, archived: 0, group_id: null, profile_id: null,
   group_name: null, updated_at: "2026-10-01", created_at: "2026-10-01", messages: [] });
 

@@ -46,6 +46,7 @@ export function profileConfiguration(form: ProfileForm, purpose: 'save' | 'probe
   return { name: purpose === 'forget_key' ? form.name : form.name.trim(), preset: form.preset,
     model: purpose === 'forget_key' ? form.model : form.model.trim(),
     base_url: purpose === 'forget_key' ? form.base_url : form.base_url.trim(),
+    ...(form.region !== undefined ? { region: form.region } : {}), ...(form.plan !== undefined ? { plan: form.plan } : {}),
     input_price: form.input_price, output_price: form.output_price, api_key: purpose === 'forget_key' ? '' : form.api_key,
     provider: form.preset === "mock" ? "mock" : "openai", ...(purpose === 'save' ? tariffPatch(form.billing_tariff_edit) : {}) };
 }
@@ -153,7 +154,8 @@ export class WorkspaceController {
 
   updateSettings(settings: PublicSettings): void {
     this.state.settings = settings; // public API deliberately omits all key bytes
-    if (!settings.profiles.some((profile) => profile.id === this.state.profileId)) this.state.profileId = settings.active_profile_id;
+    const wanted = this.state.current?.profile_id || this.state.profileId || settings.active_profile_id;
+    this.state.profileId = settings.profiles.some(profile => profile.id === wanted) ? wanted : '';
   }
 
   async refreshList(): Promise<void> {
@@ -185,14 +187,14 @@ export class WorkspaceController {
     this.remember("doppel-conversation", conversation.id);
     this.persistSelection(conversation.id);
     const wanted = conversation.profile_id || this.state.settings?.active_profile_id;
-    if (wanted && this.state.settings?.profiles.some((profile) => profile.id === wanted)) this.state.profileId = wanted;
+    this.state.profileId = wanted && this.state.settings?.profiles.some((profile) => profile.id === wanted) ? wanted : '';
   }
 
   async prepareDraft(mode: "agent" | "review"): Promise<void> {
     if (this.busy) return;
     this.state.transition = true;
     const epoch = ++this.selectionEpoch;
-    const profileId = this.state.profileId;
+    const profileId = this.state.current ? this.state.settings?.active_profile_id : this.state.profileId;
     try {
       let conversation = await workspaceApi.draft(mode);
       if (this.disposed || epoch !== this.selectionEpoch) return;
@@ -434,11 +436,12 @@ export class NativeWorkspaceController {
     } finally { if (!this.disposed && epoch === this.selectionEpoch) this.state.opening = false; }
   }
   async prepareDraft(review = false): Promise<void> {
-    if (this.busy || !this.state.profileId) return;
+    const profileId = this.state.current ? this.state.settings?.active_profile_id : this.state.profileId;
+    if (this.busy || !profileId) return;
     this.state.transition = true;
     const epoch = ++this.selectionEpoch;
     try {
-      const conversation = await nativeWorkspaceApi.draft(this.state.mode, this.state.profileId, review ? "代码审查" : "新对话");
+      const conversation = await nativeWorkspaceApi.draft(this.state.mode, profileId, review ? "代码审查" : "新对话");
       if (this.disposed || epoch !== this.selectionEpoch) return;
       this.state.groupId = null; this.select(conversation);
       await this.flushSelection(); await this.refreshList();
@@ -455,6 +458,7 @@ export class NativeWorkspaceController {
       if (current) {
         const updated = await nativeWorkspaceApi.update(current.id, { profile_id: profileId });
         if (this.disposed || epoch !== this.selectionEpoch) return;
+        if (updated.id !== current.id || updated.profile_id !== profileId) throw new Error('profile_application_not_acknowledged');
         this.state.current = updated;
       }
       this.state.profileId = profileId;

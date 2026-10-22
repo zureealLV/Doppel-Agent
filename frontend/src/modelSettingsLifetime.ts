@@ -5,7 +5,8 @@
 // Joining the HTTP promise isn't proof of SDK/provider/SQLite/OS physical drain.
 import { reactive, type InjectionKey } from 'vue';
 import type { PublicSettings } from './workspaceTypes';
-type SettingsAction = 'save' | 'forget' | 'delete' | 'read_settings';
+import { HttpError } from './api';
+type SettingsAction = 'save' | 'save_only' | 'save_default' | 'forget' | 'delete' | 'read_settings';
 type ProbeReply = { ok: boolean; reply: string };
 type Request = { kind: SettingsAction; profileId: string; invoke(): Promise<PublicSettings> }
   | { kind: 'probe'; profileId: string; invoke(): Promise<ProbeReply> };
@@ -61,8 +62,15 @@ export class ModelSettingsLifetime {
       // native success. Retain one reply, never request config/key/exception.
       const reply = { kind: request.kind, profileId: request.profileId, value } as ModelSettingsReply;
       this.pending = { token, epoch, reply }; this.state.deferred = true; this.state.outcome = 'reply_available';
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (this.disposed) return;
+      // Only this backend pre-write validation contract proves no mutation.
+      // An arbitrary 400/transport/probe failure is still unknown, never reset.
+      if (request.kind.startsWith('save') && error instanceof HttpError && error.status === 400 && error.message === 'credential_reentry_required') {
+        this.state.outcome = 'not_started';
+        this.state.error = '地址或套餐已变化，请重新提供凭据，或先明确移除旧 Key。原档案未修改。';
+        return;
+      }
       if (entered && request.kind !== 'read_settings' && !this.uncertain) {
         this.uncertain = true; this.state.uncertain = true; this.state.uncertainAction = request.kind; this.state.uncertainProfileId = request.profileId;
       }

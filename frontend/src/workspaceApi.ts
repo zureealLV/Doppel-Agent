@@ -34,8 +34,8 @@ export const workspaceApi = {
     "/api/workspace-selection", { conversation_id: conversationId }),
   health: () => request<{ status: string; workspace: string }>("/api/health"),
   settings: () => request<PublicSettings>("/api/settings"),
-  saveProfile: (profileId: string, config: ProfileConfiguration, forgetKey = false) =>
-    post<PublicSettings>("/api/settings", { profile_id: profileId, config, forget_key: forgetKey }),
+  saveProfile: (profileId: string, config: ProfileConfiguration, forgetKey = false, makeDefault = false) =>
+    post<PublicSettings>("/api/settings", { profile_id: profileId, config, forget_key: forgetKey, make_default: makeDefault }),
   deleteProfile: (profileId: string) => post<PublicSettings>(`/api/settings/profiles/${id(profileId)}/delete`),
   probe: (config: ProfileConfiguration & { profile_id?: string }) => post<{ ok: boolean; reply: string }>("/api/probe", { config }),
   conversations: (archived = false) => request<ConversationSummary[]>(`/api/conversations?archived=${archived ? 1 : 0}`),

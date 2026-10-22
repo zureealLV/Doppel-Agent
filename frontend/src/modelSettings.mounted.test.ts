@@ -121,10 +121,10 @@ it('failed probe stays unknown across reopen; explicit readonly settings read is
   const first = fixture(owner); await flushVue(); await click(button(first.root, '测试连接')); await flushVue(); first.unmount();
   const second = fixture(owner); await flushVue();
   expect(second.root.textContent).toContain('本窗口不重试'); expect(second.root.textContent).not.toContain('PRIVATE_KEY');
-  for (const phrase of ['移除 Key', '测试连接', '保存为默认']) expect(button(second.root, phrase).props.disabled).toBe(true);
+  for (const phrase of ['移除 Key', '测试连接', '保存并使用']) expect(button(second.root, phrase).props.disabled).toBe(true);
   await click(button(second.root, '明确只读查看当前设置')); await flushVue();
   expect(workspaceApi.settings).toHaveBeenCalledOnce(); expect(owner.state.uncertain).toBe(true);
-  for (const phrase of ['移除 Key', '测试连接', '保存为默认']) expect(button(second.root, phrase).props.disabled).toBe(true);
+  for (const phrase of ['移除 Key', '测试连接', '保存并使用']) expect(button(second.root, phrase).props.disabled).toBe(true);
   expect(workspaceApi.probe).toHaveBeenCalledOnce(); expect(workspaceApi.saveProfile).not.toHaveBeenCalled();
 });
 it('opens a searchable provider directory without touching the saved custom draft or doing IO', async () => {
@@ -187,9 +187,9 @@ it('save remains available for an archived/busy conversation but application doe
   const applyProfile = vi.fn();
   const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile, applyDisabled: true }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
   expect(button(m.root, '使用已存档案').props.disabled).toBe(true);
-  expect(button(m.root, '保存为默认').props.disabled).toBe(false);
+  expect(button(m.root, '保存并使用').props.disabled).toBe(false);
   await submit(m.root); expect(workspaceApi.saveProfile).toHaveBeenCalledOnce(); expect(applyProfile).not.toHaveBeenCalled();
-  expect(m.root.textContent).toContain('已保存为默认'); expect(m.root.textContent).toContain('尚未应用');
+  expect(m.root.textContent).toContain('已保存'); expect(m.root.textContent).toContain('尚未应用');
 });
 it('explicitly adopting a late save never auto applies it to a new dialog or conversation', async () => {
   const owner = new ModelSettingsLifetime(), applyProfile = vi.fn(); let resolve!: (settings: PublicSettings) => void;
@@ -205,4 +205,25 @@ it('the quick-picker new connection entry opens the API catalog directly with an
   expect(descendants(m.root).some(node => node.props.id === 'provider-search')).toBe(true);
   expect(descendants(m.root).find(node => node.props.id === 'profile-key')?.value).toBe('');
   expect(workspaceApi.probe).not.toHaveBeenCalled(); expect(workspaceApi.saveProfile).not.toHaveBeenCalled();
+});
+
+it('explicit save-only does not request default or apply; explicit default does not apply', async () => {
+  const applyProfile = vi.fn();
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  await click(button(m.root, '仅保存')); await flushVue();
+  expect(workspaceApi.saveProfile).toHaveBeenLastCalledWith('fixture', expect.anything(), false, false);
+  expect(applyProfile).not.toHaveBeenCalled();
+  await click(button(m.root, '设为新对话默认')); await flushVue();
+  expect(workspaceApi.saveProfile).toHaveBeenLastCalledWith('fixture', expect.anything(), false, true);
+  expect(applyProfile).not.toHaveBeenCalled();
+});
+
+it('save and apply uses saved_profile_id rather than unrelated default', async () => {
+  const reply = settings(); reply.active_profile_id = 'other-default'; reply.saved_profile_id = 'fixture';
+  vi.mocked(workspaceApi.saveProfile).mockResolvedValue(reply);
+  const applyProfile = vi.fn().mockResolvedValue(undefined);
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  await submit(m.root);
+  expect(workspaceApi.saveProfile).toHaveBeenCalledWith('fixture', expect.anything(), false, false);
+  expect(applyProfile).toHaveBeenCalledExactlyOnceWith('fixture');
 });

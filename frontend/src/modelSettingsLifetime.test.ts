@@ -1,6 +1,14 @@
 // C1 definitions FIRST, ALL UNRUN. Promise ownership only, no SDK/native proof.
 import { expect, it, vi } from 'vitest';
 import { ModelSettingsLifetime } from './modelSettingsLifetime';
+import { HttpError } from './api';
+
+it('controlled pre-effect credential validation stays correctable without clearing any unknown gate', async () => {
+  const c = new ModelSettingsLifetime(), token = c.attach();
+  await c.perform(token, { kind: 'save', profileId: 'fixture', invoke: async () => { throw new HttpError(400, 'credential_reentry_required'); } });
+  expect(c.state.uncertain).toBe(false); expect(c.canMutate(token)).toBe(true);
+  expect(c.state.error).toContain('重新提供凭据');
+});
 import type { PublicSettings } from './workspaceTypes';
 const settings = (): PublicSettings => ({ active_profile_id: 'fixture', profiles: [], key_protection: 'fixture' });
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void;

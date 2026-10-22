@@ -28,7 +28,7 @@ const visibleKey = ref(false);
 const message = ref("");
 const savedProfile = shallowRef<ModelProfile | null>(null);
 const savedTariff = ref<BillingTariff | null>(null);
-const form = reactive({ name: "", preset: "openai", model: "", base_url: "", input_price: 0, output_price: 0, api_key: "",
+const form = reactive({ name: "", preset: "openai", model: "", base_url: "", region: '', plan: '', input_price: 0, output_price: 0, api_key: "",
   billing_tariff_edit: emptyTariffEdit() });
 
 watch(() => [form.preset, form.model, form.base_url, form.api_key], () => { testStatus.value = 'untested'; }, { flush: 'sync' });
@@ -61,8 +61,8 @@ function fill(id: string, settings: PublicSettings = props.settings): void {
   catch { savedTariff.value = null; }
   form.billing_tariff_edit = tariffEditFromSaved(profile?.billing_tariff);
   Object.assign(form, profile ? { name: profile.name, preset: profile.preset, model: profile.model, base_url: profile.base_url,
-    input_price: profile.input_price, output_price: profile.output_price } : {
-    name: "新模型", preset: "openai", model: "", base_url: "", input_price: 0, output_price: 0 });
+    input_price: profile.input_price, output_price: profile.output_price, region: profile.region || '', plan: profile.plan || '' } : {
+    name: "新模型", preset: "openai", model: "", base_url: "", region: '', plan: '', input_price: 0, output_price: 0 });
   message.value = "";
 }
 
@@ -77,9 +77,9 @@ async function applyReply(reply: ModelSettingsReply, adopted = false): Promise<v
   emit('changed', reply.value);
   if (reply.kind === 'forget' && !adopted && profileId.value === reply.profileId) {
     savedProfile.value = reply.value.profiles.find(item => item.id === reply.profileId) ?? null;
-  } else fill(reply.value.active_profile_id, reply.value);
+  } else fill(reply.value.saved_profile_id || (reply.profileId !== '__new__' && reply.value.profiles.some(p => p.id === reply.profileId) ? reply.profileId : reply.value.active_profile_id), reply.value);
   message.value = reply.kind === 'read_settings' ? '只读查看当前设置，不重发保存或测试；旧请求结果仍不据此证明，本窗口未知门禁不解除。'
-    : reply.kind === 'forget' ? 'Key 已移除。' : reply.kind === 'delete' ? '模型档案已删除。' : '设置已保存为默认；保存不代表测试通过，输入框不会回显已保存的 Key。';
+    : reply.kind === 'forget' ? 'Key 已移除。' : reply.kind === 'delete' ? '模型档案已删除。' : reply.kind === 'save_default' ? '已保存并设为新对话默认；已有对话不变。' : '设置已保存；默认和已有对话不变，保存不代表测试通过。';
   if (reply.kind === 'save' && !adopted && props.applyProfile) await applySelected(true);
 }
 async function receiveReply(explicit = false): Promise<void> {
@@ -90,14 +90,14 @@ async function receiveReply(explicit = false): Promise<void> {
 }
 async function applySelected(afterSave = false): Promise<void> {
   if (!lifetime.isActive(session) || !props.applyProfile) return;
-  if (props.applyDisabled) { message.value = `${afterSave ? '已保存为默认；' : ''}当前对话忙碌或只读，尚未应用。`; return; }
+  if (props.applyDisabled) { message.value = `${afterSave ? '已保存；' : ''}当前对话忙碌或只读，尚未应用。`; return; }
   const source = profileId.value;
   form.api_key = ''; visibleKey.value = false;
   try {
     await props.applyProfile(source);
     if (lifetime.isActive(session)) message.value = `${afterSave ? '已保存并应用到当前选择；' : '已应用已存档案（未保存草稿）；'}不发送模型请求，不代表测试通过。`;
   } catch {
-    if (lifetime.isActive(session)) message.value = `${afterSave ? '已保存为默认；' : ''}应用未确认，可能失败或结果未知；不自动重试，请核对当前对话的模型。`;
+    if (lifetime.isActive(session)) message.value = `${afterSave ? '已保存；' : ''}应用未确认，可能失败或结果未知；不自动重试，请核对当前对话的模型。`;
   }
 }
 async function useSaved(): Promise<void> {
@@ -113,7 +113,7 @@ async function readCurrent(): Promise<void> {
   finally { form.api_key = ''; visibleKey.value = false; busy.value = false; }
 }
 
-async function save(forget = false): Promise<void> {
+async function save(forget = false, intent: 'save' | 'save_only' | 'save_default' = 'save'): Promise<void> {
   if (busy.value || !lifetime.canMutate(session)) return;
   busy.value = true;
   try {
@@ -124,8 +124,8 @@ async function save(forget = false): Promise<void> {
       : profileConfiguration(form);
     form.billing_tariff_edit.confirmed = false; // Consume before IO, also on unknown/failed reply.
     const source = profileId.value;
-    await lifetime.perform(session, { kind: forget ? 'forget' : 'save', profileId: source,
-      invoke: () => workspaceApi.saveProfile(source, config, forget) });
+    await lifetime.perform(session, { kind: forget ? 'forget' : intent, profileId: source,
+      invoke: () => workspaceApi.saveProfile(source, config, forget, !forget && intent === 'save_default') });
     await receiveReply();
   } catch (error) { message.value = tariffErrorMessage(error); }
   finally { form.api_key = ""; visibleKey.value = false; busy.value = false; }
@@ -247,7 +247,7 @@ onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billin
       </fieldset>
       <p class="provider-boundary">仅 Chat Completions 兼容；预设／保存不代表账户实测或工具调用验证。</p>
       <p role="status" aria-live="polite">{{ message }}</p>
-      <footer v-if="section !== 'accounts'" class="button-row provider-footer"><button v-if="props.applyProfile" type="button" :disabled="blocked || props.applyDisabled || profileId === '__new__'" @click="useSaved">使用已存档案</button><button type="button" :disabled="blocked || profileId === '__new__'" @click="save(true)">移除 Key</button><button type="button" :disabled="blocked" @click="probe">测试连接</button><button type="submit" class="primary-button" :disabled="blocked">{{ busy ? '请求中…' : props.applyProfile && !props.applyDisabled ? '保存并使用' : '保存为默认' }}</button></footer>
+      <footer v-if="section !== 'accounts'" class="button-row provider-footer"><button v-if="props.applyProfile" type="button" :disabled="blocked || props.applyDisabled || profileId === '__new__'" @click="useSaved">使用已存档案</button><button type="button" :disabled="blocked || profileId === '__new__'" @click="save(true)">移除 Key</button><button type="button" :disabled="blocked" @click="probe">测试连接 · 可能计费</button><button type="submit" class="primary-button" :disabled="blocked">{{ busy ? '请求中…' : '保存并使用' }}</button><details><summary>更多保存操作</summary><button type="button" :disabled="blocked" @click="save(false, 'save_only')">仅保存</button><button type="button" :disabled="blocked" @click="save(false, 'save_default')">设为新对话默认</button></details></footer>
     </form>
   </dialog>
 </template>
