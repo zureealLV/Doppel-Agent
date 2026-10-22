@@ -10,6 +10,44 @@ const deferred = <T>() => { let resolve!: (value: T) => void; const promise = ne
 const make = () => { const store = new Map<string, string>(); const controller = new NativeWorkspaceController({ getItem: k => store.get(k) || null, setItem: (k,v) => { store.set(k,v); }, removeItem: k => { store.delete(k); } }); controller.updateSettings(settings); return { controller, store }; };
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(api.selection).mockResolvedValue({ saved: false, conversation_id: null, run_id: null }); vi.mocked(api.saveSelection).mockImplementation(async (conversation_id, run_id) => ({ saved: true, conversation_id, run_id })); vi.mocked(api.conversations).mockResolvedValue([]); vi.mocked(api.groups).mockResolvedValue([]); vi.mocked(workspaceApi.health).mockResolvedValue({ status: "ok", workspace: "disposable" }); vi.mocked(workspaceApi.settings).mockResolvedValue(settings); vi.mocked(api.conversation).mockResolvedValue(conv()); vi.mocked(api.draft).mockResolvedValue(conv()); });
 describe("native conversation behavior", () => {
+  it("never re-saves an unchanged empty draft selection on background polls", async () => {
+    const { controller } = make();
+    await controller.open("c"); await controller.flushSelection();
+    vi.mocked(api.saveSelection).mockClear();
+    for (let i = 0; i < 10; i++) {
+      await controller.refreshRun();
+      expect(controller.state.selectionSaving).toBe(false);
+      await controller.flushSelection();
+    }
+    expect(api.saveSelection).not.toHaveBeenCalled();
+    expect(controller.state.selectedRunId).toBe("");
+    expect(api.start).not.toHaveBeenCalled();
+  });
+  it("leaves a failed empty preference visible until explicit repair, without poll retries", async () => {
+    const { controller } = make();
+    vi.mocked(api.saveSelection).mockRejectedValueOnce(new Error("offline"));
+    await controller.open("c");
+    const error = controller.state.selectionError;
+    expect(error).toContain("保存失败");
+    for (let i = 0; i < 5; i++) await controller.refreshRun();
+    await controller.flushSelection();
+    expect(api.saveSelection).toHaveBeenCalledTimes(1);
+    expect(controller.state.selectionError).toBe(error);
+    await controller.open("c");
+    expect(api.saveSelection).toHaveBeenCalledTimes(2);
+    expect(controller.state.selectionError).toBe("");
+  });
+  it("persists a removed audit fallback once, not on every subsequent empty poll", async () => {
+    const { controller } = make();
+    vi.mocked(api.conversation).mockResolvedValueOnce(conv("c", { runs: [
+      { run_id: "removed", mode: "graph", status: "completed", lease_active: 0 },
+    ] }));
+    await controller.open("c");
+    vi.mocked(api.saveSelection).mockClear();
+    for (let i = 0; i < 5; i++) { await controller.refreshRun(); await controller.flushSelection(); }
+    expect(vi.mocked(api.saveSelection).mock.calls).toEqual([["c", null]]);
+    expect(controller.state.selectedRunId).toBe("");
+  });
   it.each(["graph", "deep", "legacy"] as const)("keeps an archived %s profile read-only until explicitly reopened", async mode => {
     const { controller } = make();
     const second = { ...settings.profiles[0]!, id: "two" };

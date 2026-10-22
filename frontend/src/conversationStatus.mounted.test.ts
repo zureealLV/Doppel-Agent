@@ -25,6 +25,18 @@ beforeEach(() => {
 });
 afterEach(() => { mounts.splice(0).forEach(item => item.unmount()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("conversation run notice", () => {
+  it("keeps the empty draft stable across polls without flashing selection-save status", async () => {
+    const mounted = await mount();
+    vi.mocked(nativeWorkspaceApi.conversation).mockResolvedValue({ ...current("completed"),
+      runs: [], messages: [], active_run_id: null, selected_run_id: null });
+    await host.controller!.open("c"); await host.controller!.flushSelection(); await flushVue();
+    vi.mocked(nativeWorkspaceApi.saveSelection).mockClear().mockImplementation(() => new Promise(() => {}));
+    for (let i = 0; i < 5; i++) {
+      await host.controller!.refreshRun(); await flushVue();
+      expect(mounted.root.textContent).not.toContain("正在保存历史选择");
+    }
+    expect(nativeWorkspaceApi.saveSelection).not.toHaveBeenCalled();
+  });
   it.each([["queued", "任务排队中"], ["running", "正在执行"], ["interrupted", "等待审批"]])("shows %s in an actionable bar", async (status, text) => {
     const mounted = await mount(status); const notice = descendants(mounted.root).find(node => node.props.class === "conversation-run-notice");
     expect(notice?.textContent).toContain(text); expect(mounted.root.textContent).not.toContain("此对话有进行中或待审批运行");

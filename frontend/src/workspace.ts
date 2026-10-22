@@ -516,7 +516,12 @@ export class NativeWorkspaceController {
       const changed = JSON.stringify(current) !== JSON.stringify(next);
       this.state.current = next;
       this.replyStream.follow(next.id, next.active_run_id || "", next.runs.map(run => run.run_id));
-      if (!next.runs.some(r => r.run_id === this.state.selectedRunId)) this.selectRun(next.active_run_id || next.runs.at(-1)?.run_id || "");
+      if (!next.runs.some(r => r.run_id === this.state.selectedRunId)) {
+        const fallback = next.active_run_id || next.runs.at(-1)?.run_id || "";
+        // An empty draft has a valid empty selection. Polling must not turn
+        // that unchanged state into a preference write and a flashing status.
+        if (fallback !== this.state.selectedRunId) this.selectRun(fallback);
+      }
       if (changed) await this.refreshList();
     } finally { this.polling = false; }
   }
