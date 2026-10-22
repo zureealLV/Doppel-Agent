@@ -54,6 +54,15 @@
 
 ## 快速开始
 
+### 提供商中心（当前源码）
+
+模型与 API 设置现在区分已配置档案、可搜索的 API Key 提供商、自定义端点和本地服务。
+选择官方端点预设、填写模型与 Key 后，可以保存并显式应用到当前对话；价格声明默认折叠。
+预设不代表已经连通或完成模型实测，连接测试单独点击且可能计费。本次界面更新不包含
+OAuth、原生 Responses/Messages、自动发现模型或托管本地模型下载。详见
+[设计与后续实施方案](docs/plans/2026-10-22-provider-center.md)及
+[实现、截图与验收记录](docs/releases/2026-10-23-provider-center.md)。源码更新不会自动替换已下载的旧版 EXE。
+
 ### 下载桌面预发布版
 
 1. 下载 [Windows x64 压缩包](https://github.com/zureealLV/Doppel-Agent/releases/download/v0.15.0-rc.1/DoppelAgent-v0.15.0-rc.1-windows-x64.zip)，**完整解压**；`DoppelAgent.exe` 必须与 `_internal` 同目录，不能只复制 EXE。

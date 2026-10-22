@@ -121,9 +121,88 @@ it('failed probe stays unknown across reopen; explicit readonly settings read is
   const first = fixture(owner); await flushVue(); await click(button(first.root, '测试连接')); await flushVue(); first.unmount();
   const second = fixture(owner); await flushVue();
   expect(second.root.textContent).toContain('本窗口不重试'); expect(second.root.textContent).not.toContain('PRIVATE_KEY');
-  for (const phrase of ['移除 Key', '测试连接', '保存']) expect(button(second.root, phrase).props.disabled).toBe(true);
+  for (const phrase of ['移除 Key', '测试连接', '保存为默认']) expect(button(second.root, phrase).props.disabled).toBe(true);
   await click(button(second.root, '明确只读查看当前设置')); await flushVue();
   expect(workspaceApi.settings).toHaveBeenCalledOnce(); expect(owner.state.uncertain).toBe(true);
-  for (const phrase of ['移除 Key', '测试连接', '保存']) expect(button(second.root, phrase).props.disabled).toBe(true);
+  for (const phrase of ['移除 Key', '测试连接', '保存为默认']) expect(button(second.root, phrase).props.disabled).toBe(true);
   expect(workspaceApi.probe).toHaveBeenCalledOnce(); expect(workspaceApi.saveProfile).not.toHaveBeenCalled();
+});
+it('opens a searchable provider directory without touching the saved custom draft or doing IO', async () => {
+  const saved = settings(); Object.assign(saved.profiles[0]!, { preset: 'custom', provider: 'openai', name: 'my gateway', model: 'private-model', base_url: 'https://gateway.example/v1' });
+  const owner = new ModelSettingsLifetime();
+  const m = mountVirtualProps(ModelSettings, { settings: saved }, app => app.provide(modelSettingsLifetimeKey, owner)); mounts.push(m); await flushVue();
+  await click(button(m.root, 'API 密钥')); await flushVue();
+  await value(m.root, 'provider-search', 'DeepSeek');
+  expect(m.root.textContent).toContain('DeepSeek');
+  expect(descendants(m.root).find(node => node.props.id === 'profile-base-url')?.value).toBe('https://gateway.example/v1');
+  expect(workspaceApi.saveProfile).not.toHaveBeenCalled(); expect(workspaceApi.probe).not.toHaveBeenCalled();
+  await click(button(m.root, '添加 DeepSeek')); await flushVue();
+  expect(descendants(m.root).find(node => node.props.id === 'profile-base-url')?.value).toBe('https://api.deepseek.com');
+  expect(descendants(m.root).find(node => node.props.id === 'profile-model')?.value).toBe('');
+  expect(m.root.textContent).toContain('建议模型');
+  expect(m.root.textContent).toContain('尚未保存');
+  await value(m.root, 'profile-model', 'manual-model-id'); await value(m.root, 'profile-key', 'OFFLINE_TEST_KEY'); await submit(m.root);
+  const [id, config] = vi.mocked(workspaceApi.saveProfile).mock.calls[0]!;
+  expect(id).toBe('__new__'); expect(config.model).toBe('manual-model-id'); expect(config.api_key).toBe('OFFLINE_TEST_KEY');
+  expect(workspaceApi.probe).not.toHaveBeenCalled();
+});
+it('save and use waits for real parent application and distinguishes a failed application from a failed save', async () => {
+  const changed = vi.fn(), applyProfile = vi.fn().mockRejectedValue(new Error('PRIVATE_APPLICATION_ERROR'));
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), onChanged: changed, applyProfile }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  expect(button(m.root, '保存并使用')).toBeDefined();
+  await value(m.root, 'profile-key', 'OFFLINE_TEST_KEY'); await submit(m.root);
+  expect(changed).toHaveBeenCalledOnce(); expect(applyProfile).toHaveBeenCalledExactlyOnceWith('fixture');
+  expect(m.root.textContent).toContain('已保存'); expect(m.root.textContent).toContain('应用未确认');
+  expect(m.root.textContent).not.toContain('PRIVATE_APPLICATION_ERROR');
+  expect(descendants(m.root).find(node => node.props.id === 'profile-key')?.value).toBe('');
+  expect(workspaceApi.saveProfile).toHaveBeenCalledOnce(); expect(workspaceApi.probe).not.toHaveBeenCalled();
+});
+it('explicit probe status is not a save receipt and is invalidated by every endpoint/model/key edit', async () => {
+  const saved = settings(); Object.assign(saved.profiles[0]!, { preset: 'custom', provider: 'openai', base_url: 'https://fixture.example/v1' });
+  const m = mountVirtualProps(ModelSettings, { settings: saved }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  expect(m.root.textContent).toContain('当前配置未测试');
+  await value(m.root, 'profile-key', 'OFFLINE_TEST_KEY'); await click(button(m.root, '测试连接')); await flushVue();
+  expect(m.root.textContent).toContain('本次测试通过');
+  expect(descendants(m.root).find(node => node.props.id === 'profile-key')?.value).toBe('');
+  expect(workspaceApi.saveProfile).not.toHaveBeenCalled();
+  for (const [id, next] of [['profile-model', 'changed-model'], ['profile-base-url', 'https://changed.example/v1'], ['profile-key', 'NEW_OFFLINE_KEY']]) {
+    await value(m.root, id!, next); expect(m.root.textContent).toContain('当前配置未测试');
+    await click(button(m.root, '测试连接')); await flushVue(); expect(m.root.textContent).toContain('本次测试通过');
+  }
+  vi.mocked(workspaceApi.probe).mockResolvedValue({ ok: false, reply: 'offline rejected' });
+  await click(button(m.root, '测试连接')); await flushVue(); expect(m.root.textContent).toContain('本次测试未通过');
+  await value(m.root, 'profile-model', 'another'); expect(m.root.textContent).toContain('当前配置未测试');
+});
+it('uses the saved profile without saving unsaved draft fields or sending a model request', async () => {
+  const applyProfile = vi.fn().mockResolvedValue(undefined);
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  await value(m.root, 'profile-model', 'UNSAVED'); await value(m.root, 'profile-key', 'OFFLINE_UNSAVED_KEY');
+  await click(button(m.root, '使用已存档案')); await flushVue();
+  expect(applyProfile).toHaveBeenCalledExactlyOnceWith('fixture');
+  expect(workspaceApi.saveProfile).not.toHaveBeenCalled(); expect(workspaceApi.probe).not.toHaveBeenCalled();
+  expect(m.root.textContent).toContain('未保存草稿');
+  expect(descendants(m.root).find(node => node.props.id === 'profile-key')?.value).toBe('');
+});
+it('save remains available for an archived/busy conversation but application does not run', async () => {
+  const applyProfile = vi.fn();
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile, applyDisabled: true }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  expect(button(m.root, '使用已存档案').props.disabled).toBe(true);
+  expect(button(m.root, '保存为默认').props.disabled).toBe(false);
+  await submit(m.root); expect(workspaceApi.saveProfile).toHaveBeenCalledOnce(); expect(applyProfile).not.toHaveBeenCalled();
+  expect(m.root.textContent).toContain('已保存为默认'); expect(m.root.textContent).toContain('尚未应用');
+});
+it('explicitly adopting a late save never auto applies it to a new dialog or conversation', async () => {
+  const owner = new ModelSettingsLifetime(), applyProfile = vi.fn(); let resolve!: (settings: PublicSettings) => void;
+  vi.mocked(workspaceApi.saveProfile).mockImplementation(() => new Promise(yes => { resolve = yes; }));
+  const mount = () => { const m = mountVirtualProps(ModelSettings, { settings: settings(), applyProfile }, app => app.provide(modelSettingsLifetimeKey, owner)); mounts.push(m); return m; };
+  const first = mount(); await flushVue(); const saving = submit(first.root); await flushVue(); first.unmount();
+  const second = mount(); await flushVue(); resolve(settings()); await saving; await flushVue();
+  expect(applyProfile).not.toHaveBeenCalled(); await click(button(second.root, '明确显示原请求的迟到回复')); await flushVue();
+  expect(applyProfile).not.toHaveBeenCalled(); expect(workspaceApi.saveProfile).toHaveBeenCalledOnce();
+});
+it('the quick-picker new connection entry opens the API catalog directly with an empty key', async () => {
+  const m = mountVirtualProps(ModelSettings, { settings: settings(), initialProfileId: '__new__' }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  expect(descendants(m.root).some(node => node.props.id === 'provider-search')).toBe(true);
+  expect(descendants(m.root).find(node => node.props.id === 'profile-key')?.value).toBe('');
+  expect(workspaceApi.probe).not.toHaveBeenCalled(); expect(workspaceApi.saveProfile).not.toHaveBeenCalled();
 });

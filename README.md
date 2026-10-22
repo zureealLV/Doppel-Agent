@@ -54,6 +54,18 @@ A local coding agent and Windows coding workbench for understanding repositories
 
 ## Start on Windows
 
+### Provider center (current source)
+
+Model / API settings now separates saved profiles, searchable API-key providers,
+custom endpoints, and local services. Pick a documented endpoint, enter a model
+and key, then save and explicitly use the profile in the current conversation.
+Advanced pricing declarations remain collapsed by default. Presets are not live
+provider acceptance; connection tests are explicit and may be billable. OAuth,
+native Responses/Messages, model discovery and managed local downloads are not
+implemented by this UI update. See the [design and rollout plan](docs/plans/2026-10-22-provider-center.md).
+See the [implementation, screenshot and acceptance record](docs/releases/2026-10-23-provider-center.md).
+Existing downloaded releases do not update themselves when this source changes.
+
 ### Desktop download
 
 1. Download the [Windows x64 archive](https://github.com/zureealLV/Doppel-Agent/releases/download/v0.15.0-rc.1/DoppelAgent-v0.15.0-rc.1-windows-x64.zip) and extract the **whole folder**. Keep `DoppelAgent.exe` beside `_internal`; the EXE alone is not portable.

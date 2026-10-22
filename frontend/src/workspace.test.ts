@@ -253,3 +253,15 @@ describe("workspace presentation and secrets", () => {
     expect(searchIndex(2, 1, 3)).toBe(0);
   });
 });
+
+it('legacy profile application waits for acknowledgement and refuses busy or archived targets', async () => {
+  const controller = new WorkspaceController();
+  controller.updateSettings({ active_profile_id: 'old', key_protection: 'fixture', profiles: ['old', 'next'].map(id => ({ id, name: id, provider: 'mock' as const, preset: 'mock', model: 'mock', base_url: '', input_price: 0, output_price: 0, api_key_saved: false })) });
+  controller.state.current = { ...conversation('c'), profile_id: 'old' };
+  const update = vi.spyOn(workspaceApi, 'setProfile').mockRejectedValue(new Error('offline update rejected'));
+  await expect(controller.chooseProfile('next')).rejects.toThrow('offline update rejected');
+  expect(controller.state.profileId).toBe('old'); expect(controller.state.current.profile_id).toBe('old');
+  controller.state.current.archived = 1; await controller.chooseProfile('next');
+  controller.state.current.archived = 0; controller.state.submitting = true; await controller.chooseProfile('next');
+  expect(update).toHaveBeenCalledOnce();
+});

@@ -218,12 +218,19 @@ export class WorkspaceController {
   }
 
   async chooseProfile(profileId: string): Promise<void> {
-    const current = this.state.current;
-    this.state.profileId = profileId;
-    if (current) {
-      await workspaceApi.setProfile(current.id, profileId);
-      if (this.state.current?.id === current.id) this.state.current.profile_id = profileId;
-    }
+    if (this.busy || this.state.current?.archived) return;
+    if (!this.state.settings?.profiles.some(profile => profile.id === profileId)) throw new Error("模型档案不存在。");
+    const current = this.state.current, epoch = this.selectionEpoch;
+    this.state.transition = true;
+    try {
+      if (current) {
+        const updated = await workspaceApi.setProfile(current.id, profileId);
+        if (this.disposed || epoch !== this.selectionEpoch) return;
+        if (updated.id !== current.id || updated.profile_id !== profileId) throw new Error("profile_application_not_acknowledged");
+        this.state.current!.profile_id = profileId;
+      }
+      if (!this.disposed) this.state.profileId = profileId;
+    } finally { if (!this.disposed) this.state.transition = false; }
   }
 
   async submit(request: ChatSubmission): Promise<void> {

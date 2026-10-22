@@ -31,3 +31,11 @@ not the current README gallery.
 未读取真实项目历史或凭据，也未覆盖日常安装。计划截图记录的是手工填写、尚未
 保存的草稿；之后仅保存草稿以正常退出，没有批准执行。截图只证明界面展示，
 不等于完整原生矩阵或模型质量验收。
+
+## Provider center source preview — 2026-10-23
+
+`provider-center-20261023.png` is an unmodified screenshot of the current bundled
+application served by a real DesktopKernel in an isolated workspace, captured in
+the in-app browser at a 1264×811 viewport. It is **not a native EXE screenshot**
+or authenticated provider acceptance. No real keys or model responses appear.
+See [scope and acceptance](../releases/2026-10-23-provider-center.md).
