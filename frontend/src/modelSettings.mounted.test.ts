@@ -243,9 +243,36 @@ it('preset address has an explicit editor and entry switching protects an unsave
   expect(workspaceApi.probe).not.toHaveBeenCalled();
 });
 
+it('fetches metadata only on explicit action; failed refresh retains stale directory and manual entry', async () => {
+  const discover = vi.spyOn(workspaceApi, 'discoverModels').mockImplementation(async body => ({ status: 'ok', models: [{ id: 'org/model-a' }], metadata_only: true, strategy: 'openai-list', pages: 1, credential_revision: body.credential_revision }));
+  const m = fixture(); await flushVue();
+  await click(button(m.root, 'API 密钥')); await click(button(m.root, '添加 DeepSeek')); await value(m.root, 'profile-key', 'SYNTHETIC_DISCOVERY_KEY');
+  expect(discover).not.toHaveBeenCalled();
+  await click(button(m.root, '获取模型')); await flushVue();
+  expect(discover).toHaveBeenCalledOnce();
+  expect(discover.mock.calls[0]![0]).not.toHaveProperty('billing_tariff');
+  expect(m.root.textContent).toContain('org/model-a');
+  discover.mockImplementation(async body => ({ status: 'error', models: [], metadata_only: true, strategy: 'openai-list', pages: 0, error_code: 'authentication', credential_revision: body.credential_revision }));
+  await click(button(m.root, '获取模型')); await flushVue();
+  expect(m.root.textContent).toContain('旧缓存'); expect(m.root.textContent).toContain('org/model-a');
+  await value(m.root, 'profile-model', 'manual/model');
+  expect(descendants(m.root).find(n => n.props.id === 'profile-model')?.value).toBe('manual/model');
+  expect(workspaceApi.probe).not.toHaveBeenCalled();
+});
+
 it('successful replacement clears pending unsaved-switch action rather than retaining a stale discard target', async () => {
   const m = fixture(); await flushVue(); await value(m.root, 'profile-key', 'SYNTHETIC_DRAFT');
   await click(button(m.root, '新建')); expect(m.root.textContent).toContain('未保存修改');
   await click(button(m.root, '仅保存')); await flushVue();
   expect(m.root.textContent).not.toContain('未保存修改');
+});
+
+it('uses the same opaque draft generation for request and directory and rejects mismatched replies', async () => {
+  const discover = vi.spyOn(workspaceApi, 'discoverModels').mockResolvedValue({ status: 'ok', models: [{ id: 'wrong-generation' }], metadata_only: true, strategy: 'openai-list', pages: 1, credential_revision: 'wrong-revision' });
+  const owner = new ModelSettingsLifetime(), m = fixture(owner); await flushVue();
+  await click(button(m.root, 'API 密钥')); await click(button(m.root, '添加 DeepSeek')); await value(m.root, 'profile-key', 'SYNTHETIC_ONLY');
+  await click(button(m.root, '获取模型')); await flushVue();
+  expect(discover.mock.calls[0]![0].credential_revision).toMatch(/^draft-/);
+  expect(m.root.textContent).not.toContain('wrong-generation');
+  expect(owner.state.uncertain).toBe(true);
 });

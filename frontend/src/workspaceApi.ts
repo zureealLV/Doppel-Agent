@@ -1,4 +1,5 @@
 import { request } from "./api";
+import type { DiscoveryStrategy, ModelDiscoveryResult } from './modelDiscovery';
 import type { RunMode, RunRequest } from "./types";
 import type { NativeConversation, NativeConversationSummary, NativeWorkspaceSelection } from "./workspaceTypes";
 import type { Conversation, ConversationGroup, ConversationSummary, LegacyApproval, LegacyEvent,
@@ -38,6 +39,7 @@ export const workspaceApi = {
     post<PublicSettings>("/api/settings", { profile_id: profileId, config, forget_key: forgetKey, make_default: makeDefault }),
   deleteProfile: (profileId: string) => post<PublicSettings>(`/api/settings/profiles/${id(profileId)}/delete`),
   probe: (config: ProfileConfiguration & { profile_id?: string }) => post<{ ok: boolean; reply: string }>("/api/probe", { config }),
+  discoverModels: (config: { base_url: string; provider: string; preset: string; region?: string; plan?: string; credential_revision?: string; profile_id?: string; api_key: string; strategy: DiscoveryStrategy }) => post<ModelDiscoveryResult>('/api/models/discover', { config }),
   conversations: (archived = false) => request<ConversationSummary[]>(`/api/conversations?archived=${archived ? 1 : 0}`),
   conversation: (conversationId: string) => request<Conversation>(`/api/conversations/${id(conversationId)}`),
   draft: (mode: "agent" | "review") => post<Conversation>(`/api/conversations/${mode === "review" ? "review" : "new"}-draft`),

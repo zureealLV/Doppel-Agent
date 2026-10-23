@@ -1,9 +1,12 @@
 """PyInstaller entry point; report startup errors without a console window."""
 
-from doppel_agent.desktop import main
+from multiprocessing import freeze_support
 
 
 if __name__ == "__main__":
+    freeze_support()  # Dispatch bounded discovery workers before any GUI import.
+    from doppel_agent.desktop import main
+
     try:
         main()
     except Exception as exc:

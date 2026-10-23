@@ -2,6 +2,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
 
 import ProviderConnectionEditor from './ProviderConnectionEditor.vue';
+import { directoryIdentity, type DirectoryEntry, type DiscoveryStrategy } from '../modelDiscovery';
 import { searchProviders, providerForEndpoint, type ProviderRecipe } from '../providerCatalog';
 import { workspaceApi } from "../workspaceApi";
 import { profileConfiguration } from "../workspace";
@@ -28,11 +29,20 @@ const testStatus = ref<'untested' | 'passed' | 'failed'>('untested');
 const visibleKey = ref(false);
 const message = ref("");
 const savedProfile = shallowRef<ModelProfile | null>(null);
+const customDiscovery = ref<DiscoveryStrategy>('manual');
+const discoveryStrategy = computed(() => selectedProvider.value?.discovery || customDiscovery.value);
+const keyDraftRevision = ref(0);
 const pendingSwitch = shallowRef<(() => void) | null>(null);
 const baseline = ref('');
 const savedTariff = ref<BillingTariff | null>(null);
 const form = reactive({ name: "", preset: "openai", model: "", base_url: "", region: '', plan: '', input_price: 0, output_price: 0, api_key: "",
   billing_tariff_edit: emptyTariffEdit() });
+
+watch(() => form.api_key, () => { keyDraftRevision.value++; }, { flush: 'sync' });
+const directoryRevision = computed(() => form.api_key ? `draft-${session}-${keyDraftRevision.value}` : savedProfile.value?.credential_revision || '');
+const directoryId = computed(() => directoryIdentity(form, directoryRevision.value, discoveryStrategy.value));
+const directory = ref<DirectoryEntry>();
+watch(directoryId, next => { directory.value = lifetime.directories.get(next); });
 
 watch(() => [form.preset, form.model, form.base_url, form.api_key], () => { testStatus.value = 'untested'; }, { flush: 'sync' });
 
@@ -85,6 +95,12 @@ function close(): void {
 }
 
 async function applyReply(reply: ModelSettingsReply, adopted = false): Promise<void> {
+  if (reply.kind === 'discover') {
+    const entry = lifetime.directories.accept(reply.directoryIdentity, reply.value);
+    if (reply.directoryIdentity === directoryId.value) directory.value = entry;
+    message.value = reply.value.status === 'ok' ? '能列模型，仅为元数据；文本与工具调用能力仍未知。' : reply.value.status === 'manual' ? '此服务需手动填写模型 ID；未发送目录请求。' : `模型目录获取失败（${reply.value.error_code || 'unknown'}）。请核对服务文档、凭据和权限；保留可用旧缓存，不自动重试。`;
+    return;
+  }
   form.api_key = ''; visibleKey.value = false; form.billing_tariff_edit.confirmed = false;
   if (reply.kind === 'probe') { testStatus.value = adopted ? 'untested' : reply.value.ok ? 'passed' : 'failed'; message.value = `${adopted ? `原 ${reply.profileId} 的迟到测试回复：` : ''}${reply.value.reply}`; return; }
   emit('changed', reply.value);
@@ -156,6 +172,23 @@ async function probe(): Promise<void> {
   finally { form.api_key = ""; visibleKey.value = false; busy.value = false; }
 }
 
+async function discover(): Promise<void> {
+  if (busy.value || !lifetime.canMutate(session)) return;
+  busy.value = true;
+  try {
+    const source = profileId.value;
+    const revision = directoryRevision.value;
+    const body = { base_url: form.base_url, provider: form.preset === 'mock' ? 'mock' : 'openai', preset: form.preset, region: form.region, plan: form.plan, credential_revision: revision, api_key: form.api_key, strategy: discoveryStrategy.value,
+      ...(source !== '__new__' ? { profile_id: source } : {}) };
+    await lifetime.perform(session, { kind: 'discover', profileId: source, directoryIdentity: directoryId.value, invoke: async () => {
+      const reply = await workspaceApi.discoverModels(body);
+      if (reply.status !== 'manual' && reply.credential_revision !== revision) throw new Error('discovery_revision_mismatch');
+      return reply;
+    } });
+    await receiveReply();
+  } finally { busy.value = false; }
+}
+
 async function remove(): Promise<void> {
   if (busy.value || !lifetime.canMutate(session) || profileId.value === "__new__" || !window.confirm("删除这个模型档案？至少保留一个档案。")) return;
   busy.value = true;
@@ -201,7 +234,7 @@ onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billin
           </template>
           <p v-else class="helper">本版只支持 API Key／兼容端点，不提供 OAuth 登录，也不复用聊天产品订阅。</p>
         </aside>
-        <ProviderConnectionEditor :form="form" :blocked="blocked" :settings="props.settings" :profile-id="profileId" :selected-provider="selectedProvider" :saved-profile="savedProfile" :saved-tariff="savedTariff" :test-status="testStatus" v-model:visible-key="visibleKey" @remove="remove" @forget="save(true)" />
+        <ProviderConnectionEditor :form="form" :blocked="blocked" :settings="props.settings" :profile-id="profileId" :selected-provider="selectedProvider" :saved-profile="savedProfile" :saved-tariff="savedTariff" :test-status="testStatus" :directory="directory" :discovery-strategy="discoveryStrategy" v-model:custom-discovery="customDiscovery" v-model:visible-key="visibleKey" @discover="discover" @remove="remove" @forget="save(true)" />
 
       </fieldset>
       <details class="provider-more"><summary>更多连接方式</summary><p>账号授权未支持；不复用聊天产品订阅、Token 或 Cookie。本地仅连接已启动服务。</p></details>

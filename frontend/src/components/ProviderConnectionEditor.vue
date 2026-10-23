@@ -3,10 +3,12 @@ import { ref, watch } from 'vue';
 import type { ProviderRecipe } from '../providerCatalog';
 import type { ModelProfile, ProfileForm, PublicSettings } from '../workspaceTypes';
 import type { BillingTariff, TariffEdit } from '../billingTariff';
+import type { DirectoryEntry, DiscoveryStrategy } from '../modelDiscovery';
 const props = defineProps<{ form: ProfileForm & { billing_tariff_edit: TariffEdit }; settings: PublicSettings; profileId: string;
-  selectedProvider?: ProviderRecipe; blocked: boolean; savedProfile: ModelProfile | null; savedTariff: BillingTariff | null; testStatus: 'untested' | 'passed' | 'failed' }>();
+  selectedProvider?: ProviderRecipe; blocked: boolean; savedProfile: ModelProfile | null; savedTariff: BillingTariff | null; testStatus: 'untested' | 'passed' | 'failed'; directory?: DirectoryEntry; discoveryStrategy: DiscoveryStrategy }>();
 const visibleKey = defineModel<boolean>('visibleKey', { default: false });
-const emit = defineEmits<{ remove: []; forget: [] }>();
+const customDiscovery = defineModel<DiscoveryStrategy>('customDiscovery', { default: 'manual' });
+const emit = defineEmits<{ remove: []; forget: []; discover: [] }>();
 const editAddress = ref(false);
 watch(() => [props.selectedProvider?.id, props.profileId], () => { editAddress.value = false; });
 </script>
@@ -22,11 +24,15 @@ watch(() => [props.selectedProvider?.id, props.profileId], () => { editAddress.v
         <p v-if="selectedProvider?.authentication === 'optional-key'" class="helper">本地服务未启用认证时可留空；启用认证后需填写对应 Key。</p>
         <p v-if="selectedProvider" class="provider-service">服务：{{ selectedProvider.name }} <button type="button" :aria-expanded="editAddress" @click="editAddress = !editAddress">{{ editAddress ? '收起地址' : '编辑地址' }}</button></p>
         <div class="field-grid settings-fields">
-          <label><span class="field-label">模型名称</span><input id="profile-model" v-model="form.model" :required="form.preset !== 'mock'" /></label>
+          <label><span class="field-label">模型名称 · 搜索或手动输入</span><input id="profile-model" v-model="form.model" list="provider-model-directory" role="combobox" aria-autocomplete="list" aria-controls="provider-model-directory" :aria-expanded="!!directory?.models.length" :required="form.preset !== 'mock'" /></label>
           <label v-if="!selectedProvider || editAddress"><span class="field-label">API Base URL</span><input id="profile-base-url" v-model="form.base_url" type="url" :required="form.preset !== 'mock'" /></label>
         </div>
+        <div class="provider-discovery"><button type="button" :disabled="blocked" @click="emit('discover')">获取模型</button><span class="helper">仅显式查询元数据，不发送对话或代码；不承诺所有服务免费。{{ discoveryStrategy === 'manual' ? '此服务手动填写。' : '' }}</span></div>
+        <datalist id="provider-model-directory"><option v-for="model in directory?.models || []" :key="model" :value="model">{{ model }}</option></datalist>
+        <p v-if="directory" class="helper">{{ directory.stale ? '旧缓存（刷新失败）' : '目录缓存' }} · {{ new Date(directory.fetchedAt).toLocaleString() }} · {{ directory.models.length }} 条。能列模型不代表文本或工具调用兼容。</p>
         <div v-if="selectedProvider?.models.length" class="provider-model-hints"><span class="field-label">建议模型（非实时清单，可手填）</span><button v-for="model in selectedProvider.models" :key="model" type="button" @click="form.model = model">{{ model }}</button></div>
         <details class="provider-advanced"><summary>高级 · 档案 / 协议 / 计费声明</summary>
+          <label v-if="!selectedProvider"><span class="field-label">模型发现策略（手动选择，不自动尝试）</span><select v-model="customDiscovery"><option value="manual">仅手动输入</option><option value="openai-list">OpenAI GET models</option><option value="ollama-tags">Ollama GET api/tags</option></select></label>
           <label><span class="field-label">档案名称</span><input id="profile-name" v-model="form.name" maxlength="60" required /></label>
           <label><span class="field-label">服务预设</span><select id="profile-preset" v-model="form.preset"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI-compatible</option><option value="custom">自定义提供商（OpenAI-compatible）</option><option value="local">本地服务</option><option value="mock">离线 Mock</option></select></label>
         <p class="helper">仅使用 OpenAI-compatible Chat Completions（及离线 Mock），不原生支持 Responses 或 Anthropic Messages。模型是否支持工具调用由实际服务决定。</p>

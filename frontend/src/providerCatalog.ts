@@ -11,6 +11,7 @@ export interface ProviderRecipe {
   sourceUrl: string;
   verifiedOn: string;
   note: string;
+  discovery: 'openai-list' | 'ollama-tags' | 'manual';
   capabilities: { protocol: 'openai-chat-completions'; nativeResponses: false; nativeAnthropic: false; oauth: false; tools: 'model-dependent' };
 }
 
@@ -18,11 +19,11 @@ export interface ProviderRecipe {
 const capabilities: ProviderRecipe['capabilities'] = { protocol: 'openai-chat-completions', nativeResponses: false, nativeAnthropic: false, oauth: false, tools: 'model-dependent' };
 function cloud(id: string, name: string, baseUrl: string, sourceUrl: string, models: string[] = [], note = '模型 ID 与权限以提供商控制台为准。', aliases: string[] = []): ProviderRecipe {
   return { id, name, aliases, group: 'cloud', preset: id === 'deepseek' ? 'deepseek' : 'openai', baseUrl, models,
-    authentication: 'api-key', sourceUrl, verifiedOn: '2026-10-22', note, capabilities };
+    authentication: 'api-key', sourceUrl, verifiedOn: '2026-10-22', note, capabilities, discovery: ['openai', 'deepseek'].includes(id) ? 'openai-list' : 'manual' };
 }
 function local(id: string, name: string, port: number, sourceUrl: string, note: string): ProviderRecipe {
   return { id, name, aliases: [], group: 'local', preset: 'local', baseUrl: `http://localhost:${port}/v1`, models: [],
-    authentication: 'optional-key', sourceUrl, verifiedOn: '2026-10-22', note, capabilities };
+    authentication: 'optional-key', sourceUrl, verifiedOn: '2026-10-22', note, capabilities, discovery: id === 'ollama' ? 'ollama-tags' : 'manual' };
 }
 
 export const providerCatalog: readonly ProviderRecipe[] = [

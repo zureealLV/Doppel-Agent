@@ -6,15 +6,19 @@
 import { reactive, type InjectionKey } from 'vue';
 import type { PublicSettings } from './workspaceTypes';
 import { HttpError } from './api';
+import { ModelDirectoryCache, type ModelDiscoveryResult } from './modelDiscovery';
 type SettingsAction = 'save' | 'save_only' | 'save_default' | 'forget' | 'delete' | 'read_settings';
 type ProbeReply = { ok: boolean; reply: string };
 type Request = { kind: SettingsAction; profileId: string; invoke(): Promise<PublicSettings> }
+  | { kind: 'discover'; profileId: string; directoryIdentity: string; invoke(): Promise<ModelDiscoveryResult> }
   | { kind: 'probe'; profileId: string; invoke(): Promise<ProbeReply> };
 export type ModelSettingsReply = { kind: SettingsAction; profileId: string; value: PublicSettings }
+  | { kind: 'discover'; profileId: string; directoryIdentity: string; value: ModelDiscoveryResult }
   | { kind: 'probe'; profileId: string; value: ProbeReply };
 export const modelSettingsLifetimeKey: InjectionKey<ModelSettingsLifetime> = Symbol('root-owned-model-settings-lifetime');
 
 export class ModelSettingsLifetime {
+  readonly directories = new ModelDirectoryCache(); // Metadata only. No key or key digest.
   readonly state = reactive({ busy: false, closing: false, deferred: false, uncertain: false,
     uncertainAction: '' as Request['kind'] | '', uncertainProfileId: '', lastAction: '' as Request['kind'] | '',
     sourceProfileId: '', outcome: 'none' as 'none' | 'pending' | 'not_started' | 'reply_available' | 'acknowledged' | 'unknown', error: '' });
@@ -60,13 +64,14 @@ export class ModelSettingsLifetime {
       if (this.disposed) return;
       // Original typed transport correlation only, NOT source authentication or
       // native success. Retain one reply, never request config/key/exception.
-      const reply = { kind: request.kind, profileId: request.profileId, value } as ModelSettingsReply;
+      const reply = { kind: request.kind, profileId: request.profileId, value, ...(request.kind === 'discover' ? { directoryIdentity: request.directoryIdentity } : {}) } as ModelSettingsReply;
       this.pending = { token, epoch, reply }; this.state.deferred = true; this.state.outcome = 'reply_available';
     }).catch((error: unknown) => {
       if (this.disposed) return;
+      if (request.kind === 'discover') this.directories.markStale(request.directoryIdentity);
       // Only this backend pre-write validation contract proves no mutation.
       // An arbitrary 400/transport/probe failure is still unknown, never reset.
-      if (request.kind.startsWith('save') && error instanceof HttpError && error.status === 400 && error.message === 'credential_reentry_required') {
+      if ((request.kind.startsWith('save') || request.kind === 'discover') && error instanceof HttpError && error.status === 400 && error.message === 'credential_reentry_required') {
         this.state.outcome = 'not_started';
         this.state.error = '地址或套餐已变化，请重新提供凭据，或先明确移除旧 Key。原档案未修改。';
         return;
