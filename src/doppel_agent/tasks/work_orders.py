@@ -130,7 +130,7 @@ def execution_settings(payload: Any) -> dict[str, Any]:
         validated = {}
         for identifier, snapshot in profiles.items():
             identifier = _text(identifier, "profile id", 128)
-            if not isinstance(snapshot, dict) or set(snapshot) - {"id", "provider", "model", "base_url", "implementation", "billing_price_receipt"}:
+            if not isinstance(snapshot, dict) or set(snapshot) - {"id", "provider", "model", "base_url", "implementation", "billing_price_receipt", "preset", "region", "plan", "credential_revision"}:
                 raise ValueError("invalid frozen profile fields")
             if snapshot.get("id") != identifier or snapshot.get("provider") not in ("mock", "openai", "explicit_override"):
                 raise ValueError("invalid frozen profile identity")
@@ -140,6 +140,14 @@ def execution_settings(payload: Any) -> dict[str, Any]:
                 if not isinstance(value, str) or len(value) > 4096 or "\x00" in value:
                     raise ValueError("invalid frozen profile URL")
                 item["base_url"] = value
+            # Preserve the exact non-secret credential contract across DAG replay.
+            # Never accept a raw key/hash; historical snapshots keep their old shape.
+            for field in ("preset", "region", "plan", "credential_revision"):
+                if field in snapshot:
+                    value = snapshot[field]
+                    if not isinstance(value, str) or "\x00" in value:
+                        raise ValueError("invalid frozen credential metadata")
+                    item[field] = value
             if "implementation" in snapshot:
                 item["implementation"] = _text(snapshot["implementation"], "provider implementation", 128)
             if "billing_price_receipt" in snapshot:

@@ -791,6 +791,10 @@ class RunService:
         self._assert_provider_admission()  # BEFORE override/settings/key/client lookup.
         if self.provider_override is not None:
             return self.provider_override
+        if snapshot and snapshot["provider"] == "mock":
+            return MockProvider()  # Frozen offline identity NEVER reads current settings/key.
+        if snapshot and snapshot["provider"] != "openai":
+            raise ValueError("explicit provider override is required to continue this run")
         if snapshot:
             # Public snapshots contain no key. Resolve the CURRENT secret only
             # if its original destination AND revision still match this snapshot,
