@@ -3,6 +3,7 @@ import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, shallowRef
 
 import ProviderConnectionEditor from './ProviderConnectionEditor.vue';
 import { directoryIdentity, type DirectoryEntry, type DiscoveryStrategy } from '../modelDiscovery';
+import { connectionState, diagnostic, receiptMatches, type ValidationReceipt } from '../providerConnectionState';
 import { searchProviders, providerForEndpoint, type ProviderRecipe } from '../providerCatalog';
 import { workspaceApi } from "../workspaceApi";
 import { profileConfiguration } from "../workspace";
@@ -10,7 +11,7 @@ import type { ModelProfile, PublicSettings } from "../workspaceTypes";
 import { canonicalTariff, emptyTariffEdit, tariffEditFromSaved, tariffErrorMessage, type BillingTariff } from '../billingTariff';
 import { modelSettingsLifetimeKey, type ModelSettingsReply } from '../modelSettingsLifetime';
 
-const props = defineProps<{ settings: PublicSettings; initialProfileId?: string; applyProfile?: (profileId: string) => Promise<void>; applyDisabled?: boolean }>();
+const props = defineProps<{ settings: PublicSettings; initialProfileId?: string; currentProfileId?: string; applyProfile?: (profileId: string) => Promise<void>; applyDisabled?: boolean }>();
 const emit = defineEmits<{ close: []; changed: [settings: PublicSettings] }>();
 const owner = inject(modelSettingsLifetimeKey);
 if (!owner) throw new Error('settings_owner_missing'); // Production MUST use the original App owner, never a dialog-local flight.
@@ -29,6 +30,7 @@ const testStatus = ref<'untested' | 'passed' | 'failed'>('untested');
 const visibleKey = ref(false);
 const message = ref("");
 const savedProfile = shallowRef<ModelProfile | null>(null);
+const lastReceipt = shallowRef<ValidationReceipt | null>(null);
 const customDiscovery = ref<DiscoveryStrategy>('manual');
 const discoveryStrategy = computed(() => selectedProvider.value?.discovery || customDiscovery.value);
 const keyDraftRevision = ref(0);
@@ -44,7 +46,9 @@ const directoryId = computed(() => directoryIdentity(form, directoryRevision.val
 const directory = ref<DirectoryEntry>();
 watch(directoryId, next => { directory.value = lifetime.directories.get(next); });
 
-watch(() => [form.preset, form.model, form.base_url, form.api_key], () => { testStatus.value = 'untested'; }, { flush: 'sync' });
+watch(() => [form.preset, form.model, form.base_url, form.region, form.plan, form.api_key], () => { testStatus.value = 'untested'; }, { flush: 'sync' });
+const connection = computed(() => connectionState({ saved: profileId.value !== '__new__', dirty: !!savedProfile.value && (form.model !== savedProfile.value.model || form.preset !== savedProfile.value.preset || form.base_url !== savedProfile.value.base_url || (form.region || '') !== (savedProfile.value.region || '') || (form.plan || '') !== (savedProfile.value.plan || '') || !!form.api_key), pending: lifetime.state.busy && lifetime.state.lastAction === 'probe', unknown: lifetime.state.uncertain, failed: testStatus.value === 'failed', matched: !savedProfile.value?.validation_invalidated && !!lastReceipt.value && receiptMatches(lastReceipt.value, form, savedProfile.value), verifiedAt: lastReceipt.value?.verified_at || (savedProfile.value?.validation_invalidated ? '失效' : undefined) }));
+function savedStatus(profile: ModelProfile): string { return profile.validation_invalidated ? '配置已变 · 需重新验证' : profile.validation_receipt ? `上次验证 ${profile.validation_receipt.verified_at} · ${profile.validation_receipt.kind === 'mock-probe' ? '离线 Mock' : '文本探测'}` : '已保存未验证'; }
 
 function navigate(next: ProviderSection): void { if (!blocked.value) { section.value = next; search.value = ''; } }
 function switchEditor(action: () => void): void {
@@ -78,6 +82,7 @@ function fill(id: string, settings: PublicSettings = props.settings): void {
   profileId.value = id;
   const profile = settings.profiles.find((item) => item.id === id);
   savedProfile.value = profile ?? null;
+  lastReceipt.value = profile?.validation_receipt || null;
   selectedProvider.value = profile ? providerForEndpoint(profile.base_url) : undefined;
   testStatus.value = 'untested';
   try { savedTariff.value = canonicalTariff(profile?.billing_tariff); }
@@ -98,11 +103,19 @@ async function applyReply(reply: ModelSettingsReply, adopted = false): Promise<v
   if (reply.kind === 'discover') {
     const entry = lifetime.directories.accept(reply.directoryIdentity, reply.value);
     if (reply.directoryIdentity === directoryId.value) directory.value = entry;
-    message.value = reply.value.status === 'ok' ? '能列模型，仅为元数据；文本与工具调用能力仍未知。' : reply.value.status === 'manual' ? '此服务需手动填写模型 ID；未发送目录请求。' : `模型目录获取失败（${reply.value.error_code || 'unknown'}）。请核对服务文档、凭据和权限；保留可用旧缓存，不自动重试。`;
+    message.value = reply.value.status === 'ok' ? '能列模型，仅为元数据；文本与工具调用能力仍未知。' : reply.value.status === 'manual' ? '此服务需手动填写模型 ID；未发送目录请求。' : `${diagnostic(reply.value.error_code)} 保留可用旧缓存，不自动重试。`;
     return;
   }
   form.api_key = ''; visibleKey.value = false; form.billing_tariff_edit.confirmed = false;
-  if (reply.kind === 'probe') { testStatus.value = adopted ? 'untested' : reply.value.ok ? 'passed' : 'failed'; message.value = `${adopted ? `原 ${reply.profileId} 的迟到测试回复：` : ''}${reply.value.reply}`; return; }
+  if (reply.kind === 'probe') {
+    testStatus.value = adopted ? 'untested' : reply.value.ok ? 'passed' : 'failed';
+    if (!adopted && reply.value.validation_receipt && profileId.value === reply.profileId) {
+      lastReceipt.value = reply.value.validation_receipt;
+      const updated = { ...props.settings, profiles: props.settings.profiles.map(p => p.id === reply.profileId ? { ...p, validation_receipt: reply.value.validation_receipt!, validation_invalidated: false } : p) };
+      savedProfile.value = updated.profiles.find(p => p.id === reply.profileId) || null; emit('changed', updated);
+    }
+    message.value = `${adopted ? `原 ${reply.profileId} 的迟到测试回复（不绑定当前配置）：` : ''}${reply.value.ok ? reply.value.reply : diagnostic(reply.value.error_code)}`; return;
+  }
   emit('changed', reply.value);
   if (reply.kind === 'forget' && !adopted && profileId.value === reply.profileId) {
     savedProfile.value = reply.value.profiles.find(item => item.id === reply.profileId) ?? null;
@@ -199,7 +212,7 @@ async function remove(): Promise<void> {
   finally { form.api_key = ""; visibleKey.value = false; busy.value = false; }
 }
 
-onMounted(() => { fill(props.initialProfileId || props.settings.active_profile_id); if (profileId.value === '__new__') section.value = 'cloud'; dialog.value?.showModal(); });
+onMounted(() => { fill(props.initialProfileId || props.currentProfileId || props.settings.active_profile_id); if (profileId.value === '__new__') section.value = 'cloud'; dialog.value?.showModal(); });
 onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billing_tariff_edit = emptyTariffEdit(); savedTariff.value = null; savedProfile.value = null; dialog.value?.close(); });
 </script>
 
@@ -222,7 +235,7 @@ onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billin
           <template v-if="section === 'saved' || section === 'custom'">
             <div class="provider-list-heading"><strong>{{ section === 'saved' ? '模型档案' : '自定义连接' }}</strong><button type="button" @click="newCustom">新建</button></div>
             <p v-if="section === 'custom'" class="helper">OpenAI-compatible Chat Completions。现有档案可直接编辑，不套用目录预设。</p>
-            <button v-for="profile in props.settings.profiles" :key="profile.id" type="button" class="provider-list-item" :aria-pressed="profileId === profile.id" @click="selectProfile(profile.id)"><strong>{{ profile.name }}</strong><small>{{ profile.model || profile.preset }}</small><small>{{ profile.id === props.settings.active_profile_id ? '默认 · ' : '' }}已保存 · 未测试</small></button>
+            <button v-for="profile in props.settings.profiles" :key="profile.id" type="button" class="provider-list-item" :aria-pressed="profileId === profile.id" @click="selectProfile(profile.id)"><strong>{{ profile.name }}</strong><small>{{ profile.model || profile.preset }}</small><small>{{ profile.id === props.currentProfileId ? '当前对话 · ' : '' }}{{ profile.id === props.settings.active_profile_id ? '默认 · ' : '' }}{{ savedStatus(profile) }}</small></button>
           </template>
           <template v-else-if="section === 'cloud' || section === 'local'">
             <label for="provider-search" class="field-label">搜索提供商</label><input id="provider-search" v-model="search" type="search" placeholder="名称或模型 ID" />
@@ -234,7 +247,7 @@ onBeforeUnmount(() => { lifetime.detach(session); form.api_key = ""; form.billin
           </template>
           <p v-else class="helper">本版只支持 API Key／兼容端点，不提供 OAuth 登录，也不复用聊天产品订阅。</p>
         </aside>
-        <ProviderConnectionEditor :form="form" :blocked="blocked" :settings="props.settings" :profile-id="profileId" :selected-provider="selectedProvider" :saved-profile="savedProfile" :saved-tariff="savedTariff" :test-status="testStatus" :directory="directory" :discovery-strategy="discoveryStrategy" v-model:custom-discovery="customDiscovery" v-model:visible-key="visibleKey" @discover="discover" @remove="remove" @forget="save(true)" />
+        <ProviderConnectionEditor :form="form" :blocked="blocked" :settings="props.settings" :profile-id="profileId" :selected-provider="selectedProvider" :saved-profile="savedProfile" :saved-tariff="savedTariff" :test-status="testStatus" :connection-label="connection.label" :receipt-kind="connection.state === 'last-success' ? lastReceipt?.kind : undefined" :directory="directory" :discovery-strategy="discoveryStrategy" v-model:custom-discovery="customDiscovery" v-model:visible-key="visibleKey" @discover="discover" @remove="remove" @forget="save(true)" />
 
       </fieldset>
       <details class="provider-more"><summary>更多连接方式</summary><p>账号授权未支持；不复用聊天产品订阅、Token 或 Cookie。本地仅连接已启动服务。</p></details>

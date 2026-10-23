@@ -25,6 +25,7 @@ export interface ModelProfile {
   base_url: string; input_price: number; output_price: number; api_key_saved: boolean;
   billing_tariff?: BillingTariff | null; // Historical absence remains unknown.
   region?: string; plan?: string; credential_revision?: string; credential_reentry_required?: boolean;
+  validation_receipt?: import('./providerConnectionState').ValidationReceipt | null; validation_invalidated?: boolean;
 }
 
 export interface PublicSettings { active_profile_id: string; saved_profile_id?: string; profiles: ModelProfile[]; key_protection: string }

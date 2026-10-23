@@ -267,6 +267,29 @@ it('successful replacement clears pending unsaved-switch action rather than reta
   expect(m.root.textContent).not.toContain('未保存修改');
 });
 
+it('renders last saved verification as historical text and invalidates when model changes', async () => {
+  const saved = settings(); Object.assign(saved.profiles[0]!, { provider: 'openai', preset: 'custom', base_url: 'https://fixture.example/v1', credential_revision: 'opaque-revision', validation_receipt: { protocol: 'openai-chat-completions', identity: { provider: 'openai', preset: 'custom', region: '', plan: '', endpoint: ['https', 'fixture.example', 443, '/v1'] }, model: 'fixture-model', credential_revision: 'opaque-revision', verified_at: '2026-10-23T00:00:00Z', kind: 'text-probe', tools: 'unknown' } });
+  const m = mountVirtualProps(ModelSettings, { settings: saved }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  expect(m.root.textContent).toContain('上次验证 2026-10-23');
+  expect(m.root.textContent).toContain('工具调用：unknown');
+  await value(m.root, 'profile-model', 'changed');
+  expect(m.root.textContent).toContain('配置已变');
+  expect(workspaceApi.probe).not.toHaveBeenCalled();
+});
+
+it('accepts the actual validation_receipt probe contract and preserves current/default distinctions', async () => {
+  const saved = settings();
+  const receipt = { protocol: 'openai-chat-completions', identity: { provider: 'mock', preset: 'mock', region: '', plan: '', endpoint: [] }, model: 'fixture-model', credential_revision: '', verified_at: '2026-10-23T01:00:00Z', kind: 'mock-probe' as const, tools: 'unknown' as const };
+  vi.mocked(workspaceApi.probe).mockResolvedValue({ ok: true, reply: 'offline', validation_receipt: receipt });
+  const changed = vi.fn();
+  const m = mountVirtualProps(ModelSettings, { settings: saved, currentProfileId: 'fixture', onChanged: changed }, app => app.provide(modelSettingsLifetimeKey, new ModelSettingsLifetime())); mounts.push(m); await flushVue();
+  await click(button(m.root, '测试连接 · 可能计费')); await flushVue();
+  expect(m.root.textContent).toContain('上次验证 2026-10-23T01:00:00Z');
+  expect(changed).toHaveBeenCalledWith(expect.objectContaining({ profiles: [expect.objectContaining({ validation_receipt: receipt })] }));
+  expect(m.root.textContent).toContain('当前对话');
+  expect(m.root.textContent).toContain('默认');
+});
+
 it('uses the same opaque draft generation for request and directory and rejects mismatched replies', async () => {
   const discover = vi.spyOn(workspaceApi, 'discoverModels').mockResolvedValue({ status: 'ok', models: [{ id: 'wrong-generation' }], metadata_only: true, strategy: 'openai-list', pages: 1, credential_revision: 'wrong-revision' });
   const owner = new ModelSettingsLifetime(), m = fixture(owner); await flushVue();

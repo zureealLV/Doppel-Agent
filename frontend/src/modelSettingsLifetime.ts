@@ -6,9 +6,10 @@
 import { reactive, type InjectionKey } from 'vue';
 import type { PublicSettings } from './workspaceTypes';
 import { HttpError } from './api';
+import { diagnostic } from './providerConnectionState';
 import { ModelDirectoryCache, type ModelDiscoveryResult } from './modelDiscovery';
 type SettingsAction = 'save' | 'save_only' | 'save_default' | 'forget' | 'delete' | 'read_settings';
-type ProbeReply = { ok: boolean; reply: string };
+type ProbeReply = import('./providerConnectionState').ProviderProbeResult;
 type Request = { kind: SettingsAction; profileId: string; invoke(): Promise<PublicSettings> }
   | { kind: 'discover'; profileId: string; directoryIdentity: string; invoke(): Promise<ModelDiscoveryResult> }
   | { kind: 'probe'; profileId: string; invoke(): Promise<ProbeReply> };
@@ -81,6 +82,12 @@ export class ModelSettingsLifetime {
       }
       this.state.outcome = 'unknown';
       this.state.error = '请求结果未知；未认定设置已更新或测试未执行。本窗口不重试，私有错误不显示。';
+      // Fixed server-owned classifications only: never display arbitrary SDK/body text.
+      // Guidance does not clear unknown or assert a no-charge/no-effect outcome.
+      if (request.kind === 'probe' && error instanceof HttpError
+          && /^provider_probe_(authentication|permission|rate_limited|model_or_endpoint|request_or_protocol|network|timeout|unavailable)$/.test(error.message)) {
+        this.state.error += ` ${diagnostic(error.message)}`;
+      }
     }).finally(() => { if (this.flight === work) { this.flight = undefined; this.state.busy = false; } });
     this.flight = work; return work;
   }

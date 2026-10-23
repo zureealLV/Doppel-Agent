@@ -5,7 +5,7 @@ import type { ModelProfile, ProfileForm, PublicSettings } from '../workspaceType
 import type { BillingTariff, TariffEdit } from '../billingTariff';
 import type { DirectoryEntry, DiscoveryStrategy } from '../modelDiscovery';
 const props = defineProps<{ form: ProfileForm & { billing_tariff_edit: TariffEdit }; settings: PublicSettings; profileId: string;
-  selectedProvider?: ProviderRecipe; blocked: boolean; savedProfile: ModelProfile | null; savedTariff: BillingTariff | null; testStatus: 'untested' | 'passed' | 'failed'; directory?: DirectoryEntry; discoveryStrategy: DiscoveryStrategy }>();
+  selectedProvider?: ProviderRecipe; blocked: boolean; savedProfile: ModelProfile | null; savedTariff: BillingTariff | null; testStatus: 'untested' | 'passed' | 'failed'; connectionLabel: string; receiptKind?: string; directory?: DirectoryEntry; discoveryStrategy: DiscoveryStrategy }>();
 const visibleKey = defineModel<boolean>('visibleKey', { default: false });
 const customDiscovery = defineModel<DiscoveryStrategy>('customDiscovery', { default: 'manual' });
 const emit = defineEmits<{ remove: []; forget: []; discover: [] }>();
@@ -14,7 +14,8 @@ watch(() => [props.selectedProvider?.id, props.profileId], () => { editAddress.v
 </script>
 <template>
         <section class="provider-editor" aria-label="连接配置">
-          <div class="provider-editor-heading"><div><p class="eyebrow">{{ profileId === '__new__' ? 'NEW CONNECTION' : 'SAVED PROFILE' }}</p><h3>{{ selectedProvider?.name || '自定义 / 离线连接' }}</h3></div><span class="provider-state">{{ profileId === '__new__' ? '尚未保存' : '已保存档案' }} · {{ testStatus === 'passed' ? form.preset === 'mock' ? '离线 Mock 测试通过（非外部连接）' : '本次测试通过' : testStatus === 'failed' ? '本次测试未通过' : '当前配置未测试' }}</span></div>
+          <div class="provider-editor-heading"><div><p class="eyebrow">{{ profileId === '__new__' ? 'NEW CONNECTION' : 'SAVED PROFILE' }}</p><h3>{{ selectedProvider?.name || '自定义 / 离线连接' }}</h3></div><span class="provider-state">{{ connectionLabel }} · {{ testStatus === 'passed' ? form.preset === 'mock' ? '离线 Mock 测试通过（非外部连接）' : '本次测试通过（仅原请求输入）' : testStatus === 'failed' ? '本次测试未通过' : '当前配置未测试' }}</span></div>
+          <p class="helper">文本探测：{{ receiptKind === 'text-probe' ? '上次成功' : receiptKind === 'mock-probe' ? '离线 Mock，非外部验证' : 'unknown' }} · 工具调用：unknown。列模型、文本 200 不等于 Agent 兼容。</p>
           <template v-if="selectedProvider">
             <p class="helper">{{ selectedProvider.note }}</p>
             <p class="provider-source helper"><a :href="selectedProvider.sourceUrl" target="_blank" rel="noopener noreferrer">{{ selectedProvider.name }} 文档</a> · 核验 {{ selectedProvider.verifiedOn }}</p>
